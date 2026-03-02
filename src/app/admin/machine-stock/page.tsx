@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { getMachineInventory, getMachines } from "@/actions/inventory";
 import { TrendingDown } from "lucide-react";
 import MachineInventoryTable from "@/components/MachineInventoryTable";
