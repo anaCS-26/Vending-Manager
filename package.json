@@ -6,9 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "pages:build": "npx @cloudflare/next-on-pages",
-    "pages:deploy": "wrangler pages deploy .vercel/output"
+    "lint": "eslint"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
@@ -39,8 +37,7 @@
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
-    "wrangler": "^4.69.0",
-    "@cloudflare/next-on-pages": "^1.13.4"
+    "wrangler": "^4.69.0"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
