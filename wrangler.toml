@@ -1,0 +1,8 @@
+name = "vending"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output"
+
+[vars]
+# Add any environment variables here
+# DATABASE_URL should be set in Cloudflare dashboard for production

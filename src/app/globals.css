@@ -1,0 +1,159 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: var(--font-outfit), "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* We'll pass the colors down from the variables defined in :root and .dark */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  --color-neo-bg: var(--background);
+  --color-neo-surface: var(--surface);
+  --color-neo-surface-hover: var(--surface-hover);
+  --color-neo-border: var(--surface-border);
+
+  /* Professional Accents */
+  --color-accent-blue: #3b82f6;
+  /* Blue 500 */
+  --color-accent-purple: #6366f1;
+  /* Indigo 500 */
+  --color-accent-pink: #f43f5e;
+  /* Rose 500 */
+  --color-accent-green: #10b981;
+  /* Emerald 500 */
+  --color-accent-orange: #f97316;
+  /* Orange 500 */
+}
+
+@layer base {
+  :root {
+    /* Light Mode */
+    --background: #f8fafc;
+    --foreground: #0f172a;
+    --border: rgba(0, 0, 0, 0.1);
+    --ring: var(--color-accent-blue);
+
+    --surface: rgba(255, 255, 255, 0.75);
+    --surface-hover: rgba(241, 245, 249, 0.9);
+    --surface-border: rgba(0, 0, 0, 0.08);
+
+    --glass-border-hover: rgba(0, 0, 0, 0.15);
+  }
+
+  .dark {
+    /* Dark Mode */
+    --background: #09090b;
+    /* Zinc 950 */
+    --foreground: #f8fafc;
+    --border: rgba(255, 255, 255, 0.08);
+    --ring: var(--color-accent-blue);
+
+    --surface: rgba(24, 24, 27, 0.6);
+    /* Zinc 900 */
+    --surface-hover: rgba(39, 39, 42, 0.8);
+    /* Zinc 800 */
+    --surface-border: rgba(255, 255, 255, 0.08);
+
+    --glass-border-hover: rgba(255, 255, 255, 0.2);
+  }
+
+  * {
+    border-color: var(--border);
+    outline-color: var(--ring);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    background-image:
+      radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+      radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.08) 0%, transparent 40%);
+    background-attachment: fixed;
+    @apply antialiased selection:bg-accent-blue selection:text-white transition-colors duration-300;
+  }
+
+  /* Remove default arrows for numeric inputs globally */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  /* Unified Focus styling */
+  input:focus,
+  select:focus,
+  textarea:focus,
+  button:focus {
+    @apply outline-none ring-2 ring-accent-blue/40 border-accent-blue transition-shadow;
+  }
+}
+
+/* Glassmorphic utilities */
+@layer utilities {
+  .glass-panel {
+    @apply bg-neo-surface backdrop-blur-xl border border-neo-border shadow-md dark:shadow-2xl transition-all duration-300;
+  }
+
+  .glass-panel-hover {
+    @apply hover:bg-neo-surface-hover transition-all duration-300;
+  }
+
+  .glass-panel-hover:hover {
+    border-color: var(--glass-border-hover);
+  }
+
+  .text-glow {
+    text-shadow: 0 0 20px rgba(0, 240, 255, 0.5);
+  }
+
+  .bg-grid {
+    background-size: 40px 40px;
+    background-image: linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+  }
+
+  .dark .bg-grid {
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  }
+
+  .scroll-fade-right {
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 32px), transparent 100%);
+    mask-image: linear-gradient(to right, black calc(100% - 32px), transparent 100%);
+  }
+}
+
+/* Custom Scrollbar for sleekness */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
