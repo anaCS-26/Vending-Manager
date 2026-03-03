@@ -44,5 +44,10 @@
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "overrides": {
+    "@cloudflare/next-on-pages": {
+      "next": "$next"
+    }
   }
 }
