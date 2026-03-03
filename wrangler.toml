@@ -1,0 +1,13 @@
+name = "vending-app"
+compatibility_date = "2024-03-29"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+# Production environment variables (You configure these in the Cloudflare Dashboard)
+# [vars]
+# DATABASE_URL = "production-url"
+
+# Local/Development bindings if you want to use `wrangler dev`
+[env.preview.vars]
+# These will be used for the 'dev' branch deployments on Cloudflare
+# DATABASE_URL = "development-url"
