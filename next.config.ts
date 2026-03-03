@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '10mb',
     },
   },
-  transpilePackages: ['pg', '@prisma/adapter-pg'],
+  serverExternalPackages: ['pg', '@prisma/adapter-pg', '@prisma/client'],
 };
 
 export default nextConfig;
