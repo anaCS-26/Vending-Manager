@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { PieChart, TrendingUp, Download, Building2, Package, MapPin, LayoutGrid } from "lucide-react";
 import prisma from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";

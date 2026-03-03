@@ -4,6 +4,8 @@ import { Outfit, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
+export const dynamic = 'force-dynamic';
+
 const outfit = Outfit({
   variable: "--font-outfit",
   subsets: ["latin"],

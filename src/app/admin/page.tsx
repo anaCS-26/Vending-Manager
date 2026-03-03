@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getWarehouseInventory, getActiveDispatches } from "@/actions/inventory";
 import { getWarehouses } from "@/actions/warehouses";
 import { getPredictedDepletion } from "@/actions/predictions";

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import prisma from "@/lib/prisma";
 import { Store } from "lucide-react";
 import OrderManagerUI from "@/components/OrderManagerUI";
