@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { CreditCard, Search, CheckCircle2, Clock, AlertTriangle, MessageSquare, Phone, Smartphone } from "lucide-react";
 import prisma from "@/lib/prisma"; // Assuming a prisma client instance
 

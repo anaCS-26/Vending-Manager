@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getPendingReturns, getProcessedReturns } from "@/actions/returns";
 import { ReturnsManager } from "@/components/ReturnsManager";
 

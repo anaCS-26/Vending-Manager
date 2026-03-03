@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getClosedDispatches } from "@/actions/inventory";
 import prisma from "@/lib/prisma";
 import UnifiedHistoryManager from "@/components/UnifiedHistoryManager";

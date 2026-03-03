@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getWarehouseInventory } from "@/actions/inventory";
 import { getWarehouses } from "@/actions/warehouses";
 import { Database } from "lucide-react";

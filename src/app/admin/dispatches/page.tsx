@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getDrivers, getWarehouseInventory, getActiveDispatches } from "@/actions/inventory";
 import { getWarehouses } from "@/actions/warehouses";
 import { DispatchManager } from "@/components/DispatchManager";
