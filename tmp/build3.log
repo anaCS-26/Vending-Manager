@@ -1,0 +1,98 @@
+
+ΓöîΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÉ
+Γöé OpenNext ΓÇö Cloudflare build Γöé
+ΓööΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÿ
+
+WARN OpenNext is not fully compatible with Windows.
+WARN For optimal performance, it is recommended to use Windows Subsystem for Linux (WSL).
+WARN While OpenNext may function on Windows, it could encounter unpredictable failures during runtime.
+(node:44876) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+App directory: C:\Users\asadn\Desktop\Projects\vending
+Next.js version : 16.1.6
+@opennextjs/cloudflare version: 1.17.1
+@opennextjs/aws version: 3.9.16
+
+ΓöîΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÉ
+Γöé OpenNext ΓÇö Building Next.js app Γöé
+ΓööΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÿ
+
+
+> vending@0.1.0 build
+> next build
+
+(node:17644) ExperimentalWarning: CommonJS module C:\Users\asadn\Desktop\Projects\vending\next.config.compiled.js is loading ES Module C:\Users\asadn\Desktop\Projects\vending\node_modules\@opennextjs\cloudflare\dist\api\index.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Γû▓ Next.js 16.1.6 (Turbopack)
+- Environments: .env
+- Experiments (use with caution):
+  ┬╖ serverActions
+
+Using vars defined in .dev.vars
+(node:17644) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+  Creating an optimized production build ...
+(node:17644) ExperimentalWarning: CommonJS module C:\Users\asadn\Desktop\Projects\vending\next.config.compiled.js is loading ES Module C:\Users\asadn\Desktop\Projects\vending\node_modules\@opennextjs\cloudflare\dist\api\index.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Using vars defined in .dev.vars
+(node:17644) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+Γ£ô Compiled successfully in 6.7s
+  Running TypeScript ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/2) ...
+Γ£ô Generating static pages using 15 workers (2/2) in 133.2ms
+  Finalizing page optimization ...
+
+Route (app)
+Γöî ╞Æ /
+Γö£ ╞Æ /_not-found
+Γö£ ╞Æ /admin
+Γö£ ╞Æ /admin/analytics
+Γö£ ╞Æ /admin/dispatches
+Γö£ ╞Æ /admin/financials
+Γö£ ╞Æ /admin/history
+Γö£ ╞Æ /admin/machine-stock
+Γö£ ╞Æ /admin/manage
+Γö£ ╞Æ /admin/orders
+Γö£ ╞Æ /admin/refunds
+Γö£ ╞Æ /admin/returns
+Γö£ ╞Æ /admin/warehouse
+Γö£ ╞Æ /api/export-zatca
+Γö£ ╞Æ /driver
+Γöö ╞Æ /refund-request/[machineId]
+
+
+╞Æ  (Dynamic)  server-rendered on demand
+
+
+ΓöîΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÉ
+Γöé OpenNext ΓÇö Generating bundle Γöé
+ΓööΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÿ
+
+Bundling middleware function...
+Bundling static assets...
+Bundling cache assets...
+Building server function: default...
+node:fs:1808
+  binding.symlink(
+          ^
+
+Error: EPERM: operation not permitted, symlink 'C:\Users\asadn\Desktop\Projects\vending\node_modules\@prisma\client' -> 'C:\Users\asadn\Desktop\Projects\vending\.open-next\server-functions\default\.next\node_modules\@prisma\client-2c3a283f134fdcb6'
+    at symlinkSync (node:fs:1808:11)
+    at file:///C:/Users/asadn/Desktop/Projects/vending/node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js:211:17
+    at Map.forEach (<anonymous>)
+    at copyTracedFiles (file:///C:/Users/asadn/Desktop/Projects/vending/node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js:193:17)
+    at generateBundle (file:///C:/Users/asadn/Desktop/Projects/vending/node_modules/@opennextjs/cloudflare/dist/cli/build/open-next/createServerBundle.js:121:60)
+    at createServerBundle (file:///C:/Users/asadn/Desktop/Projects/vending/node_modules/@opennextjs/cloudflare/dist/cli/build/open-next/createServerBundle.js:75:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async build (file:///C:/Users/asadn/Desktop/Projects/vending/node_modules/@opennextjs/cloudflare/dist/cli/build/build.js:74:5)
+    at async buildCommand (file:///C:/Users/asadn/Desktop/Projects/vending/node_modules/@opennextjs/cloudflare/dist/cli/commands/build.js:33:5) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Users\\asadn\\Desktop\\Projects\\vending\\node_modules\\@prisma\\client',
+  dest: 'C:\\Users\\asadn\\Desktop\\Projects\\vending\\.open-next\\server-functions\\default\\.next\\node_modules\\@prisma\\client-2c3a283f134fdcb6'
+}
+
+Node.js v22.12.0
