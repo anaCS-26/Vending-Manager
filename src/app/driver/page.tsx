@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getMachines, getActiveDispatches } from "@/actions/inventory";
 import { DriverRefillUI } from "@/components/DriverRefillUI";
 
