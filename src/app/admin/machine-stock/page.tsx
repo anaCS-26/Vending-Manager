@@ -1,11 +1,13 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 30;
 import { getMachineInventory, getMachines } from "@/actions/inventory";
 import { TrendingDown } from "lucide-react";
 import MachineInventoryTable from "@/components/MachineInventoryTable";
 
 export default async function MachineStockPage() {
-    const inventory = await getMachineInventory();
-    const machines = await getMachines();
+    const [inventory, machines] = await Promise.all([
+        getMachineInventory(),
+        getMachines()
+    ]);
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">

@@ -1,32 +1,32 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 30;
 import prisma from "@/lib/prisma";
 import { Store } from "lucide-react";
 import OrderManagerUI from "@/components/OrderManagerUI";
 
 export default async function OrdersPage() {
-    const warehouses = await prisma.warehouse.findMany({
-        orderBy: { name: 'asc' }
-    });
-
-    const items = await prisma.item.findMany({
-        orderBy: { name: 'asc' },
-        include: {
-            WarehouseStock: true,
-            _count: { select: { DispatchItems: true } }
-        }
-    });
-
-    const orders = await prisma.purchaseOrder.findMany({
-        orderBy: { createdAt: 'desc' },
-        include: {
-            warehouse: true,
-            Items: {
-                include: {
-                    item: true
+    const [warehouses, items, orders] = await Promise.all([
+        prisma.warehouse.findMany({
+            orderBy: { name: 'asc' }
+        }),
+        prisma.item.findMany({
+            orderBy: { name: 'asc' },
+            include: {
+                WarehouseStock: true,
+                _count: { select: { DispatchItems: true } }
+            }
+        }),
+        prisma.purchaseOrder.findMany({
+            orderBy: { createdAt: 'desc' },
+            include: {
+                warehouse: true,
+                Items: {
+                    include: {
+                        item: true
+                    }
                 }
             }
-        }
-    });
+        })
+    ]);
 
     const pendingOrders = orders.filter((o: any) => o.status === "PENDING" || o.status === "DRAFT");
     const completedOrders = orders.filter((o: any) => o.status === "COMPLETED" || o.status === "CANCELLED");

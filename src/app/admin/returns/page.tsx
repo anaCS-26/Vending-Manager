@@ -1,10 +1,12 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 30;
 import { getPendingReturns, getProcessedReturns } from "@/actions/returns";
 import { ReturnsManager } from "@/components/ReturnsManager";
 
 export default async function ReturnsVerificationPage() {
-    const pending = await getPendingReturns();
-    const history = await getProcessedReturns();
+    const [pending, history] = await Promise.all([
+        getPendingReturns(),
+        getProcessedReturns()
+    ]);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">

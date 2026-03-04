@@ -1,12 +1,11 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 import { CreditCard, Search, CheckCircle2, Clock, AlertTriangle, MessageSquare, Phone, Smartphone } from "lucide-react";
-import prisma from "@/lib/prisma"; // Assuming a prisma client instance
+import prisma from "@/lib/prisma";
 
 export default async function RefundsPage() {
-    // In a real implementation this would fetch from prisma:
-    // const refunds = await prisma.customerRefund.findMany({ orderBy: { createdAt: 'desc' } });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const refunds: any[] = [];
+    const refunds = await prisma.customerRefund.findMany({
+        orderBy: { createdAt: 'desc' }
+    });
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">

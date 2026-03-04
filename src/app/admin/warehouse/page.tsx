@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 30;
 import { getWarehouseInventory } from "@/actions/inventory";
 import { getWarehouses } from "@/actions/warehouses";
 import { Database } from "lucide-react";
@@ -6,9 +6,11 @@ import WarehouseInventoryTable from "@/components/WarehouseInventoryTable";
 import prisma from "@/lib/prisma";
 
 export default async function WarehousePage() {
-    const inventory = await getWarehouseInventory();
-    const warehouses = await getWarehouses();
-    const existingItems = await prisma.item.findMany();
+    const [inventory, warehouses, existingItems] = await Promise.all([
+        getWarehouseInventory(),
+        getWarehouses(),
+        prisma.item.findMany()
+    ]);
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">

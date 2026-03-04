@@ -3,9 +3,10 @@ import { getMachines, getActiveDispatches } from "@/actions/inventory";
 import { DriverRefillUI } from "@/components/DriverRefillUI";
 
 export default async function DriverPortal() {
-    const machines = await getMachines();
-    // We'll pass the active dispatches. The client component picks the first one as a mock "Current logged in driver"
-    const dispatches = await getActiveDispatches();
+    const [machines, dispatches] = await Promise.all([
+        getMachines(),
+        getActiveDispatches()
+    ]);
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-neo-bg sm:p-4 text-slate-900 dark:text-white">

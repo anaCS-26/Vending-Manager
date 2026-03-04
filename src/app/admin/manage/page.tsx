@@ -3,23 +3,22 @@ import prisma from "@/lib/prisma";
 import ManagementDashboard from "@/components/ManagementDashboard";
 
 export default async function ManagePage() {
-    const [drivers, machines, warehouses] = await Promise.all([
+    const [drivers, machines, warehouses, items] = await Promise.all([
         prisma.driver.findMany(),
         prisma.machine.findMany(),
-        prisma.warehouse.findMany()
-    ]);
-
-    const items = await prisma.item.findMany({
-        include: {
-            WarehouseStock: {
-                include: {
-                    warehouse: {
-                        select: { name: true }
+        prisma.warehouse.findMany(),
+        prisma.item.findMany({
+            include: {
+                WarehouseStock: {
+                    include: {
+                        warehouse: {
+                            select: { name: true }
+                        }
                     }
                 }
             }
-        }
-    });
+        })
+    ]);
 
     return (
         <div className="space-y-6">
