@@ -4,8 +4,6 @@ import { Outfit, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
-export const dynamic = 'force-dynamic';
-
 const outfit = Outfit({
   variable: "--font-outfit",
   subsets: ["latin"],
@@ -29,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${outfit.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
-      <body className="antialiased font-sans transition-colors duration-300">
+      <body className="antialiased font-sans transition-colors duration-300" suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
           <Toaster
