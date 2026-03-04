@@ -1,4 +1,4 @@
-export const revalidate = 3600; // Recalculate AI analytics and heavy DB aggregation only once per hour
+export const dynamic = 'force-dynamic';
 import prisma from "@/lib/prisma";
 import { Package, TrendingUp, Users, MapPin, Truck, AlertTriangle, CheckCircle2, Factory, PackageOpen, LayoutGrid, Clock, RefreshCw, BarChart2, CalendarDays, LineChart, Activity, ShieldCheck, Target, TrendingDown } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
