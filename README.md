@@ -10,7 +10,7 @@
 - **Language**: TypeScript
 - **Database**: Prisma + D1/SQLite
 - **UI/UX**: Framer Motion + Tailwind CSS
-- **Edge Architecture**: Cloudflare Pages + Workers
+- **Runtime**: Node.js / Default Edge
 - **Real-time**: Server-Sent Events (SSE) for driver-to-warehouse synchronization
 
 ---
@@ -36,13 +36,13 @@ While currently serving as a robust operational backbone, AII is designed for th
 
 ## 🚀 Deployment
 
-The project is optimized for **Cloudflare Pages**, utilizing edge-runtime for global low-latency performance.
+The project is optimized for local or standard VPS deployment.
 
 ```bash
 # Production Build
 npm run build
-# Edge Deployment
-npx wrangler pages deploy .vercel/output
+# Start Server
+npm start
 ```
 
 ---

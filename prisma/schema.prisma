@@ -2,42 +2,12 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider   = "prisma-client-js"
-  engineType = "wasm"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
-}
-
-enum DispatchStatus {
-  OPEN
-  CLOSED
-}
-
-enum ReturnStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
-enum RefundStatus {
-  PENDING
-  DONE
-}
-
-enum AdjustmentReason {
-  DAMAGED
-  EXPIRED
-  OFFICE_USE
-}
-
-enum PurchaseOrderStatus {
-  PENDING
-  COMPLETED
-  CANCELLED
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model Item {
@@ -125,7 +95,7 @@ model Dispatch {
   warehouseId   Int?           // Optional temporarily for migration, should be required
   warehouse     Warehouse?     @relation(fields: [warehouseId], references: [id])
   dispatch_date DateTime       @default(now())
-  status        DispatchStatus @default(OPEN) // OPEN, CLOSED
+  status        String         @default("OPEN") // OPEN, CLOSED
   DispatchItems DispatchItem[]
   RefillLogs    RefillLog[]
   ReturnVerifications ReturnVerification[]
@@ -177,8 +147,8 @@ model ReturnVerification {
   itemId        Int
   item          Item     @relation(fields: [itemId], references: [id])
   quantity      Int
-  reason        AdjustmentReason   // DAMAGED, EXPIRED, etc.
-  status        ReturnStatus   @default(PENDING) // PENDING, APPROVED, REJECTED
+  reason        String   // DAMAGED, EXPIRED
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
   reported_at   DateTime @default(now())
   verified_at   DateTime?
   notes         String?
@@ -229,7 +199,7 @@ model CustomerRefund {
   refundNumber  String // e.g., the SR# or phone number
   phoneNumber   String?
   itemPrice     Float     @default(0.0)
-  status        RefundStatus    @default(PENDING) // PENDING, DONE
+  status        String    @default("PENDING") // PENDING, DONE
   receivedMoney Float?    @default(0.0)
   dateReceived  DateTime?
   createdAt     DateTime  @default(now())
@@ -243,7 +213,7 @@ model InventoryAdjustment {
   itemId            Int
   item              Item     @relation(fields: [itemId], references: [id])
   quantity          Int
-  reason            AdjustmentReason // DAMAGED, EXPIRED, OFFICE_USE
+  reason            String // DAMAGED, EXPIRED, OFFICE_USE
   locationName      String? // Where it happened (e.g., machine name or warehouse)
   priceAtAdjustment Float    @default(0.0)
   date              DateTime @default(now())
@@ -256,7 +226,7 @@ model PurchaseOrder {
   id           Int                 @id @default(autoincrement())
   warehouseId  Int
   warehouse    Warehouse           @relation(fields: [warehouseId], references: [id])
-  status       PurchaseOrderStatus              @default(PENDING) // PENDING, COMPLETED, CANCELLED
+  status       String              @default("PENDING") // PENDING, COMPLETED, CANCELLED
   createdAt    DateTime            @default(now())
   completedAt  DateTime?
   Items        PurchaseOrderItem[]

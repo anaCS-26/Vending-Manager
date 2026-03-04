@@ -55,8 +55,7 @@ export async function approveReturn(returnId: number): Promise<ActionResult> {
                 data: {
                     itemId: ret.itemId,
                     quantity: -ret.quantity, // Write off, so negative
-                    reason: ret.reason,
-                    locationName: "Approved Driver Return",
+                    reason: `Approved Driver Return: ${ret.reason}`,
                     priceAtAdjustment: ret.item.price
                 }
             });
