@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 import { PieChart, TrendingUp, Download, Building2, Package, MapPin, LayoutGrid } from "lucide-react";
 import prisma from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
@@ -8,18 +8,19 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
     const searchParams = await props.searchParams;
     const currentView = searchParams.view || "machine";
 
-    // 1. Fetch Master Data
-    const refillLogsRaw = await prisma.refillLog.findMany({
-        include: {
-            item: true,
-            machine: true,
-            dispatch: { include: { warehouse: true } }
-        }
-    });
-
-    const machinesRaw = await prisma.machine.findMany();
-    const itemsRaw = await prisma.item.findMany();
-    const warehousesRaw = await prisma.warehouse.findMany();
+    // 1. Fetch Master Data in Parallel
+    const [refillLogsRaw, machinesRaw, itemsRaw, warehousesRaw] = await Promise.all([
+        prisma.refillLog.findMany({
+            include: {
+                item: true,
+                machine: true,
+                dispatch: { include: { warehouse: true } }
+            }
+        }),
+        prisma.machine.findMany(),
+        prisma.item.findMany(),
+        prisma.warehouse.findMany()
+    ]);
 
     // 2. Global Totals Calculation
     let totalRevenue = 0;

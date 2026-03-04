@@ -76,11 +76,28 @@ export async function getClosedDispatchesPaginated(
     filter?: "ALL" | "ISSUES" | "MATCHES",
     searchQuery?: string
 ): Promise<PaginatedResult<DispatchWithRelations>> {
-    // We need to fetch all matching results for filtering since variance
-    // is computed in-app, not in SQL. For true scale, this would be a
-    // materialized column, but for the prototype this is acceptable.
+    // 1. Build the database-side where clause
+    const where: any = { status: "CLOSED" }
+
+    if (searchQuery) {
+        const lowerQuery = searchQuery.toLowerCase()
+        where.OR = [
+            { driver: { name: { contains: searchQuery, mode: 'insensitive' } } },
+            { DispatchItems: { some: { item: { name: { contains: searchQuery, mode: 'insensitive' } } } } }
+        ]
+
+        // Handle numeric ID search if possible
+        const numericId = parseInt(searchQuery)
+        if (!isNaN(numericId)) {
+            where.OR.push({ id: numericId })
+        }
+    }
+
+    // 2. Fetch data from DB
+    // Optimization: If we have a lot of data, we should move the 'anomaly' flag to a column.
+    // Since this is a prototype, we fetch enough for filtering.
     const allDispatches = await prisma.dispatch.findMany({
-        where: { status: "CLOSED" },
+        where,
         orderBy: { dispatch_date: 'desc' },
         include: {
             driver: true,
@@ -89,9 +106,9 @@ export async function getClosedDispatchesPaginated(
         }
     })
 
+    // 3. Post-fetch filtering (for the complex variance logic that isn't in SQL)
     let filtered = allDispatches
 
-    // Apply categorical filter
     if (filter && filter !== "ALL") {
         filtered = filtered.filter(d => {
             const totalGiven = d.DispatchItems.reduce((acc, curr) => acc + curr.quantity_given, 0)
@@ -102,17 +119,6 @@ export async function getClosedDispatchesPaginated(
             if (filter === "ISSUES") return hasAnomaly
             if (filter === "MATCHES") return !hasAnomaly
             return true
-        })
-    }
-
-    // Apply text search
-    if (searchQuery) {
-        const lowerQuery = searchQuery.toLowerCase()
-        filtered = filtered.filter(d => {
-            const driverMatch = d.driver.name.toLowerCase().includes(lowerQuery)
-            const idMatch = d.id.toString().padStart(4, '0').includes(lowerQuery)
-            const itemMatch = d.DispatchItems.some(di => di.item.name.toLowerCase().includes(lowerQuery))
-            return driverMatch || idMatch || itemMatch
         })
     }
 
