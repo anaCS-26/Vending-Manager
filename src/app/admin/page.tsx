@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 30; // 30 second background revalidation
 import { getWarehouseInventory, getActiveDispatches } from "@/actions/inventory";
 import { getWarehouses } from "@/actions/warehouses";
 import { getPredictedDepletion } from "@/actions/predictions";
@@ -7,70 +7,77 @@ import prisma from "@/lib/prisma";
 import MapVisualWrapper from "@/components/MapVisualWrapper";
 
 export default async function AdminDashboard() {
-    const dispatches = await getActiveDispatches();
-    const warehouses = await getWarehouses();
-
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // 1. Fetch Today's Logs for Revenue and Volume
-    const todaysLogs = await prisma.refillLog.findMany({
-        where: { refilled_at: { gte: startOfDay } },
-        include: { item: true }
-    });
+    // Parallelize ALL database calls
+    const [
+        dispatches,
+        warehouses,
+        todaysLogs,
+        pendingReturnsCount,
+        machines,
+        warehousesWithStats,
+        recentActivity,
+        predictions,
+        recentLogsForSales
+    ] = await Promise.all([
+        getActiveDispatches(),
+        getWarehouses(),
+        prisma.refillLog.findMany({
+            where: { refilled_at: { gte: startOfDay } },
+            include: { item: true }
+        }),
+        prisma.returnVerification.count({
+            where: { status: "PENDING" }
+        }),
+        prisma.machine.findMany({
+            include: {
+                RefillLogs: {
+                    take: 5,
+                    orderBy: { refilled_at: 'desc' },
+                    include: { item: true }
+                },
+                Stock: {
+                    include: { item: true }
+                }
+            }
+        }),
+        prisma.warehouse.findMany({
+            include: {
+                Stock: true,
+                Dispatches: {
+                    where: { status: "OPEN" }
+                }
+            },
+            orderBy: { id: 'asc' }
+        }),
+        prisma.refillLog.findMany({
+            orderBy: { refilled_at: 'desc' },
+            take: 5,
+            include: {
+                machine: true,
+                item: true,
+                dispatch: { include: { driver: true } }
+            }
+        }),
+        getPredictedDepletion(),
+        prisma.refillLog.findMany({
+            where: { refilled_at: { gte: sevenDaysAgo } },
+            include: { item: true }
+        })
+    ]);
 
+    // --- Processing Logic ---
     const totalRevenueToday = todaysLogs.reduce((acc, log) =>
         acc + ((log.items_sold_since_last_refill || 0) * (log.item.price || 0)), 0
     );
 
     const todayVolume = todaysLogs.reduce((acc, log) => acc + log.quantity_refilled, 0);
-
-    // 2. Pending Issues
-    const pendingReturnsCount = await prisma.returnVerification.count({
-        where: { status: "PENDING" }
-    });
-
-    // 3. Current Dispatches
     const activeDispatchCount = dispatches.length;
 
-    // 4. Machine Data & Predictions
-    const machines = await prisma.machine.findMany({
-        include: {
-            RefillLogs: {
-                take: 5,
-                orderBy: { refilled_at: 'desc' },
-                include: { item: true }
-            },
-            Stock: {
-                include: { item: true }
-            }
-        }
-    });
-
-    const warehousesWithStats = await prisma.warehouse.findMany({
-        include: {
-            Stock: true,
-            Dispatches: {
-                where: { status: "OPEN" }
-            }
-        },
-        orderBy: { id: 'asc' }
-    });
-
-    // Derived from machines for activity feed
-    const recentActivity = await prisma.refillLog.findMany({
-        orderBy: { refilled_at: 'desc' },
-        take: 5,
-        include: {
-            machine: true,
-            item: true,
-            dispatch: { include: { driver: true } }
-        }
-    });
-
-    const predictions = await getPredictedDepletion();
-
-    // 5. Evaluate Stock Levels
     const criticalAnomalies = predictions.filter(p => p.predictedHoursUntilEmpty !== null && p.predictedHoursUntilEmpty <= 24);
     const warningAnomalies = predictions.filter(p => p.predictedHoursUntilEmpty !== null && p.predictedHoursUntilEmpty > 24 && p.predictedHoursUntilEmpty <= 72);
 
@@ -78,14 +85,6 @@ export default async function AdminDashboard() {
     const criticalStock = criticalAnomalies.length;
     const warningStock = warningAnomalies.length;
     const healthyStock = Math.max(0, totalInventoryKinds - criticalStock - warningStock);
-
-    // 6. Top Selling Items (Past 7 Days for trend)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const recentLogsForSales = await prisma.refillLog.findMany({
-        where: { refilled_at: { gte: sevenDaysAgo } },
-        include: { item: true }
-    });
 
     const itemSales: Record<number, { name: string, quantity: number, category: string, price: number }> = {};
     recentLogsForSales.forEach(log => {

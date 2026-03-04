@@ -4,10 +4,12 @@ import { getWarehouses } from "@/actions/warehouses";
 import { DispatchManager } from "@/components/DispatchManager";
 
 export default async function DispatchesPage() {
-    const drivers = await getDrivers();
-    const inventory = await getWarehouseInventory();
-    const activeDispatches = await getActiveDispatches();
-    const warehouses = await getWarehouses();
+    const [drivers, inventory, activeDispatches, warehouses] = await Promise.all([
+        getDrivers(),
+        getWarehouseInventory(),
+        getActiveDispatches(),
+        getWarehouses()
+    ]);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">

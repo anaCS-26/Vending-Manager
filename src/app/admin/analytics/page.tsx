@@ -1,16 +1,36 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 60; // Revalidate every minute for background updating
 import prisma from "@/lib/prisma";
 import { Package, TrendingUp, Users, MapPin, Truck, AlertTriangle, CheckCircle2, Factory, PackageOpen, LayoutGrid, Clock, RefreshCw, BarChart2, CalendarDays, LineChart, Activity, ShieldCheck, Target, TrendingDown } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function AnalyticsPage() {
-    // 1. Item Velocity Data
-    const allRefills = await prisma.refillLog.groupBy({
-        by: ['itemId'],
-        _sum: { quantity_refilled: true },
-        orderBy: { _sum: { quantity_refilled: 'desc' } }
-    });
-    const items = await prisma.item.findMany();
+    // Parallelize all initial database fetches
+    const [allRefills, items, machineRefills, machines, drivers, machinesData] = await Promise.all([
+        prisma.refillLog.groupBy({
+            by: ['itemId'],
+            _sum: { quantity_refilled: true },
+            orderBy: { _sum: { quantity_refilled: 'desc' } }
+        }),
+        prisma.item.findMany(),
+        prisma.refillLog.groupBy({
+            by: ['machineId'],
+            _sum: { quantity_refilled: true },
+            orderBy: { _sum: { quantity_refilled: 'desc' } }
+        }),
+        prisma.machine.findMany(),
+        prisma.driver.findMany({
+            include: {
+                Dispatches: {
+                    include: { DispatchItems: true, RefillLogs: true }
+                }
+            }
+        }),
+        prisma.machine.findMany({
+            include: { RefillLogs: { include: { item: true } } }
+        })
+    ]);
+
+    // 1. Item Velocity Data (Processing)
     const formattedData = allRefills.map(refill => {
         const item = items.find(i => i.id === refill.itemId);
         return {
@@ -22,13 +42,7 @@ export default async function AnalyticsPage() {
     const fastMoving = formattedData.slice(0, Math.ceil(formattedData.length / 2));
     const slowMoving = formattedData.slice(Math.ceil(formattedData.length / 2));
 
-    // 2. Machine Demand Data
-    const machineRefills = await prisma.refillLog.groupBy({
-        by: ['machineId'],
-        _sum: { quantity_refilled: true },
-        orderBy: { _sum: { quantity_refilled: 'desc' } }
-    });
-    const machines = await prisma.machine.findMany();
+    // 2. Machine Demand Data (Processing)
     const topMachines = machineRefills.map(mr => {
         const machine = machines.find(m => m.id === mr.machineId);
         return {
@@ -38,15 +52,7 @@ export default async function AnalyticsPage() {
         };
     }).slice(0, 5);
 
-    // 3. Driver Status & Shrinkage Data
-    const drivers = await prisma.driver.findMany({
-        include: {
-            Dispatches: {
-                include: { DispatchItems: true, RefillLogs: true }
-            }
-        }
-    });
-
+    // 3. Driver Status & Shrinkage Data (Processing)
     const driverStats = drivers.map(d => {
         const activeRoute = d.Dispatches.find(disp => disp.status === "OPEN");
         const closedRoutes = d.Dispatches.filter(disp => disp.status === "CLOSED");
@@ -68,11 +74,7 @@ export default async function AnalyticsPage() {
         };
     });
 
-    // --- Predictive Restocking Analytics ---
-    const machinesData = await prisma.machine.findMany({
-        include: { RefillLogs: { include: { item: true } } }
-    });
-    // In a real scenario, this uses historical linear regression. For the prototype, we flag machines with > 100 volume as high risk.
+    // --- Predictive Restocking Analytics (Processing) ---
     const predictiveAlerts = machinesData
         .map((m: any) => {
             const last7DaysVol = m.RefillLogs.filter((rl: any) => new Date(rl.refilled_at).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -83,7 +85,6 @@ export default async function AnalyticsPage() {
                 ...m,
                 velocity: last7DaysVol,
                 isHighRisk: totalVol > 50,
-                // eslint-disable-next-line react-hooks/purity
                 daysRemaining: Math.floor(Math.random() * 5) + 1 // Mock AI prediction for prototype
             };
         })
