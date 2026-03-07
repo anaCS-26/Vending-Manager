@@ -253,11 +253,13 @@ model PurchaseOrderItem {
 }
 
 model Admin {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  password  String   // Stores hashed password
-  role      String   @default("ADMIN") // 'ADMIN' or 'SUPER_ADMIN'
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 Int       @id @default(autoincrement())
+  email              String    @unique
+  name               String?
+  password           String    // Stores hashed password
+  role               String    @default("ADMIN") // 'ADMIN' or 'SUPER_ADMIN'
+  resetToken         String?   @unique
+  resetTokenExpiry   DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
