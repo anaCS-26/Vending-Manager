@@ -122,7 +122,7 @@ export default function MapVisual({ machines, predictions = [], warehouses = [] 
         : [26.3045, 50.1481];
 
     return (
-        <div className="w-full h-[450px] rounded-3xl overflow-hidden relative border border-slate-200 dark:border-white/10 group shadow-2xl">
+        <div className="w-full h-[450px] rounded-3xl overflow-hidden relative z-0 border border-slate-200 dark:border-white/10 group shadow-2xl">
             {/* Adding a custom inner shadow overlay using absolute borders to blend map with Dark Mode */}
             <div className="absolute inset-0 pointer-events-none border-[12px] border-slate-100/50 dark:border-black/10 z-[400] mix-blend-overlay"></div>
 

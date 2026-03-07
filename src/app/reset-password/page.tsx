@@ -5,7 +5,7 @@ import ResetPasswordClient from "./ResetPasswordClient";
 export default async function ResetPasswordPage({
     searchParams,
 }: {
-    searchParams: { token?: string };
+    searchParams: Promise<{ token?: string }>;
 }) {
     // If the user happens to be logged in, maybe log them out automatically, but normally they are not.
     const session = await auth();
@@ -13,7 +13,9 @@ export default async function ResetPasswordPage({
         redirect('/admin');
     }
 
-    if (!searchParams.token) {
+    const { token } = await searchParams;
+
+    if (!token) {
         return (
             <div className="min-h-screen bg-slate-50 dark:bg-neo-bg text-slate-900 dark:text-white flex items-center justify-center p-4">
                 <div className="text-center">
@@ -25,5 +27,5 @@ export default async function ResetPasswordPage({
         )
     }
 
-    return <ResetPasswordClient token={searchParams.token} />;
+    return <ResetPasswordClient token={token} />;
 }
