@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { LayoutDashboard, Truck, Package, Activity, LogOut, AlertTriangle, RefreshCw, History, Settings, CreditCard, FileWarning, PieChart, Store, ExternalLink } from "lucide-react";
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { AdminSettingsModal } from "@/components/AdminSettingsModal";
+import { signOut } from "next-auth/react";
 
 const mainNav = [
     { name: 'Overview', href: '/admin', icon: LayoutDashboard },
@@ -28,9 +29,10 @@ const adminNav = [
 ];
 
 
-export function Sidebar() {
+export function Sidebar({ user }: { user?: any }) {
     const pathname = usePathname();
     const [isPending, startTransition] = useTransition();
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     return (
         <div className="w-72 bg-slate-50 dark:bg-neo-bg border-r border-slate-200 dark:border-white/5 flex flex-col relative z-20 transition-colors">
@@ -124,15 +126,19 @@ export function Sidebar() {
             </nav>
 
             <div className="p-6 border-t border-slate-200 dark:border-white/5 transition-colors">
-                <div className="p-4 rounded-xl mb-4 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center gap-3 transition-colors">
-                    <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex flex-shrink-0 items-center justify-center">
-                        <span className="text-slate-900 dark:text-white font-medium text-sm">AD</span>
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900 dark:text-white line-clamp-1">Administrator</p>
-                        <p className="text-xs text-slate-600 dark:text-slate-400">HQ Setup</p>
-                    </div>
-                </div>
+                {user && (
+                    <button onClick={() => setIsSettingsOpen(true)} className="p-2 w-full text-left rounded-xl mb-4 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center gap-3 transition-colors hover:bg-slate-200 dark:hover:bg-white/10 group cursor-pointer block">
+                        <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex flex-shrink-0 items-center justify-center group-hover:bg-accent-blue/10 group-hover:text-accent-blue transition-colors">
+                            <span className="text-slate-900 group-hover:text-accent-blue dark:text-white font-medium text-sm">
+                                {user.name ? user.name.charAt(0).toUpperCase() : "A"}
+                            </span>
+                        </div>
+                        <div className="flex-1 text-left hidden md:block">
+                            <p className="text-sm font-medium text-slate-900 dark:text-white line-clamp-1">{user.name || "Administrator"}</p>
+                            <p className="text-xs text-slate-500 hover:text-accent-blue line-clamp-1">Edit Profile</p>
+                        </div>
+                    </button>
+                )}
 
                 <Link
                     href="/driver"
@@ -142,11 +148,15 @@ export function Sidebar() {
                     Enter Driver Portal
                 </Link>
 
-                <button className="flex items-center gap-3 px-4 py-3 w-full text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white hover:bg-slate-100 dark:bg-white/5 rounded-xl transition-all text-sm font-medium group">
+                <button onClick={() => signOut({ callbackUrl: '/login' })} className="flex items-center gap-3 px-4 py-3 w-full text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white hover:bg-slate-100 dark:bg-white/5 rounded-xl transition-all text-sm font-medium group">
                     <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
                     Sign Out
                 </button>
             </div>
+
+            {user && (
+                <AdminSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={user} />
+            )}
         </div>
     );
 }

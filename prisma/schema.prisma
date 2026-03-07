@@ -84,10 +84,12 @@ model MachineStock {
 model Driver {
   id         Int        @id @default(autoincrement())
   name       String
-  phone      String?
+  phone      String?    @unique // Added unique for phone number login
   email      String?
+  pin        String?    // Stores hashed 4-digit PIN
   Dispatches Dispatch[]
 }
+
 
 model Dispatch {
   id            Int            @id @default(autoincrement())
@@ -248,4 +250,14 @@ model PurchaseOrderItem {
 
   @@index([purchaseOrderId])
   @@index([itemId])
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  password  String   // Stores hashed password
+  role      String   @default("ADMIN") // 'ADMIN' or 'SUPER_ADMIN'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
