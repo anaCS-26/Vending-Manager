@@ -7,6 +7,8 @@ import type { ActionResult, PaginatedResult, DispatchWithRelations } from "@/typ
 import { join } from "path"
 import { writeFile, mkdir } from "fs/promises"
 import fs from "fs"
+import { put } from '@vercel/blob';
+import bcrypt from "bcryptjs";
 
 export async function getVersion(): Promise<number> {
     return getDataVersion();
@@ -212,14 +214,10 @@ export async function logRefill(
 ): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
-            // 1. Get current stock for sales calculation
-            const currentStock = await tx.machineStock.findUnique({
-                where: { machineId_itemId: { machineId, itemId } }
-            });
+            const itemData = await tx.item.findUnique({ where: { id: itemId } });
 
-            const previousEstimate = currentStock?.estimated_stock || 0;
-            // Sales = What we thought was there - What the driver actually found
-            const sales = Math.max(0, previousEstimate - quantity_before);
+            // Sales = What the driver refilled
+            const sales = quantity_refilled;
 
             // 2. Create the refill log
             await tx.refillLog.create({
@@ -229,24 +227,30 @@ export async function logRefill(
                     itemId,
                     quantity_refilled,
                     items_sold_since_last_refill: sales,
+                    price_at_refill: itemData?.price || 0,
+                    cost_at_refill: (itemData as any)?.cost || 0,
                     damaged_quantity: damaged,
                     expired_quantity: expired
-                }
+                } as any
             })
 
             // 3. Update or Create MachineStock
-            const finalStockAfterRefill = (quantity_before - damaged - expired) + quantity_refilled;
+            const currentStock = await tx.machineStock.findUnique({
+                where: { machineId_itemId: { machineId, itemId } }
+            });
+            const cap = currentStock?.capacity || 10;
 
             await tx.machineStock.upsert({
                 where: { machineId_itemId: { machineId, itemId } },
                 update: {
-                    estimated_stock: Math.max(0, finalStockAfterRefill),
+                    estimated_stock: cap,
                     last_refilled_at: new Date()
                 },
                 create: {
                     machineId,
                     itemId,
-                    estimated_stock: Math.max(0, finalStockAfterRefill),
+                    capacity: cap,
+                    estimated_stock: cap,
                     last_refilled_at: new Date()
                 }
             });
@@ -286,17 +290,10 @@ export async function logBatchRefills(
             for (const item of items) {
                 if (item.refilled === 0 && item.expired === 0) continue;
 
-                const currentStock = await tx.machineStock.findUnique({
-                    where: { machineId_itemId: { machineId, itemId: item.itemId } }
-                });
+                const itemData = await tx.item.findUnique({ where: { id: item.itemId } });
 
-                // Assumed logic: Driver tops off to Capacity. 
-                // Found before refill = capacity - refilled + expired
-                let assumedFound = item.capacity - item.refilled + item.expired;
-                assumedFound = Math.min(item.capacity, Math.max(0, assumedFound));
-
-                const previousEstimate = currentStock?.estimated_stock || item.capacity;
-                const sales = Math.max(0, Math.round(previousEstimate - assumedFound));
+                // Sales is now accurately reflected just by what they put in to fill it
+                const sales = item.refilled;
 
                 await tx.refillLog.create({
                     data: {
@@ -305,25 +302,25 @@ export async function logBatchRefills(
                         itemId: item.itemId,
                         quantity_refilled: item.refilled,
                         items_sold_since_last_refill: sales,
+                        price_at_refill: itemData?.price || 0,
+                        cost_at_refill: (itemData as any)?.cost || 0,
                         damaged_quantity: 0,
                         expired_quantity: item.expired
-                    }
+                    } as any
                 });
-
-                const finalStock = (assumedFound - item.expired) + item.refilled;
 
                 await tx.machineStock.upsert({
                     where: { machineId_itemId: { machineId, itemId: item.itemId } },
                     update: {
                         capacity: item.capacity,
-                        estimated_stock: Math.max(0, Math.min(item.capacity, finalStock)),
+                        estimated_stock: item.capacity,
                         last_refilled_at: new Date()
                     },
                     create: {
                         machineId,
                         itemId: item.itemId,
                         capacity: item.capacity,
-                        estimated_stock: Math.max(0, Math.min(item.capacity, finalStock)),
+                        estimated_stock: item.capacity,
                         last_refilled_at: new Date()
                     }
                 });
@@ -481,9 +478,31 @@ async function geocodeAddress(address?: string): Promise<{ latitude?: number, lo
     return {};
 }
 
-export async function createDriver(name: string, phone?: string, email?: string): Promise<ActionResult> {
+function normalizePhoneNumber(phone?: string): string | undefined {
+    if (!phone) return undefined;
+    // Remove all non-numeric characters (including spaces, hyphens, and the + sign if we handle it next)
+    let cleaned = phone.replace(/[^\d+]/g, '');
+
+    // Convert '+9665XXXXXXXX' or '9665XXXXXXXX' to '05XXXXXXXX'
+    if (cleaned.startsWith('+966')) {
+        cleaned = '0' + cleaned.substring(4);
+    } else if (cleaned.startsWith('966')) {
+        cleaned = '0' + cleaned.substring(3);
+    }
+
+    return cleaned;
+}
+
+export async function createDriver(name: string, phone?: string, email?: string, pin?: string): Promise<ActionResult> {
     try {
-        await prisma.driver.create({ data: { name, phone, email } })
+        let hashedPin = pin;
+        if (pin) {
+            hashedPin = await bcrypt.hash(pin, 10);
+        }
+
+        const normalizedPhone = normalizePhoneNumber(phone);
+
+        await prisma.driver.create({ data: { name, phone: normalizedPhone, email, pin: hashedPin } })
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
@@ -491,9 +510,16 @@ export async function createDriver(name: string, phone?: string, email?: string)
     }
 }
 
-export async function updateDriver(id: number, name: string, phone?: string, email?: string): Promise<ActionResult> {
+export async function updateDriver(id: number, name: string, phone?: string, email?: string, pin?: string): Promise<ActionResult> {
     try {
-        await prisma.driver.update({ where: { id }, data: { name, phone, email } })
+        let hashedPin = pin;
+        if (pin) {
+            hashedPin = await bcrypt.hash(pin, 10);
+        }
+
+        const normalizedPhone = normalizePhoneNumber(phone);
+
+        await prisma.driver.update({ where: { id }, data: { name, phone: normalizedPhone, email, ...(hashedPin !== undefined && { pin: hashedPin }) } })
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
@@ -513,7 +539,7 @@ export async function deleteDriver(id: number): Promise<ActionResult> {
     }
 }
 
-export async function createMachine(location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string): Promise<ActionResult> {
+export async function createMachine(location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string, operating_cost?: number, rental_cost?: number): Promise<ActionResult> {
     try {
         let finalLat = latitude;
         let finalLon = longitude;
@@ -533,8 +559,10 @@ export async function createMachine(location_name: string, district: string, add
                 notes,
                 terminalId,
                 latitude: finalLat,
-                longitude: finalLon
-            }
+                longitude: finalLon,
+                operating_cost: operating_cost || 0,
+                rental_cost: rental_cost || 0
+            } as any
         })
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
@@ -543,7 +571,7 @@ export async function createMachine(location_name: string, district: string, add
     }
 }
 
-export async function updateMachine(id: number, location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string): Promise<ActionResult> {
+export async function updateMachine(id: number, location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string, operating_cost?: number, rental_cost?: number): Promise<ActionResult> {
     try {
         let finalLat = latitude;
         let finalLon = longitude;
@@ -564,8 +592,10 @@ export async function updateMachine(id: number, location_name: string, district:
                 notes,
                 terminalId,
                 latitude: finalLat,
-                longitude: finalLon
-            }
+                longitude: finalLon,
+                operating_cost: operating_cost || 0,
+                rental_cost: rental_cost || 0
+            } as any
         })
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
@@ -771,28 +801,17 @@ export async function uploadItemImage(itemId: number, formData: FormData): Promi
         const file = formData.get('image') as File | null;
         if (!file) throw new Error("No image file provided");
 
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-
         const filename = `item-${itemId}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
-        const uploadDir = join(process.cwd(), 'public', 'uploads');
 
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
+        const blob = await put(filename, file, {
+            access: 'public',
+            addRandomSuffix: false
+        });
 
-        const path = join(uploadDir, filename);
-        await writeFile(path, buffer);
+        const imageUrl = blob.url;
 
-        const imageUrl = `/uploads/${filename}`;
-
-        const existingItem = await prisma.item.findUnique({ where: { id: itemId } }) as any;
-        if (existingItem?.imageUrl?.startsWith('/uploads/')) {
-            const oldPath = join(process.cwd(), 'public', existingItem.imageUrl);
-            if (fs.existsSync(oldPath)) {
-                fs.unlinkSync(oldPath);
-            }
-        }
+        // Note: we can't easily delete old blobs without storing their blob object ID or making external queries tracking urls, 
+        // to save time, we'll let vercel keep them or clean them manually.
 
         await prisma.item.update({
             where: { id: itemId },

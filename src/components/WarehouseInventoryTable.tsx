@@ -4,7 +4,6 @@ import { Package, MapPin, Search, Plus, AlertCircle } from "lucide-react";
 import type { WarehouseWithItem, WarehouseType } from "@/types";
 import type { Item } from "@prisma/client";
 import { formatCurrency } from "@/lib/utils";
-import AddStockModal from "./AddStockModal";
 
 type Props = {
     inventory: WarehouseWithItem[];
@@ -15,7 +14,6 @@ type Props = {
 export default function WarehouseInventoryTable({ inventory, warehouses, existingItems }: Props) {
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | "all">("all");
     const [searchQuery, setSearchQuery] = useState("");
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
     // Filter stock based on selected warehouse
     let filteredInventory = selectedWarehouseId === "all"
@@ -71,10 +69,6 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                 ))}
                             </select>
                         </div>
-
-                        <button onClick={() => setIsAddModalOpen(true)} className="flex items-center justify-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-colors whitespace-nowrap">
-                            <Plus className="w-4 h-4" /> Add Stock
-                        </button>
                     </div>
                 </div>
 
@@ -85,6 +79,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                 <th className="px-6 py-4 uppercase w-16 text-center">SR #</th>
                                 <th className="px-6 py-4 uppercase">Items Name</th>
                                 <th className="px-6 py-4 uppercase text-right">Store Remain / Pcs</th>
+                                <th className="px-6 py-4 uppercase text-right">COG Per Pcs</th>
                                 <th className="px-6 py-4 uppercase text-right">Price Per Pcs</th>
                                 <th className="px-6 py-4 uppercase text-right">Total Amount</th>
                                 {selectedWarehouseId === "all" && <th className="px-6 py-4 uppercase text-center w-32">Location</th>}
@@ -128,7 +123,12 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300 font-mono" dir="ltr">
+                                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 font-mono" dir="ltr">
+                                                {formatCurrency((stock.item as any).cost || 0)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="text-sm font-bold text-accent-pink font-mono" dir="ltr">
                                                 {formatCurrency(stock.item.price)}
                                             </span>
                                         </td>
@@ -162,14 +162,6 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                 )}
             </div>
 
-            <AddStockModal
-                isOpen={isAddModalOpen}
-                onClose={() => setIsAddModalOpen(false)}
-                warehouses={warehouses}
-                existingItems={existingItems}
-                inventory={inventory}
-                selectedWarehouseId={selectedWarehouseId}
-            />
         </>
     );
 }

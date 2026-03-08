@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
 import { Plus, CheckCircle2, History, Package, Clock, Loader2, Search, Store, FileText, X, Trash2, ArrowRight, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -31,7 +31,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
 
     // -- Create Order State --
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | "">("");
-    const [orderLines, setOrderLines] = useState<Array<{ itemId: number; quantityRequested: number; costPerUnit: number }>>([]);
+    const [orderLines, setOrderLines] = useState<Array<{ itemId: number; quantityRequested: number }>>([]);
     const [itemSearchQuery, setItemSearchQuery] = useState("");
     const [isSearchFocused, setIsSearchFocused] = useState(false);
 
@@ -42,17 +42,30 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
     // -- Receive Order State --
     const [receivingOrderId, setReceivingOrderId] = useState<number | null>(null);
     const [receivedQtys, setReceivedQtys] = useState<Record<number, number>>({});
+    const [receivedPrices, setReceivedPrices] = useState<Record<number, { cost: number, price: number }>>({});
 
     // -- Order History State --
     const [historySearchQuery, setHistorySearchQuery] = useState("");
     const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<OrderWithRelations | null>(null);
+
+    // -- Print State --
+    const [printingOrder, setPrintingOrder] = useState<OrderWithRelations | null>(null);
+
+    useEffect(() => {
+        if (printingOrder) {
+            setTimeout(() => {
+                window.print();
+                setPrintingOrder(null);
+            }, 100);
+        }
+    }, [printingOrder]);
 
     const handleAddLine = (itemId: number) => {
         if (orderLines.find(l => l.itemId === itemId)) return;
         const item = items.find(i => i.id === itemId);
         if (!item) return;
 
-        setOrderLines([...orderLines, { itemId, quantityRequested: 1, costPerUnit: item.price || 0 }]);
+        setOrderLines([...orderLines, { itemId, quantityRequested: 1 }]);
         setItemSearchQuery("");
         setIsSearchFocused(false);
     };
@@ -94,7 +107,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                 // Add it directly to the order line using the returned item
                 setOrderLines(prev => {
                     if (prev.find(l => l.itemId === res.item!.id)) return prev;
-                    return [...prev, { itemId: res.item!.id, quantityRequested: 1, costPerUnit: res.item!.price || 0 }];
+                    return [...prev, { itemId: res.item!.id, quantityRequested: 1 }];
                 });
 
                 setIsCreatingItem(false);
@@ -110,7 +123,14 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
             acc[curr.id] = curr.quantityRequested; // Default to expected amount
             return acc;
         }, {} as Record<number, number>);
+
+        const initialPrices = order.Items.reduce((acc: Record<number, { cost: number, price: number }>, curr: any) => {
+            acc[curr.id] = { cost: (curr.item as any).cost || 0, price: curr.item.price || 0 };
+            return acc;
+        }, {} as Record<number, { cost: number, price: number }>);
+
         setReceivedQtys(initialQtys);
+        setReceivedPrices(initialPrices);
         setReceivingOrderId(order.id);
     };
 
@@ -118,7 +138,9 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
         startTransition(async () => {
             const payload = Object.keys(receivedQtys).map(k => ({
                 purchaseOrderItemId: Number(k),
-                quantityReceived: receivedQtys[Number(k)]
+                quantityReceived: receivedQtys[Number(k)],
+                costPerUnit: receivedPrices[Number(k)]?.cost || 0,
+                retailPrice: receivedPrices[Number(k)]?.price || 0
             }));
             const res = await completePurchaseOrder(orderId, payload);
             if (res.success) {
@@ -357,12 +379,6 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                 </div>
                                                 <div className="flex items-center gap-6 self-start xl:self-auto">
                                                     <div>
-                                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Set Price</label>
-                                                        <p className="font-mono text-slate-700 dark:text-slate-300 text-sm flex items-center h-[38px]">
-                                                            {formatCurrency(line.costPerUnit)}
-                                                        </p>
-                                                    </div>
-                                                    <div>
                                                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Request Qty</label>
                                                         <input
                                                             type="number"
@@ -489,6 +505,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
 
                                                         {!isReceiving && (
                                                             <div className="flex gap-2">
+                                                                <button onClick={() => setPrintingOrder(order)} className="p-2 text-slate-400 hover:text-accent-purple hover:bg-accent-purple/10 rounded-xl transition-colors" title="Download PDF"><FileText className="w-4 h-4" /></button>
                                                                 <button onClick={() => handleStartReceiving(order)} className="px-4 py-2 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-900 dark:text-white text-xs font-bold rounded-xl transition-all border border-slate-300 dark:border-white/10">Start Receipt</button>
                                                                 <button onClick={() => handleCancelOrder(order.id)} disabled={isPending} className="p-2 text-slate-400 hover:text-accent-pink hover:bg-accent-pink/10 rounded-xl transition-colors"><X className="w-4 h-4" /></button>
                                                             </div>
@@ -514,15 +531,46 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                             </div>
                                                                         </div>
                                                                         {isReceiving && (
-                                                                            <input
-                                                                                type="number"
-                                                                                value={receivedQtys[oi.id] === 0 ? "" : (receivedQtys[oi.id] ?? oi.quantityRequested)}
-                                                                                onChange={e => setReceivedQtys({ ...receivedQtys, [oi.id]: parseInt(e.target.value) || 0 })}
-                                                                                onBlur={e => {
-                                                                                    if (receivedQtys[oi.id] === undefined || receivedQtys[oi.id] === 0) setReceivedQtys({ ...receivedQtys, [oi.id]: 0 });
-                                                                                }}
-                                                                                className="w-20 px-3 py-2 bg-white dark:bg-[#18181b] border border-accent-orange/50 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-accent-orange/50 ml-4"
-                                                                            />
+                                                                            <div className="flex flex-col gap-2 ml-4">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <label className="text-[10px] font-bold text-slate-500 uppercase flex-1 text-right">RCV QTY:</label>
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        value={receivedQtys[oi.id] === 0 ? "" : (receivedQtys[oi.id] ?? oi.quantityRequested)}
+                                                                                        onChange={e => setReceivedQtys({ ...receivedQtys, [oi.id]: parseInt(e.target.value) || 0 })}
+                                                                                        onBlur={e => {
+                                                                                            if (receivedQtys[oi.id] === undefined || receivedQtys[oi.id] === 0) setReceivedQtys({ ...receivedQtys, [oi.id]: 0 });
+                                                                                        }}
+                                                                                        className="w-20 px-2 py-1 bg-white dark:bg-[#18181b] border border-accent-orange/50 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-accent-orange/50"
+                                                                                    />
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <label className="text-[10px] font-bold text-slate-500 uppercase flex-1 text-right">Cost (COG):</label>
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        step="0.01"
+                                                                                        value={receivedPrices[oi.id]?.cost === 0 ? "" : receivedPrices[oi.id]?.cost}
+                                                                                        onChange={e => setReceivedPrices({
+                                                                                            ...receivedPrices,
+                                                                                            [oi.id]: { ...receivedPrices[oi.id], cost: parseFloat(e.target.value) || 0 }
+                                                                                        })}
+                                                                                        className="w-20 px-2 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
+                                                                                    />
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <label className="text-[10px] font-bold text-slate-500 uppercase flex-1 text-right">Retail Pr:</label>
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        step="0.01"
+                                                                                        value={receivedPrices[oi.id]?.price === 0 ? "" : receivedPrices[oi.id]?.price}
+                                                                                        onChange={e => setReceivedPrices({
+                                                                                            ...receivedPrices,
+                                                                                            [oi.id]: { ...receivedPrices[oi.id], price: parseFloat(e.target.value) || 0 }
+                                                                                        })}
+                                                                                        className="w-20 px-2 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
                                                                         )}
                                                                     </div>
                                                                     <div className="flex items-center justify-between text-xs text-slate-500 font-mono mt-1 pt-2 border-t border-slate-200 dark:border-white/5 w-full">
@@ -685,6 +733,63 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Printable Invoice Container */}
+            <div className="hidden print:block print:fixed print:inset-0 print:bg-white print:z-[9999] print:p-8">
+                {printingOrder && (
+                    <div className="max-w-4xl mx-auto text-black">
+                        <div className="flex justify-between items-start border-b-2 border-black pb-6 mb-8">
+                            <div>
+                                <h1 className="text-4xl font-black uppercase tracking-tighter">Purchase Order</h1>
+                                <p className="text-lg font-mono font-bold mt-2">PO-{printingOrder.id.toString().padStart(4, '0')}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="font-bold text-xl uppercase tracking-widest mb-1">Company Vending</p>
+                                <p className="text-sm font-medium">Destination: {printingOrder.warehouse.name}</p>
+                                <p className="text-sm font-medium text-slate-500">PO Date: {new Date(printingOrder.createdAt).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+
+                        <table className="w-full text-left border-collapse border border-black mb-16">
+                            <thead>
+                                <tr className="border-b border-black bg-slate-100 uppercase text-xs font-bold tracking-widest">
+                                    <th className="p-3 border-r border-black">Item Name</th>
+                                    <th className="p-3 border-r border-black">SKU</th>
+                                    <th className="p-3 border-r border-black">Category</th>
+                                    <th className="p-3 border-r border-black hidden sm:table-cell">Bulk Format</th>
+                                    <th className="p-3 text-center w-24">Req Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-black/20">
+                                {printingOrder.Items.map((oi: any) => (
+                                    <tr key={oi.id} className="text-sm group hover:bg-slate-50">
+                                        <td className="p-3 border-r border-black font-semibold">{oi.item.name}</td>
+                                        <td className="p-3 border-r border-black font-mono text-slate-600">{oi.item.sku}</td>
+                                        <td className="p-3 border-r border-black text-slate-600">{oi.item.category || "-"}</td>
+                                        <td className="p-3 border-r border-black text-slate-600 hidden sm:table-cell">{oi.item.bulk_format || "-"}</td>
+                                        <td className="p-3 text-center font-black text-lg">{oi.quantityRequested}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+
+                        <div className="grid grid-cols-2 gap-12 text-sm mt-auto pb-8 pt-8 border-t-2 border-black border-dashed">
+                            <div>
+                                <p className="font-bold uppercase tracking-wider mb-8 text-slate-500">Prepared By</p>
+                                <div className="border-b border-black w-full pb-1">
+                                    <span className="text-slate-400 text-xs">Signature & Date</span>
+                                </div>
+                            </div>
+                            <div>
+                                <p className="font-bold uppercase tracking-wider mb-8 text-slate-500">Received By</p>
+                                <div className="border-b border-black w-full pb-1">
+                                    <span className="text-slate-400 text-xs">Signature & Date</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

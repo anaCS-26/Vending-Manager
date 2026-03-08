@@ -16,7 +16,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 type DriverRefillUIProps = {
     machines: MachineType[];
     activeDispatches: DispatchWithRelations[];
-    userRole?: 'admin' | 'driver';
+    userRole?: 'admin' | 'super_admin' | 'driver';
 };
 
 type ItemFormState = {
@@ -45,6 +45,9 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
     // For visual submission state
     const [isSuccess, setIsSuccess] = useState(false)
+
+    // View mode toggle
+    const [viewMode, setViewMode] = useState<"BAG" | "MACHINE">("BAG");
 
     // SSE-based real-time refresh
     useRealtimeRefresh();
@@ -118,7 +121,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
         return (
             <div className="flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-neo-bg rounded-3xl min-h-[50vh] relative overflow-hidden border border-slate-200 dark:border-white/5">
                 <div className="absolute top-4 right-4 flex items-center gap-2">
-                    {userRole === 'admin' ? (
+                    {userRole === 'admin' || userRole === 'super_admin' ? (
                         <Link href="/admin" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
                             <ShieldCheck className="w-5 h-5 text-accent-green" />
                         </Link>
@@ -183,22 +186,6 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
         }));
     };
 
-    const handleFillMax = (id: number) => {
-        const row = machineItems[id];
-        // Calculate gap based on projected stock = estimated_stock - expired
-        // So the amount needed to hit capacity is capacity - projected stock
-        const projectedStock = Math.max(0, row.estimated_stock - row.expired);
-        const gap = Math.max(0, row.capacity - projectedStock);
-
-        // We can only fill up to what we have in the bag
-        const actualFill = Math.min(gap, row.bagQuantity);
-        if (actualFill > 0) {
-            updateItem(id, 'refilled', actualFill);
-        } else {
-            // Already full or out of bag stock
-            toast.info("Cannot fill to max", { description: row.bagQuantity === 0 ? "You have no remaining stock in your bag." : "Machine is already at calculated capacity." });
-        }
-    };
 
     // Add external global item to the row list
     const handleAddGlobalItem = (catalogItem: any) => {
@@ -238,7 +225,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
             {/* Top Header Section */}
             <div className="bg-white/80 dark:bg-black/40 backdrop-blur-3xl pt-10 pb-10 px-8 rounded-b-[2rem] relative z-20 border-b border-slate-200 dark:border-white/10 shrink-0">
                 <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-                    {userRole === 'admin' ? (
+                    {userRole === 'admin' || userRole === 'super_admin' ? (
                         <Link href="/admin" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10" title="Return to Admin HQ">
                             <ShieldCheck className="w-5 h-5 text-accent-green" />
                         </Link>
@@ -310,156 +297,168 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
                 {/* Dense Item List */}
                 {selectedMachine && !isLoadingMachineStock && (
-                    <div className="space-y-3 pb-6">
-                        {Object.values(machineItems)
-                            .sort((a, b) => a.item.name.localeCompare(b.item.name))
-                            .map((row) => {
-                                const isModified = row.refilled > 0 || row.expired > 0;
+                    <div className="space-y-4 pb-6">
 
-                                return (
-                                    <div key={row.itemId} className={`p-4 rounded-3xl transition-colors border ${isModified ? 'bg-accent-blue/5 border-accent-blue/40 shadow-sm' : 'bg-white dark:bg-[#1a1a1c] border-slate-200 dark:border-white/5'}`}>
+                        {/* View Mode Toggle */}
+                        <div className="flex bg-slate-100 dark:bg-black/40 p-1 rounded-xl border border-slate-200 dark:border-white/10 w-full mb-4">
+                            <button
+                                onClick={() => setViewMode("BAG")}
+                                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${viewMode === "BAG" ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
+                            >
+                                Bag Inventory
+                            </button>
+                            <button
+                                onClick={() => setViewMode("MACHINE")}
+                                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${viewMode === "MACHINE" ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
+                            >
+                                Machine Stock
+                            </button>
+                        </div>
 
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div className="flex items-center gap-3 flex-1 pr-2">
-                                                <div className="flex-shrink-0">
-                                                    {row.item.imageUrl ? (
-                                                        <label className="relative block w-16 h-16 cursor-pointer group">
-                                                            <img src={row.item.imageUrl} alt={row.item.name} className="w-16 h-16 rounded-xl object-cover bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 group-hover:opacity-50 transition-opacity shadow-sm" />
-                                                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <Camera className="w-6 h-6 text-white" />
-                                                            </div>
-                                                            <input
-                                                                type="file"
-                                                                accept="image/*"
-                                                                className="hidden"
-                                                                onChange={async (e) => {
-                                                                    const file = e.target.files?.[0];
-                                                                    if (!file) return;
-                                                                    const toastId = toast.loading("Compressing & Updating image...");
-                                                                    try {
-                                                                        const compressedFile = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 800 });
-                                                                        const formData = new FormData();
-                                                                        formData.append("image", compressedFile);
-                                                                        const res = await uploadItemImage(row.itemId, formData);
-                                                                        if (res.success && res.data) {
-                                                                            toast.success("Image updated", { id: toastId });
-                                                                            updateItem(row.itemId, 'item', { ...row.item, imageUrl: res.data });
-                                                                        } else {
-                                                                            toast.error("Upload failed", { id: toastId, description: 'error' in res ? res.error : "Failed" });
+                        <div className="space-y-3">
+                            {Object.values(machineItems)
+                                .filter(row => viewMode === "BAG" ? row.inBag : true)
+                                .sort((a, b) => a.item.name.localeCompare(b.item.name))
+                                .map((row) => {
+                                    const isModified = row.refilled > 0 || row.expired > 0;
+
+                                    return (
+                                        <div key={row.itemId} className={`p-4 rounded-3xl transition-colors border ${isModified ? 'bg-accent-blue/5 border-accent-blue/40 shadow-sm' : 'bg-white dark:bg-[#1a1a1c] border-slate-200 dark:border-white/5'}`}>
+
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div className="flex items-center gap-3 flex-1 pr-2">
+                                                    <div className="flex-shrink-0">
+                                                        {row.item.imageUrl ? (
+                                                            <label className="relative block w-16 h-16 cursor-pointer group">
+                                                                <img src={row.item.imageUrl} alt={row.item.name} className="w-16 h-16 rounded-xl object-cover bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 group-hover:opacity-50 transition-opacity shadow-sm" />
+                                                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <Camera className="w-6 h-6 text-white" />
+                                                                </div>
+                                                                <input
+                                                                    type="file"
+                                                                    accept="image/*"
+                                                                    className="hidden"
+                                                                    onChange={async (e) => {
+                                                                        const file = e.target.files?.[0];
+                                                                        if (!file) return;
+                                                                        const toastId = toast.loading("Compressing & Updating image...");
+                                                                        try {
+                                                                            const compressedFile = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 800 });
+                                                                            const formData = new FormData();
+                                                                            formData.append("image", compressedFile);
+                                                                            const res = await uploadItemImage(row.itemId, formData);
+                                                                            if (res.success && res.data) {
+                                                                                toast.success("Image updated", { id: toastId });
+                                                                                updateItem(row.itemId, 'item', { ...row.item, imageUrl: res.data });
+                                                                            } else {
+                                                                                toast.error("Upload failed", { id: toastId, description: 'error' in res ? res.error : "Failed" });
+                                                                            }
+                                                                        } catch (err) {
+                                                                            toast.error("Compression failed", { id: toastId });
                                                                         }
-                                                                    } catch (err) {
-                                                                        toast.error("Compression failed", { id: toastId });
-                                                                    }
-                                                                }}
-                                                            />
-                                                        </label>
-                                                    ) : (
-                                                        <label className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm gap-1">
-                                                            <input
-                                                                type="file"
-                                                                accept="image/*"
-                                                                className="hidden"
-                                                                onChange={async (e) => {
-                                                                    const file = e.target.files?.[0];
-                                                                    if (!file) return;
-                                                                    const toastId = toast.loading("Compressing & Uploading image...");
-                                                                    try {
-                                                                        const compressedFile = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 800 });
-                                                                        const formData = new FormData();
-                                                                        formData.append("image", compressedFile);
-                                                                        const res = await uploadItemImage(row.itemId, formData);
-                                                                        if (res.success && res.data) {
-                                                                            toast.success("Image uploaded", { id: toastId });
-                                                                            updateItem(row.itemId, 'item', { ...row.item, imageUrl: res.data });
-                                                                        } else {
-                                                                            toast.error("Upload failed", { id: toastId, description: 'error' in res ? res.error : "Failed" });
+                                                                    }}
+                                                                />
+                                                            </label>
+                                                        ) : (
+                                                            <label className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm gap-1">
+                                                                <input
+                                                                    type="file"
+                                                                    accept="image/*"
+                                                                    className="hidden"
+                                                                    onChange={async (e) => {
+                                                                        const file = e.target.files?.[0];
+                                                                        if (!file) return;
+                                                                        const toastId = toast.loading("Compressing & Uploading image...");
+                                                                        try {
+                                                                            const compressedFile = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 800 });
+                                                                            const formData = new FormData();
+                                                                            formData.append("image", compressedFile);
+                                                                            const res = await uploadItemImage(row.itemId, formData);
+                                                                            if (res.success && res.data) {
+                                                                                toast.success("Image uploaded", { id: toastId });
+                                                                                updateItem(row.itemId, 'item', { ...row.item, imageUrl: res.data });
+                                                                            } else {
+                                                                                toast.error("Upload failed", { id: toastId, description: 'error' in res ? res.error : "Failed" });
+                                                                            }
+                                                                        } catch (err) {
+                                                                            toast.error("Compression failed", { id: toastId });
                                                                         }
-                                                                    } catch (err) {
-                                                                        toast.error("Compression failed", { id: toastId });
-                                                                    }
-                                                                }}
-                                                            />
-                                                            <Camera className="w-5 h-5 text-slate-400" />
-                                                            <span className="text-[8px] font-bold text-slate-500 uppercase">Add Photo</span>
-                                                        </label>
-                                                    )}
-                                                </div>
-                                                <div className="flex-1">
-                                                    <h3 className="font-bold text-slate-900 dark:text-white text-base leading-tight mb-1">{row.item.name}</h3>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className={`text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${row.inBag && row.bagQuantity > 0 ? 'bg-accent-blue/20 text-accent-blue' : row.inBag && row.bagQuantity === 0 ? 'bg-accent-pink/20 text-accent-pink' : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400'}`}>
-                                                            Bag: {row.bagQuantity}
-                                                        </span>
-                                                        <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
-                                                            SYS: <span className="font-bold">{row.estimated_stock}</span> / MAX:
-                                                            <input
-                                                                type="number"
-                                                                value={row.capacity === 0 ? '' : row.capacity}
-                                                                onChange={(e) => updateItem(row.itemId, 'capacity', parseInt(e.target.value) || 0)}
-                                                                className="w-10 bg-transparent border-b border-slate-300 dark:border-slate-600 text-center font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue px-0 py-0"
-                                                            />
-                                                        </span>
+                                                                    }}
+                                                                />
+                                                                <Camera className="w-5 h-5 text-slate-400" />
+                                                                <span className="text-[8px] font-bold text-slate-500 uppercase">Add Photo</span>
+                                                            </label>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <h3 className="font-bold text-slate-900 dark:text-white text-base leading-tight mb-1">{row.item.name}</h3>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${row.inBag && row.bagQuantity > 0 ? 'bg-accent-blue/20 text-accent-blue' : row.inBag && row.bagQuantity === 0 ? 'bg-accent-pink/20 text-accent-pink' : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400'}`}>
+                                                                Bag: {row.bagQuantity}
+                                                            </span>
+                                                            <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+                                                                SYS: <span className="font-bold">{row.estimated_stock}</span>
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </div>
+
+
                                             </div>
 
-                                            {userRole !== 'admin' && (
-                                                <button
-                                                    onClick={() => handleFillMax(row.itemId)}
-                                                    className="shrink-0 flex items-center gap-1 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-colors"
-                                                >
-                                                    <Zap className="w-3 h-3 text-accent-blue" /> Max Out
-                                                </button>
-                                            )}
-                                        </div>
+                                            <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-white/5">
 
-                                        <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-white/5">
-
-                                            {/* Expired Counter */}
-                                            <div className="flex flex-col flex-1 pl-1 border-r border-slate-100 dark:border-white/5">
-                                                <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Expired</span>
-                                                <div className="flex items-center h-10 w-28 bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                    {userRole !== 'admin' ? (
-                                                        <button onClick={() => updateItem(row.itemId, 'expired', Math.max(0, row.expired - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                    ) : (
-                                                        <div className="w-8 h-full"></div>
-                                                    )}
-                                                    <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.expired}</span>
-                                                    {userRole !== 'admin' ? (
-                                                        <button onClick={() => updateItem(row.itemId, 'expired', row.expired + 1)} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
-                                                    ) : (
-                                                        <div className="w-8 h-full"></div>
-                                                    )}
+                                                {/* Expired Counter */}
+                                                <div className="flex flex-col flex-1 pl-1 border-r border-slate-100 dark:border-white/5">
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Expired</span>
+                                                    <div className="flex items-center h-10 w-28 bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
+                                                        {userRole !== 'admin' ? (
+                                                            <button onClick={() => updateItem(row.itemId, 'expired', Math.max(0, row.expired - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
+                                                        ) : (
+                                                            <div className="w-8 h-full"></div>
+                                                        )}
+                                                        <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.expired}</span>
+                                                        {userRole !== 'admin' ? (
+                                                            <button onClick={() => updateItem(row.itemId, 'expired', row.expired + 1)} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
+                                                        ) : (
+                                                            <div className="w-8 h-full"></div>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
 
-                                            {/* Refilled Counter */}
-                                            <div className="flex flex-col flex-1 pl-4">
-                                                <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1">Refilled</span>
-                                                <div className="flex items-center h-10 w-28 bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                    {userRole !== 'admin' ? (
-                                                        <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                    ) : (
-                                                        <div className="w-8 h-full"></div>
-                                                    )}
-                                                    <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.refilled}</span>
-                                                    {userRole !== 'admin' ? (
-                                                        <button onClick={() => {
-                                                            const newVal = Math.min(row.bagQuantity, row.refilled + 1);
-                                                            updateItem(row.itemId, 'refilled', newVal);
-                                                        }} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
-                                                    ) : (
-                                                        <div className="w-8 h-full"></div>
-                                                    )}
+                                                {/* Refilled Counter */}
+                                                <div className="flex flex-col flex-1 pl-4">
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1">Refilled</span>
+                                                    <div className="flex items-center h-10 w-28 bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
+                                                        {userRole !== 'admin' ? (
+                                                            <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
+                                                        ) : (
+                                                            <div className="w-8 h-full"></div>
+                                                        )}
+                                                        <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.refilled}</span>
+                                                        {userRole !== 'admin' ? (
+                                                            <button onClick={() => {
+                                                                const newVal = Math.min(row.bagQuantity, row.refilled + 1);
+                                                                updateItem(row.itemId, 'refilled', newVal);
+                                                            }} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
+                                                        ) : (
+                                                            <div className="w-8 h-full"></div>
+                                                        )}
+                                                    </div>
                                                 </div>
+
                                             </div>
 
                                         </div>
-
-                                    </div>
-                                )
-                            })
-                        }
+                                    )
+                                })
+                            }
+                            {Object.values(machineItems).filter(row => viewMode === "BAG" ? row.inBag : true).length === 0 && (
+                                <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm font-medium">
+                                    No items in this view.
+                                </div>
+                            )}
+                        </div>
 
                         {/* Search to Add New Items (Driver Only) */}
                         {userRole !== 'admin' && (

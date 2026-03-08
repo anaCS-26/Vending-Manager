@@ -22,7 +22,7 @@ export function SuperSidebar() {
     return (
         <div className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col relative z-20 transition-colors">
             <div className="p-8 pb-6 border-b border-slate-800 relative overflow-hidden transition-colors">
-                <Link href="/super" className="flex items-center gap-3 relative z-10 hover:scale-105 transition-transform cursor-pointer group">
+                <Link href="/admin" className="flex items-center gap-3 relative z-10 hover:scale-105 transition-transform cursor-pointer group">
                     <div className="w-10 h-10 bg-brand-500/20 rounded-xl flex items-center justify-center border border-brand-500/40 group-hover:bg-brand-500/30 transition-colors">
                         <ShieldAlert className="w-5 h-5 text-brand-400" />
                     </div>

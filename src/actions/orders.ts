@@ -8,10 +8,16 @@ export async function createPurchaseOrder(data: {
     items: Array<{
         itemId: number;
         quantityRequested: number;
-        costPerUnit: number;
     }>;
 }) {
     try {
+        const itemIds = data.items.map((i) => i.itemId);
+        const itemCosts = await prisma.item.findMany({
+            where: { id: { in: itemIds } },
+            select: { id: true, cost: true }
+        });
+        const costMap = new Map(itemCosts.map(i => [i.id, i.cost]));
+
         const order = await prisma.purchaseOrder.create({
             data: {
                 warehouseId: data.warehouseId,
@@ -20,7 +26,7 @@ export async function createPurchaseOrder(data: {
                     create: data.items.map((item) => ({
                         itemId: item.itemId,
                         quantityRequested: item.quantityRequested,
-                        costPerUnit: item.costPerUnit,
+                        costPerUnit: costMap.get(item.itemId) || 0,
                     })),
                 },
             },
@@ -36,7 +42,7 @@ export async function createPurchaseOrder(data: {
 
 export async function completePurchaseOrder(
     orderId: number,
-    receivedData: Array<{ purchaseOrderItemId: number; quantityReceived: number }>
+    receivedData: Array<{ purchaseOrderItemId: number; quantityReceived: number; costPerUnit: number; retailPrice: number }>
 ) {
     try {
         await prisma.$transaction(async (tx) => {
@@ -94,6 +100,15 @@ export async function completePurchaseOrder(
                         });
                     }
                 }
+
+                // Update Item pricing globally
+                await tx.item.update({
+                    where: { id: orderItem.itemId },
+                    data: {
+                        cost: item.costPerUnit,
+                        price: item.retailPrice
+                    }
+                });
             }
 
             // 3. Mark the order as completed

@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -18,65 +15,68 @@ model Item {
   bulk_format          String?
   sku                  String
   price                Float                 @default(0.0)
+  cost                 Float                 @default(0.0)
   imageUrl             String?
-  WarehouseStock       WarehouseStock[]
   DispatchItems        DispatchItem[]
-  RefillLogs           RefillLog[]
-  PurchaseInvoiceItems PurchaseInvoiceItem[]
   InventoryAdjustments InventoryAdjustment[]
   MachineStock         MachineStock[]
-  ReturnVerifications  ReturnVerification[]
+  PurchaseInvoiceItems PurchaseInvoiceItem[]
   PurchaseOrderItems   PurchaseOrderItem[]
+  RefillLogs           RefillLog[]
+  ReturnVerifications  ReturnVerification[]
+  WarehouseStock       WarehouseStock[]
 }
 
 model Warehouse {
-  id            Int              @id @default(autoincrement())
-  name          String
-  location      String?
-  address       String?
-  latitude      Float?
-  longitude     Float?
-  Stock         WarehouseStock[]
-  Dispatches    Dispatch[]
+  id             Int              @id @default(autoincrement())
+  name           String
+  location       String?
+  address        String?
+  latitude       Float?
+  longitude      Float?
+  operating_cost Float            @default(0.0)
+  rental_cost    Float            @default(0.0)
+  Dispatches     Dispatch[]
   PurchaseOrders PurchaseOrder[]
+  Stock          WarehouseStock[]
 }
 
 model WarehouseStock {
   id               Int       @id @default(autoincrement())
   warehouseId      Int
-  warehouse        Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   itemId           Int
-  item             Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   quantity_on_hand Int       @default(0)
   pending_deficit  Int       @default(0)
+  item             Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  warehouse        Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   @@unique([warehouseId, itemId])
 }
 
 model Machine {
-  id            Int            @id @default(autoincrement())
-  location_name String
-  district      String
-  address       String?
-  latitude      Float?
-  longitude     Float?
-  notes         String?
-  terminalId    String?        @unique // e.g., Nayax terminal ID
-  locationRent  Float          @default(0.0)
-  adminExpenses Float          @default(0.0)
-  RefillLogs    RefillLog[]
-  Stock         MachineStock[]
+  id             Int            @id @default(autoincrement())
+  location_name  String
+  district       String
+  address        String?
+  latitude       Float?
+  longitude      Float?
+  notes          String?
+  terminalId     String?        @unique
+  operating_cost Float          @default(0.0)
+  rental_cost    Float          @default(0.0)
+  Stock          MachineStock[]
+  RefillLogs     RefillLog[]
 }
 
 model MachineStock {
   id               Int      @id @default(autoincrement())
   machineId        Int
-  machine          Machine  @relation(fields: [machineId], references: [id], onDelete: Cascade)
   itemId           Int
-  item             Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  capacity         Int      @default(10) // Maximum capacity for this item in the machine
+  capacity         Int      @default(10)
   estimated_stock  Int      @default(0)
   last_refilled_at DateTime @default(now())
+  item             Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  machine          Machine  @relation(fields: [machineId], references: [id], onDelete: Cascade)
 
   @@unique([machineId, itemId])
 }
@@ -84,23 +84,22 @@ model MachineStock {
 model Driver {
   id         Int        @id @default(autoincrement())
   name       String
-  phone      String?    @unique // Added unique for phone number login
+  phone      String?    @unique
   email      String?
-  pin        String?    // Stores hashed 4-digit PIN
+  pin        String?
   Dispatches Dispatch[]
 }
 
-
 model Dispatch {
-  id            Int            @id @default(autoincrement())
-  driverId      Int
-  driver        Driver         @relation(fields: [driverId], references: [id])
-  warehouseId   Int?           // Optional temporarily for migration, should be required
-  warehouse     Warehouse?     @relation(fields: [warehouseId], references: [id])
-  dispatch_date DateTime       @default(now())
-  status        String         @default("OPEN") // OPEN, CLOSED
-  DispatchItems DispatchItem[]
-  RefillLogs    RefillLog[]
+  id                  Int                  @id @default(autoincrement())
+  driverId            Int
+  warehouseId         Int?
+  dispatch_date       DateTime             @default(now())
+  status              String               @default("OPEN")
+  driver              Driver               @relation(fields: [driverId], references: [id])
+  warehouse           Warehouse?           @relation(fields: [warehouseId], references: [id])
+  DispatchItems       DispatchItem[]
+  RefillLogs          RefillLog[]
   ReturnVerifications ReturnVerification[]
 
   @@index([status])
@@ -112,31 +111,33 @@ model Dispatch {
 model DispatchItem {
   id                Int      @id @default(autoincrement())
   dispatchId        Int
-  dispatch          Dispatch @relation(fields: [dispatchId], references: [id])
   itemId            Int
-  item              Item     @relation(fields: [itemId], references: [id])
   quantity_given    Int      @default(0)
   quantity_returned Int      @default(0)
   quantity_damaged  Int      @default(0)
   price_at_dispatch Float    @default(0.0)
+  dispatch          Dispatch @relation(fields: [dispatchId], references: [id])
+  item              Item     @relation(fields: [itemId], references: [id])
 
   @@index([dispatchId])
   @@index([itemId])
 }
 
 model RefillLog {
-  id                            Int      @id @default(autoincrement())
-  dispatchId                    Int
-  dispatch                      Dispatch @relation(fields: [dispatchId], references: [id])
-  machineId                     Int
-  machine                       Machine  @relation(fields: [machineId], references: [id])
-  itemId                        Int
-  item                          Item     @relation(fields: [itemId], references: [id])
-  quantity_refilled             Int
-  items_sold_since_last_refill  Int?     // User driven tracker to accurately estimate machine stock
-  damaged_quantity              Int      @default(0) // Track pulled damaged items
-  expired_quantity              Int      @default(0) // Track pulled expired items
-  refilled_at                   DateTime @default(now())
+  id                           Int      @id @default(autoincrement())
+  dispatchId                   Int
+  machineId                    Int
+  itemId                       Int
+  quantity_refilled            Int
+  items_sold_since_last_refill Int?
+  price_at_refill              Float    @default(0.0)
+  cost_at_refill               Float    @default(0.0)
+  damaged_quantity             Int      @default(0)
+  expired_quantity             Int      @default(0)
+  refilled_at                  DateTime @default(now())
+  dispatch                     Dispatch @relation(fields: [dispatchId], references: [id])
+  item                         Item     @relation(fields: [itemId], references: [id])
+  machine                      Machine  @relation(fields: [machineId], references: [id])
 
   @@index([dispatchId])
   @@index([machineId])
@@ -144,17 +145,17 @@ model RefillLog {
 }
 
 model ReturnVerification {
-  id            Int      @id @default(autoincrement())
-  dispatchId    Int
-  dispatch      Dispatch @relation(fields: [dispatchId], references: [id])
-  itemId        Int
-  item          Item     @relation(fields: [itemId], references: [id])
-  quantity      Int
-  reason        String   // DAMAGED, EXPIRED
-  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  reported_at   DateTime @default(now())
-  verified_at   DateTime?
-  notes         String?
+  id          Int       @id @default(autoincrement())
+  dispatchId  Int
+  itemId      Int
+  quantity    Int
+  reason      String
+  status      String    @default("PENDING")
+  reported_at DateTime  @default(now())
+  verified_at DateTime?
+  notes       String?
+  dispatch    Dispatch  @relation(fields: [dispatchId], references: [id])
+  item        Item      @relation(fields: [itemId], references: [id])
 
   @@index([dispatchId])
   @@index([status])
@@ -171,13 +172,13 @@ model Supplier {
 model PurchaseInvoice {
   id            Int                   @id @default(autoincrement())
   supplierId    Int
-  supplier      Supplier              @relation(fields: [supplierId], references: [id])
   invoiceNumber String                @unique
   date          DateTime              @default(now())
   totalAmount   Float                 @default(0.0)
   vatAmount     Float                 @default(0.0)
   returnAmount  Float                 @default(0.0)
   notes         String?
+  supplier      Supplier              @relation(fields: [supplierId], references: [id])
   Items         PurchaseInvoiceItem[]
 
   @@index([supplierId])
@@ -187,11 +188,11 @@ model PurchaseInvoice {
 model PurchaseInvoiceItem {
   id           Int             @id @default(autoincrement())
   invoiceId    Int
-  invoice      PurchaseInvoice @relation(fields: [invoiceId], references: [id])
   itemId       Int
-  item         Item            @relation(fields: [itemId], references: [id])
   quantity     Int
   pricePerUnit Float
+  invoice      PurchaseInvoice @relation(fields: [invoiceId], references: [id])
+  item         Item            @relation(fields: [itemId], references: [id])
 
   @@index([invoiceId])
   @@index([itemId])
@@ -199,10 +200,10 @@ model PurchaseInvoiceItem {
 
 model CustomerRefund {
   id            Int       @id @default(autoincrement())
-  refundNumber  String // e.g., the SR# or phone number
+  refundNumber  String
   phoneNumber   String?
   itemPrice     Float     @default(0.0)
-  status        String    @default("PENDING") // PENDING, DONE
+  status        String    @default("PENDING")
   receivedMoney Float?    @default(0.0)
   dateReceived  DateTime?
   createdAt     DateTime  @default(now())
@@ -214,52 +215,52 @@ model CustomerRefund {
 model InventoryAdjustment {
   id                Int      @id @default(autoincrement())
   itemId            Int
-  item              Item     @relation(fields: [itemId], references: [id])
   quantity          Int
-  reason            String // DAMAGED, EXPIRED, OFFICE_USE
-  locationName      String? // Where it happened (e.g., machine name or warehouse)
+  reason            String
+  locationName      String?
   priceAtAdjustment Float    @default(0.0)
   date              DateTime @default(now())
+  item              Item     @relation(fields: [itemId], references: [id])
 
   @@index([itemId])
   @@index([reason])
 }
 
 model PurchaseOrder {
-  id           Int                 @id @default(autoincrement())
-  warehouseId  Int
-  warehouse    Warehouse           @relation(fields: [warehouseId], references: [id])
-  status       String              @default("PENDING") // PENDING, COMPLETED, CANCELLED
-  createdAt    DateTime            @default(now())
-  completedAt  DateTime?
-  Items        PurchaseOrderItem[]
+  id          Int                 @id @default(autoincrement())
+  warehouseId Int
+  status      String              @default("PENDING")
+  createdAt   DateTime            @default(now())
+  completedAt DateTime?
+  warehouse   Warehouse           @relation(fields: [warehouseId], references: [id])
+  Items       PurchaseOrderItem[]
 
   @@index([warehouseId])
   @@index([status])
 }
 
 model PurchaseOrderItem {
-  id                 Int           @id @default(autoincrement())
-  purchaseOrderId    Int
-  purchaseOrder      PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
-  itemId             Int
-  item               Item          @relation(fields: [itemId], references: [id])
-  quantityRequested  Int
-  quantityReceived   Int           @default(0)
-  costPerUnit        Float         @default(0.0)
+  id                Int           @id @default(autoincrement())
+  purchaseOrderId   Int
+  itemId            Int
+  quantityRequested Int
+  quantityReceived  Int           @default(0)
+  costPerUnit       Float         @default(0.0)
+  item              Item          @relation(fields: [itemId], references: [id])
+  purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
 
   @@index([purchaseOrderId])
   @@index([itemId])
 }
 
 model Admin {
-  id                 Int       @id @default(autoincrement())
-  email              String    @unique
-  name               String?
-  password           String    // Stores hashed password
-  role               String    @default("ADMIN") // 'ADMIN' or 'SUPER_ADMIN'
-  resetToken         String?   @unique
-  resetTokenExpiry   DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id               Int       @id @default(autoincrement())
+  email            String    @unique
+  name             String?
+  password         String
+  role             String    @default("ADMIN")
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }

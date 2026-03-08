@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import L from "leaflet";
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import { Activity, PackageOpen, AlertCircle, Store } from "lucide-react";
 
 // Fix for default Leaflet icon paths in Next.js
@@ -161,88 +164,118 @@ export default function MapVisual({ machines, predictions = [], warehouses = [] 
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
                 />
 
-                {/* Warehouses rendered first so machines overlay them if close */}
-                {warehouses.filter(w => w.latitude && w.longitude).map(warehouse => {
-                    return (
-                        <Marker
-                            key={`wh-${warehouse.id}`}
-                            position={[warehouse.latitude, warehouse.longitude]}
-                            icon={warehouseIcon}
-                        >
-                            <Popup className="custom-popup" offset={[0, -10]}>
-                                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 p-4 rounded-xl shadow-xl -m-[11px] min-w-[200px]">
-                                    <h4 className="font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
-                                        <Store className="w-4 h-4 text-[#a855f7]" />
-                                        {warehouse.name}
-                                    </h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono border-b border-slate-200 dark:border-white/5 pb-2 mb-2 break-words">
-                                        {warehouse.address || warehouse.location || "Central Facility"}
-                                    </p>
-                                    <div className="space-y-2 mt-3 text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                                        Distribution Center
-                                    </div>
-                                </div>
-                            </Popup>
-                        </Marker>
-                    )
-                })}
-
-                {mappedMachines.map(machine => {
-                    // Get all predictions for this specific machine
-                    const machinePredictions = predictions.filter((p: any) => p.machineId === machine.id && p.predictedHoursUntilEmpty !== null);
-                    // It is critical if any item runs out in <= 24 hours
-                    const criticalItems = machinePredictions.filter((p: any) => p.predictedHoursUntilEmpty <= 24);
-                    const isCritical = criticalItems.length > 0;
-
-                    // Find the shortest depletion time for the tooltip
-                    const shortestDepletion = machinePredictions.length > 0
-                        ? Math.min(...machinePredictions.map((p: any) => p.predictedHoursUntilEmpty))
-                        : null;
-
-                    const fillCount = machine.RefillLogs?.reduce((acc: number, curr: any) => acc + curr.quantity_refilled, 0) || 0;
-
-                    return (
-                        <Marker
-                            key={machine.id}
-                            position={[machine.latitude, machine.longitude]}
-                            icon={isCritical ? criticalIcon : customIcon}
-                        >
-                            <Popup
-                                className="custom-popup"
-                                offset={[0, -10]}
+                <MarkerClusterGroup
+                    chunkedLoading
+                    maxClusterRadius={40}
+                    showCoverageOnHover={false}
+                    iconCreateFunction={(cluster: any) => {
+                        return L.divIcon({
+                            html: `<div class="bg-[#a855f7]/80 backdrop-blur text-white font-bold rounded-full w-8 h-8 flex items-center justify-center border-2 border-white shadow-[0_0_15px_rgba(168,85,247,0.5)]">
+                                     ${cluster.getChildCount()}
+                                   </div>`,
+                            className: 'custom-cluster-marker',
+                            iconSize: L.point(32, 32, true),
+                        });
+                    }}
+                >
+                    {/* Warehouses rendered first so machines overlay them if close */}
+                    {warehouses.filter(w => w.latitude && w.longitude).map(warehouse => {
+                        return (
+                            <Marker
+                                key={`wh-${warehouse.id}`}
+                                position={[warehouse.latitude, warehouse.longitude]}
+                                icon={warehouseIcon}
                             >
-                                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 p-4 rounded-xl shadow-xl -m-[11px] min-w-[200px]">
-                                    <h4 className="font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
-                                        {isCritical ? <AlertCircle className="w-4 h-4 text-accent-pink" /> : <Activity className="w-4 h-4 text-accent-blue" />}
-                                        {machine.location_name}
-                                    </h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono border-b border-slate-200 dark:border-white/5 pb-2 mb-2">
-                                        ID: {machine.terminalId || `M-${machine.id.toString().padStart(4, '0')}`}
-                                    </p>
-
-                                    <div className="space-y-2 mt-3">
-                                        <div className="flex justify-between items-center bg-slate-100 dark:bg-black/20 p-2 rounded border border-slate-200 dark:border-white/5">
-                                            <span className="text-[10px] uppercase text-slate-500 font-bold flex items-center gap-1">
-                                                <PackageOpen className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                                                Total Delivered
-                                            </span>
-                                            <span className="font-mono font-bold text-slate-900 dark:text-white">{fillCount}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center bg-slate-100 dark:bg-black/20 p-2 rounded border border-slate-200 dark:border-white/5">
-                                            <span className="text-[10px] uppercase text-slate-500 font-bold flex items-center gap-1">
-                                                <Activity className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                                                Health
-                                            </span>
-                                            <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded-full ${isCritical ? 'bg-accent-pink/20 text-accent-pink' : 'bg-accent-green/20 text-accent-green'}`}>
-                                                {isCritical && shortestDepletion !== null ? `DEPLETES IN <${Math.ceil(shortestDepletion)}H` : 'HEALTHY'}
-                                            </span>
+                                <Popup className="custom-popup" offset={[0, -10]}>
+                                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 p-4 rounded-xl shadow-xl -m-[11px] min-w-[200px]">
+                                        <h4 className="font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                                            <Store className="w-4 h-4 text-[#a855f7]" />
+                                            {warehouse.name}
+                                        </h4>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono border-b border-slate-200 dark:border-white/5 pb-2 mb-2 break-words">
+                                            {warehouse.address || warehouse.location || "Central Facility"}
+                                        </p>
+                                        <div className="space-y-2 mt-3 text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                                            Distribution Center
                                         </div>
                                     </div>
-                                </div>
-                            </Popup>
-                        </Marker>
-                    )
-                })}
+                                </Popup>
+                            </Marker>
+                        )
+                    })}
+                </MarkerClusterGroup>
+
+                <MarkerClusterGroup
+                    chunkedLoading
+                    maxClusterRadius={40}
+                    showCoverageOnHover={false}
+                    iconCreateFunction={(cluster: any) => {
+                        return L.divIcon({
+                            html: `<div class="bg-brand-500/80 backdrop-blur text-white font-bold rounded-full w-8 h-8 flex items-center justify-center border-2 border-white shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                                     ${cluster.getChildCount()}
+                                   </div>`,
+                            className: 'custom-cluster-marker',
+                            iconSize: L.point(32, 32, true),
+                        });
+                    }}
+                >
+                    {mappedMachines.map(machine => {
+                        // Get all predictions for this specific machine
+                        const machinePredictions = predictions.filter((p: any) => p.machineId === machine.id && p.predictedHoursUntilEmpty !== null);
+                        // It is critical if any item runs out in <= 24 hours
+                        const criticalItems = machinePredictions.filter((p: any) => p.predictedHoursUntilEmpty <= 24);
+                        const isCritical = criticalItems.length > 0;
+
+                        // Find the shortest depletion time for the tooltip
+                        const shortestDepletion = machinePredictions.length > 0
+                            ? Math.min(...machinePredictions.map((p: any) => p.predictedHoursUntilEmpty))
+                            : null;
+
+                        const fillCount = machine.RefillLogs?.reduce((acc: number, curr: any) => acc + curr.quantity_refilled, 0) || 0;
+
+                        return (
+                            <Marker
+                                key={machine.id}
+                                position={[machine.latitude, machine.longitude]}
+                                icon={isCritical ? criticalIcon : customIcon}
+                            >
+                                <Popup
+                                    className="custom-popup"
+                                    offset={[0, -10]}
+                                >
+                                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 p-4 rounded-xl shadow-xl -m-[11px] min-w-[200px]">
+                                        <h4 className="font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                                            {isCritical ? <AlertCircle className="w-4 h-4 text-accent-pink" /> : <Activity className="w-4 h-4 text-accent-blue" />}
+                                            {machine.location_name}
+                                        </h4>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono border-b border-slate-200 dark:border-white/5 pb-2 mb-2">
+                                            ID: {machine.terminalId || `M-${machine.id.toString().padStart(4, '0')}`}
+                                        </p>
+
+                                        <div className="space-y-2 mt-3">
+                                            <div className="flex justify-between items-center bg-slate-100 dark:bg-black/20 p-2 rounded border border-slate-200 dark:border-white/5">
+                                                <span className="text-[10px] uppercase text-slate-500 font-bold flex items-center gap-1">
+                                                    <PackageOpen className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                                                    Total Delivered
+                                                </span>
+                                                <span className="font-mono font-bold text-slate-900 dark:text-white">{fillCount}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center bg-slate-100 dark:bg-black/20 p-2 rounded border border-slate-200 dark:border-white/5">
+                                                <span className="text-[10px] uppercase text-slate-500 font-bold flex items-center gap-1">
+                                                    <Activity className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                                                    Health
+                                                </span>
+                                                <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded-full ${isCritical ? 'bg-accent-pink/20 text-accent-pink' : 'bg-accent-green/20 text-accent-green'}`}>
+                                                    {isCritical && shortestDepletion !== null ? `DEPLETES IN <${Math.ceil(shortestDepletion)}H` : 'HEALTHY'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Popup>
+                            </Marker>
+                        )
+                    })}
+                </MarkerClusterGroup>
             </MapContainer>
 
             {/* Global style overrides for Leaflet Popups to match dark mode */}
