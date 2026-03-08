@@ -137,8 +137,8 @@ async function main() {
                 terminalId: m.term,
                 latitude: m.lat,
                 longitude: m.lon,
-                locationRent: 500,
-                adminExpenses: 150
+                rental_cost: 500,
+                operating_cost: 150
             }
         })
     ))
