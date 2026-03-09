@@ -285,7 +285,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                     "Bulk Format": i.bulk_format || "N/A",
                                     "Retail Price": formatCurrency(i.price),
                                     "Cost of Goods": formatCurrency(i.cost || 0),
-                                    "Total System Stock": i.WarehouseStock.reduce((acc: number, ws: any) => acc + ws.quantity_on_hand, 0) + i.MachineStock.reduce((acc: number, ms: any) => acc + ms.estimated_stock, 0)
+                                    "Total System Stock": (i.WarehouseStock || []).reduce((acc: number, ws: any) => acc + ws.quantity_on_hand, 0) + (i.MachineStock || []).reduce((acc: number, ms: any) => acc + ms.estimated_stock, 0)
                                 }))}
                                 filename="Items_Inventory_Export"
                                 label="Export Products"
