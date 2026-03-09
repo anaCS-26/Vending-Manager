@@ -1,8 +1,9 @@
 "use client"
 import { useState, useTransition, useEffect } from "react"
-import { CheckCircle2, ChevronDown, Package, Plus, MapPin, Zap, Search, Loader2, Save, Camera } from "lucide-react"
+import { CheckCircle2, ChevronDown, Package, Plus, MapPin, Zap, Search, Loader2, Save, Camera, Navigation, FileText, WifiOff, Wifi } from "lucide-react"
 import { logBatchRefills, getMachineInventoryDetails, getItems, uploadItemImage } from "@/actions/inventory"
 import imageCompression from 'browser-image-compression';
+import { get, set } from 'idb-keyval';
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh"
@@ -56,6 +57,64 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
     useEffect(() => {
         getItems().then(setAllCatalogItems).catch(console.error)
     }, [])
+
+    const [isOffline, setIsOffline] = useState(false);
+    const [pendingSyncCount, setPendingSyncCount] = useState(0);
+
+    const autoSyncQueue = async () => {
+        const queue: any[] = await get('offline_sync_queue') || [];
+        if (queue.length === 0) return;
+
+        toast.info(`Syncing ${queue.length} offline records...`);
+        let successCount = 0;
+        let failedQueue = [];
+
+        for (const log of queue) {
+            try {
+                const result = await logBatchRefills(log.dispatchId, log.machineId, log.payload);
+                if (result.success) {
+                    successCount++;
+                } else {
+                    failedQueue.push(log);
+                }
+            } catch (e) {
+                failedQueue.push(log);
+            }
+        }
+
+        await set('offline_sync_queue', failedQueue);
+        setPendingSyncCount(failedQueue.length);
+
+        if (successCount > 0) {
+            toast.success(`Successfully synced ${successCount} offline logs.`);
+        }
+        if (failedQueue.length > 0) {
+            toast.error(`Failed to sync ${failedQueue.length} logs. Still in offline queue.`);
+        }
+    };
+
+    useEffect(() => {
+        setIsOffline(!navigator.onLine);
+
+        const handleOnline = () => {
+            setIsOffline(false);
+            autoSyncQueue();
+        };
+        const handleOffline = () => setIsOffline(true);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        // Check pending on boot
+        get('offline_sync_queue').then((queue: any[]) => {
+            if (queue) setPendingSyncCount(queue.length);
+        });
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     const getRemainingStock = (itemId: number, given: number) => {
         if (!currentDispatch) return 0;
@@ -160,6 +219,28 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                 capacity: m.capacity
             }));
 
+            if (isOffline) {
+                const queue: any[] = await get('offline_sync_queue') || [];
+                queue.push({
+                    dispatchId: currentDispatch.id,
+                    machineId: parseInt(selectedMachine),
+                    payload,
+                    timestamp: new Date().toISOString()
+                });
+                await set('offline_sync_queue', queue);
+                setPendingSyncCount(queue.length);
+
+                setIsSuccess(true)
+                toast.success("Saved Offline", {
+                    description: `${modifiedItems.length} item(s) saved to device temporarily.`,
+                })
+                setTimeout(() => {
+                    setIsSuccess(false)
+                    setSelectedMachine("")
+                }, 1500)
+                return;
+            }
+
             const result = await logBatchRefills(currentDispatch.id, parseInt(selectedMachine), payload);
             if (result.success) {
                 setIsSuccess(true)
@@ -219,6 +300,8 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
     const progressPercent = totalGiven > 0 ? (totalRefilled / totalGiven) * 100 : 0;
     const isComplete = progressPercent === 100;
 
+    const activeMachineDetails = machines.find(m => m.id.toString() === selectedMachine);
+
     return (
         <div className="bg-slate-50 dark:bg-[#121214] min-h-[90vh] sm:rounded-[2.5rem] shadow-2xl shadow-black/50 overflow-hidden relative flex flex-col border-0 sm:border border-slate-200 dark:border-white/10 pb-24">
 
@@ -236,6 +319,16 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                     )}
                     <ThemeToggle />
                 </div>
+
+                <AnimatePresence>
+                    {isOffline && (
+                        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-white px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-lg shadow-amber-500/20 whitespace-nowrap">
+                            <WifiOff className="w-3.5 h-3.5" />
+                            Offline Mode - Saving Locally
+                            {pendingSyncCount > 0 && <span className="bg-white/20 px-2 py-0.5 rounded-full">{pendingSyncCount} pending</span>}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 <p className="text-accent-blue text-xs font-semibold mb-2 flex items-center gap-2 uppercase tracking-wider">
                     <Zap className="w-3 h-3 text-accent-blue" />
@@ -272,8 +365,8 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
             <div className="flex-1 overflow-y-auto px-4 py-6 relative z-10 custom-scrollbar">
 
                 {/* Machine Selection Bar */}
-                <div className="mb-6 relative z-50 sticky top-0 bg-slate-50/90 dark:bg-[#121214]/90 backdrop-blur-md pb-2 pt-2">
-                    <div className="relative group">
+                <div className="mb-6 relative z-40 sticky top-0 bg-slate-50/90 dark:bg-[#121214]/90 backdrop-blur-md pb-2 pt-2">
+                    <div className="relative group mb-3">
                         <select
                             value={selectedMachine}
                             onChange={(e) => setSelectedMachine(e.target.value)}
@@ -287,6 +380,49 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                         <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-accent-purple w-5 h-5 pointer-events-none" />
                         <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5 pointer-events-none" />
                     </div>
+
+                    {/* Machine Details & Routing Panel */}
+                    <AnimatePresence>
+                        {activeMachineDetails && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="bg-white dark:bg-black/20 border border-slate-200 dark:border-white/5 rounded-2xl p-4 overflow-hidden"
+                            >
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div className="flex-1 space-y-2">
+                                        <div className="flex items-start gap-2">
+                                            <MapPin className="w-4 h-4 text-slate-400 mt-1 shrink-0" />
+                                            <div>
+                                                <p className="text-sm font-semibold text-slate-900 dark:text-white">{activeMachineDetails.address || 'No Address Provided'}</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">{activeMachineDetails.district}</p>
+                                            </div>
+                                        </div>
+
+                                        {activeMachineDetails.notes && (
+                                            <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 p-2.5 rounded-lg border border-amber-200 dark:border-amber-500/20">
+                                                <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                                                <p className="text-xs font-medium text-amber-800 dark:text-amber-300 leading-snug">{activeMachineDetails.notes}</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {(activeMachineDetails.latitude && activeMachineDetails.longitude) ? (
+                                        <a
+                                            href={`https://www.google.com/maps/dir/?api=1&destination=${activeMachineDetails.latitude},${activeMachineDetails.longitude}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 px-4 py-2.5 rounded-xl font-bold text-sm transition-colors border border-blue-200 dark:border-blue-500/20 whitespace-nowrap"
+                                        >
+                                            <Navigation className="w-4 h-4" />
+                                            Get Directions
+                                        </a>
+                                    ) : null}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
 
                 {selectedMachine && isLoadingMachineStock && (

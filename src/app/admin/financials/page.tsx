@@ -3,6 +3,7 @@ import { PieChart, TrendingUp, Download, Building2, Package, MapPin, LayoutGrid 
 import prisma from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import ExportExcelButton from "@/components/ExportExcelButton";
 
 export default async function FinancialsPage(props: { searchParams: Promise<{ view?: string }> }) {
     const searchParams = await props.searchParams;
@@ -109,6 +110,16 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
         }).sort((a, b) => b.revenue - a.revenue);
     }
 
+    // Prepare data specifically formatted nicely for Excel
+    const excelData = displayData.map(item => ({
+        "Name / Label": item.label,
+        "Details": item.subLabel,
+        "Est. Revenue": item.revenue.toFixed(2),
+        "Cost of Goods": item.cogs.toFixed(2),
+        "Operating Expenses": item.expenses ? item.expenses.toFixed(2) : "0.00",
+        "Net Profit": item.netProfit.toFixed(2)
+    }));
+
     return (
         <div className="space-y-8 pb-20">
             {/* Header Section */}
@@ -122,9 +133,14 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <a href="/api/export-zatca" className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all flex gap-2 items-center shadow-[0_0_20px_rgba(59,130,246,0.2)]">
+                    <ExportExcelButton
+                        data={excelData}
+                        filename={`Financial_Report_${currentView.charAt(0).toUpperCase() + currentView.slice(1)}`}
+                        label={`Export ${currentView.charAt(0).toUpperCase() + currentView.slice(1)}s (Excel)`}
+                    />
+                    <a href="/api/export-zatca" className="hidden sm:flex px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all gap-2 items-center shadow-[0_0_20px_rgba(59,130,246,0.2)] opacity-50 cursor-not-allowed" title="Coming soon">
                         <Download className="w-4 h-4" />
-                        Export ZATCA Tax Report
+                        ZATCA XML
                     </a>
                 </div>
             </div>

@@ -19,6 +19,7 @@
     "clsx": "^2.1.1",
     "compress.js": "^2.1.2",
     "framer-motion": "^12.34.3",
+    "idb-keyval": "^6.2.2",
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.575.0",
@@ -33,7 +34,8 @@
     "sonner": "^2.0.7",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -9,6 +9,7 @@ import { createWarehouse, updateWarehouse, deleteWarehouse } from "@/actions/war
 import { formatCurrency } from "@/lib/utils";
 import { ConfirmModal } from "./ConfirmModal";
 import AddressAutocomplete from "./AddressAutocomplete";
+import ExportExcelButton from "./ExportExcelButton";
 
 type Driver = { id: number; name: string; phone?: string | null; email?: string | null; pin?: string | null; };
 type Machine = { id: number; location_name: string; district: string; address?: string | null; notes?: string | null; terminalId?: string | null; operating_cost: number; rental_cost: number; };
@@ -24,6 +25,9 @@ type ItemWithWarehouse = {
     WarehouseStock: {
         quantity_on_hand: number;
         warehouse: { name: string };
+    }[];
+    MachineStock: {
+        estimated_stock: number;
     }[]
 };
 type WarehouseType = {
@@ -273,6 +277,19 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">Product Catalog</h2>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">Manage snack and beverage inventory across all warehouses.</p>
                             </div>
+                            <ExportExcelButton
+                                data={filteredItems.map(i => ({
+                                    "Name": i.name,
+                                    "Category": i.category,
+                                    "SKU": i.sku,
+                                    "Bulk Format": i.bulk_format || "N/A",
+                                    "Retail Price": formatCurrency(i.price),
+                                    "Cost of Goods": formatCurrency(i.cost || 0),
+                                    "Total System Stock": i.WarehouseStock.reduce((acc: number, ws: any) => acc + ws.quantity_on_hand, 0) + i.MachineStock.reduce((acc: number, ms: any) => acc + ms.estimated_stock, 0)
+                                }))}
+                                filename="Items_Inventory_Export"
+                                label="Export Products"
+                            />
                         </div>
 
                         {/* Item adding disabled; enforced via PO Workflow */}
@@ -675,11 +692,24 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">Storage Warehouses</h2>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">Manage your distribution hubs and inventory centers.</p>
                             </div>
-                            {!isAdding && (
-                                <button onClick={() => { resetForms(); setIsAdding(true); }} className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)]">
-                                    <Plus className="w-4 h-4" /> Add Warehouse
-                                </button>
-                            )}
+                            <div className="flex items-center gap-3">
+                                <ExportExcelButton
+                                    data={filteredWarehouses.map(w => ({
+                                        "Name": w.name,
+                                        "Region/District": w.location,
+                                        "Full Address": w.address || "N/A",
+                                        "Operating Cost": formatCurrency(w.operating_cost || 0),
+                                        "Rental Cost": formatCurrency(w.rental_cost || 0)
+                                    }))}
+                                    filename="Warehouses_Export"
+                                    label="Export Warehouses"
+                                />
+                                {!isAdding && (
+                                    <button onClick={() => { resetForms(); setIsAdding(true); }} className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)]">
+                                        <Plus className="w-4 h-4" /> Add Warehouse
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         {isAdding && (
