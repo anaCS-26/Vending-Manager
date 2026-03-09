@@ -107,7 +107,12 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
         // Check pending on boot
         get('offline_sync_queue').then((queue: any[]) => {
-            if (queue) setPendingSyncCount(queue.length);
+            if (queue && queue.length > 0) {
+                setPendingSyncCount(queue.length);
+                if (navigator.onLine) {
+                    autoSyncQueue();
+                }
+            }
         });
 
         return () => {
