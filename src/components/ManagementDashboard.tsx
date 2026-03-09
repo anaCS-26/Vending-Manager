@@ -423,11 +423,26 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">Machine Locations</h2>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">Manage your active vending points and terminal IDs.</p>
                             </div>
-                            {!isAdding && (
-                                <button onClick={() => { resetForms(); setIsAdding(true); }} className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_25px_rgba(59,130,246,0.4)]">
-                                    <Plus className="w-4 h-4" /> Add Machine
-                                </button>
-                            )}
+                            <div className="flex items-center gap-3">
+                                <ExportExcelButton
+                                    data={filteredMachines.map(m => ({
+                                        "Location": m.location_name,
+                                        "District": m.district,
+                                        "Terminal ID": m.terminalId || "N/A",
+                                        "Address": m.address || "N/A",
+                                        "Operating Cost": formatCurrency(m.operating_cost || 0),
+                                        "Rental Cost": formatCurrency(m.rental_cost || 0),
+                                        "Notes": m.notes || "None"
+                                    }))}
+                                    filename="Machines_Export"
+                                    label="Export Machines"
+                                />
+                                {!isAdding && (
+                                    <button onClick={() => { resetForms(); setIsAdding(true); }} className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_25px_rgba(59,130,246,0.4)]">
+                                        <Plus className="w-4 h-4" /> Add Machine
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         {isAdding && (
