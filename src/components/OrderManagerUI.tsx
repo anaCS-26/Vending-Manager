@@ -37,7 +37,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
 
     // New Item State
     const [isCreatingItem, setIsCreatingItem] = useState(false);
-    const [newItemForm, setNewItemForm] = useState({ name: "", sku: "", category: "", bulk_format: "", price: "" });
+    const [newItemForm, setNewItemForm] = useState({ name: "", sku: "", category: "", bulk_format: "" });
 
     // -- Receive Order State --
     const [receivingOrderId, setReceivingOrderId] = useState<number | null>(null);
@@ -89,14 +89,14 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
     };
 
     const handleCreateItemAndAdd = async () => {
-        if (!newItemForm.name || !newItemForm.sku || !newItemForm.price) {
-            toast.error("Please fill out name, SKU, and price.");
+        if (!newItemForm.name || !newItemForm.sku) {
+            toast.error("Please fill out name and SKU.");
             return;
         }
         startTransition(async () => {
             const res = await createQuickItem({
                 ...newItemForm,
-                price: parseFloat(newItemForm.price) || 0
+                price: 0
             });
             if (res.success && res.item) {
                 toast.success("New product registered!");
@@ -111,7 +111,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                 });
 
                 setIsCreatingItem(false);
-                setNewItemForm({ name: "", sku: "", category: "", bulk_format: "", price: "" });
+                setNewItemForm({ name: "", sku: "", category: "", bulk_format: "" });
             } else {
                 toast.error(res.error);
             }
@@ -446,10 +446,6 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">SKU <span className="text-accent-pink">*</span></label>
                                                 <input type="text" value={newItemForm.sku} onChange={e => setNewItemForm({ ...newItemForm, sku: e.target.value })} className="w-full px-4 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple uppercase" placeholder="LAY-CLS-01" />
                                             </div>
-                                            <div>
-                                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Price (SAR) <span className="text-accent-pink">*</span></label>
-                                                <input type="number" step="0.01" value={newItemForm.price} onChange={e => setNewItemForm({ ...newItemForm, price: e.target.value })} className="w-full px-4 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple" placeholder="0.00" />
-                                            </div>
                                             <div className="col-span-2">
                                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Category (e.g., Snacks)</label>
                                                 <input type="text" value={newItemForm.category} onChange={e => setNewItemForm({ ...newItemForm, category: e.target.value })} className="w-full px-4 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple" placeholder="Enter category..." />
@@ -459,7 +455,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                 <input type="text" value={newItemForm.bulk_format} onChange={e => setNewItemForm({ ...newItemForm, bulk_format: e.target.value })} className="w-full px-4 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple" placeholder="e.g., Box of 24" />
                                             </div>
                                         </div>
-                                        <button onClick={handleCreateItemAndAdd} disabled={isPending || !newItemForm.name || !newItemForm.sku || !newItemForm.price} className="w-full py-3 bg-accent-purple text-white rounded-xl font-bold mt-4 disabled:opacity-50 flex justify-center items-center gap-2">
+                                        <button onClick={handleCreateItemAndAdd} disabled={isPending || !newItemForm.name || !newItemForm.sku} className="w-full py-3 bg-accent-purple text-white rounded-xl font-bold mt-4 disabled:opacity-50 flex justify-center items-center gap-2">
                                             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Register & Add
                                         </button>
                                     </div>
@@ -790,7 +786,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 }
 

@@ -49,7 +49,7 @@ type Props = {
 };
 
 export default function ManagementDashboard({ drivers, machines, warehouses, items }: Props) {
-    const [activeTab, setActiveTab] = useState<"drivers" | "machines" | "items" | "warehouses">("items");
+    const [activeTab, setActiveTab] = useState<"drivers" | "machines" | "items" | "warehouses">("warehouses");
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 12;
 
@@ -229,7 +229,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
             {/* Header / Search Controls */}
             <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-8 relative z-10">
                 <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100 dark:bg-black/40 rounded-2xl w-fit border border-slate-200 dark:border-white/10 relative z-10">
-                    {(["items", "machines", "drivers", "warehouses"] as const).map((tab) => (
+                    {(["warehouses", "machines", "items", "drivers"] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => handleTabChange(tab)}

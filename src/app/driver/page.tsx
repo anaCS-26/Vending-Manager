@@ -26,7 +26,7 @@ export default async function DriverPortal() {
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-neo-bg sm:p-4 text-slate-900 dark:text-white">
             <div className="max-w-md mx-auto h-full pt-4 sm:pt-0">
-                <DriverRefillUI machines={machines} activeDispatches={dispatches} userRole={role as 'admin' | 'driver'} />
+                <DriverRefillUI machines={machines} activeDispatches={dispatches} userRole={role as 'admin' | 'super_admin' | 'driver'} />
             </div>
         </div>
     );

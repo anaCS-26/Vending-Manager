@@ -458,7 +458,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
                         <div className="space-y-3">
                             {Object.values(machineItems)
-                                .filter(row => viewMode === "BAG" ? row.inBag : true)
+                                .filter(row => viewMode === "BAG" ? row.inBag : (row.estimated_stock > 0 || row.refilled > 0 || row.expired > 0))
                                 .sort((a, b) => a.item.name.localeCompare(b.item.name))
                                 .map((row) => {
                                     const isModified = row.refilled > 0 || row.expired > 0;
@@ -553,13 +553,13 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                                 <div className="flex flex-col flex-1 pl-1 border-r border-slate-100 dark:border-white/5">
                                                     <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Expired</span>
                                                     <div className="flex items-center h-10 w-28 bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                        {userRole !== 'admin' ? (
+                                                        {userRole === 'driver' ? (
                                                             <button onClick={() => updateItem(row.itemId, 'expired', Math.max(0, row.expired - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
                                                         ) : (
                                                             <div className="w-8 h-full"></div>
                                                         )}
                                                         <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.expired}</span>
-                                                        {userRole !== 'admin' ? (
+                                                        {userRole === 'driver' ? (
                                                             <button onClick={() => updateItem(row.itemId, 'expired', row.expired + 1)} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
                                                         ) : (
                                                             <div className="w-8 h-full"></div>
@@ -571,13 +571,13 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                                 <div className="flex flex-col flex-1 pl-4">
                                                     <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1">Refilled</span>
                                                     <div className="flex items-center h-10 w-28 bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                        {userRole !== 'admin' ? (
+                                                        {userRole === 'driver' ? (
                                                             <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
                                                         ) : (
                                                             <div className="w-8 h-full"></div>
                                                         )}
                                                         <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.refilled}</span>
-                                                        {userRole !== 'admin' ? (
+                                                        {userRole === 'driver' ? (
                                                             <button onClick={() => {
                                                                 const newVal = Math.min(row.bagQuantity, row.refilled + 1);
                                                                 updateItem(row.itemId, 'refilled', newVal);
@@ -594,53 +594,21 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                     )
                                 })
                             }
-                            {Object.values(machineItems).filter(row => viewMode === "BAG" ? row.inBag : true).length === 0 && (
+                            {Object.values(machineItems).filter(row => viewMode === "BAG" ? row.inBag : (row.estimated_stock > 0 || row.refilled > 0 || row.expired > 0)).length === 0 && (
                                 <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm font-medium">
                                     No items in this view.
                                 </div>
                             )}
                         </div>
 
-                        {/* Search to Add New Items (Driver Only) */}
-                        {userRole !== 'admin' && (
-                            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-white/10">
-                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 px-2">Not in list? Add Item</h4>
-                                <div className="relative">
-                                    <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search global catalog..."
-                                        value={itemSearch}
-                                        onChange={(e) => setItemSearch(e.target.value)}
-                                        className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-2xl py-3 pl-11 pr-4 text-sm focus:outline-none focus:border-accent-blue transition-all"
-                                    />
-                                    {itemSearch && (
-                                        <div className="absolute top-[110%] left-0 right-0 bg-white dark:bg-[#18181b] rounded-2xl border border-slate-200 dark:border-white/10 shadow-xl max-h-60 overflow-y-auto z-50">
-                                            {allCatalogItems.filter(i =>
-                                                i.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
-                                                i.sku.toLowerCase().includes(itemSearch.toLowerCase())
-                                            ).slice(0, 10).map(catItem => (
-                                                <button
-                                                    key={catItem.id}
-                                                    onClick={() => handleAddGlobalItem(catItem)}
-                                                    className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/5 border-b border-slate-100 dark:border-white/5 last:border-0 flex justify-between items-center"
-                                                >
-                                                    <span className="font-bold text-sm text-slate-900 dark:text-white">{catItem.name}</span>
-                                                    <Plus className="w-4 h-4 text-accent-blue" />
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
+                        {/* Search to Add New Items feature has been removed as per user request */}
 
                     </div>
                 )}
             </div>
 
             {/* Bottom Sticky Action Bar */}
-            {selectedMachine && userRole !== 'admin' && (
+            {selectedMachine && userRole === 'driver' && (
                 <div className="absolute bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-[#121214]/90 backdrop-blur-xl border-t border-slate-200 dark:border-white/10 z-50">
                     <motion.button
                         whileTap={{ scale: 0.98 }}

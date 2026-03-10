@@ -87,7 +87,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-white/5">
                             {filteredInventory.map((stock, index) => {
-                                const totalAmount = stock.quantity_on_hand * stock.item.price;
+                                const totalAmount = stock.quantity_on_hand * (stock.item as any).cost;
                                 const bulkFormat = (stock.item as any).bulk_format ? ` (${(stock.item as any).bulk_format}) ` : " ";
                                 const isZero = stock.quantity_on_hand === 0;
 
@@ -128,7 +128,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className="text-sm font-bold text-accent-pink font-mono" dir="ltr">
+                                            <span className="text-sm font-bold text-slate-900 dark:text-white font-mono" dir="ltr">
                                                 {formatCurrency(stock.item.price)}
                                             </span>
                                         </td>
