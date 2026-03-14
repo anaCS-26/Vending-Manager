@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { notifyClients, getDataVersion } from "@/lib/notify"
 import type { ActionResult, PaginatedResult, DispatchWithRelations } from "@/types"
-import { basename, isAbsolute, join, relative } from "path"
+import { basename, join } from "path"
 import { writeFile, mkdir } from "fs/promises"
 import fs from "fs"
 
@@ -780,6 +780,13 @@ export async function uploadItemImage(itemId: number, formData: FormData): Promi
         const maxBytes = 5 * 1024 * 1024;
         if (buffer.length === 0) throw new Error("Uploaded image is empty");
         if (buffer.length > maxBytes) throw new Error("Image size exceeds 5MB limit");
+        const hasExpectedSignature = (
+            (file.type === "image/jpeg" && buffer.length >= 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) ||
+            (file.type === "image/png" && buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) ||
+            (file.type === "image/gif" && buffer.length >= 6 && (buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a")) ||
+            (file.type === "image/webp" && buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP")
+        );
+        if (!hasExpectedSignature) throw new Error("Image file content does not match the declared type");
 
         const extByMime: Record<string, string> = {
             "image/jpeg": "jpg",
@@ -788,6 +795,7 @@ export async function uploadItemImage(itemId: number, formData: FormData): Promi
             "image/gif": "gif"
         };
         const extension = extByMime[file.type];
+        if (!extension) throw new Error("Unsupported image type");
         const filename = `item-${itemId}-${Date.now()}.${extension}`;
         const uploadDir = join(process.cwd(), 'public', 'uploads');
 
@@ -803,11 +811,11 @@ export async function uploadItemImage(itemId: number, formData: FormData): Promi
         const existingItem = await prisma.item.findUnique({ where: { id: itemId } }) as any;
         if (existingItem?.imageUrl?.startsWith('/uploads/')) {
             const oldFileName = basename(existingItem.imageUrl);
-            const oldPath = join(uploadDir, oldFileName);
-            const relativeToUploadDir = relative(uploadDir, oldPath);
-            const isWithinUploadDir = relativeToUploadDir && !relativeToUploadDir.startsWith('..') && !isAbsolute(relativeToUploadDir);
-            if (isWithinUploadDir && fs.existsSync(oldPath)) {
-                fs.unlinkSync(oldPath);
+            if (oldFileName && oldFileName !== '.' && oldFileName !== '..' && !oldFileName.includes('/') && !oldFileName.includes('\\')) {
+                const oldPath = join(uploadDir, oldFileName);
+                if (fs.existsSync(oldPath)) {
+                    fs.unlinkSync(oldPath);
+                }
             }
         }
 
