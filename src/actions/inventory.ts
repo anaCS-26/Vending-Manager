@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { notifyClients, getDataVersion } from "@/lib/notify"
 import type { ActionResult, PaginatedResult, DispatchWithRelations } from "@/types"
-import { join } from "path"
+import { basename, isAbsolute, join, relative } from "path"
 import { writeFile, mkdir } from "fs/promises"
 import fs from "fs"
 
@@ -770,11 +770,25 @@ export async function uploadItemImage(itemId: number, formData: FormData): Promi
     try {
         const file = formData.get('image') as File | null;
         if (!file) throw new Error("No image file provided");
+        const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+        if (!allowedMimeTypes.has(file.type)) {
+            throw new Error("Unsupported image type. Allowed types: JPEG, PNG, WEBP, GIF");
+        }
 
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
+        const maxBytes = 5 * 1024 * 1024;
+        if (buffer.length === 0) throw new Error("Uploaded image is empty");
+        if (buffer.length > maxBytes) throw new Error("Image size exceeds 5MB limit");
 
-        const filename = `item-${itemId}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+        const extByMime: Record<string, string> = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+            "image/gif": "gif"
+        };
+        const extension = extByMime[file.type];
+        const filename = `item-${itemId}-${Date.now()}.${extension}`;
         const uploadDir = join(process.cwd(), 'public', 'uploads');
 
         if (!fs.existsSync(uploadDir)) {
@@ -788,8 +802,11 @@ export async function uploadItemImage(itemId: number, formData: FormData): Promi
 
         const existingItem = await prisma.item.findUnique({ where: { id: itemId } }) as any;
         if (existingItem?.imageUrl?.startsWith('/uploads/')) {
-            const oldPath = join(process.cwd(), 'public', existingItem.imageUrl);
-            if (fs.existsSync(oldPath)) {
+            const oldFileName = basename(existingItem.imageUrl);
+            const oldPath = join(uploadDir, oldFileName);
+            const relativeToUploadDir = relative(uploadDir, oldPath);
+            const isWithinUploadDir = relativeToUploadDir && !relativeToUploadDir.startsWith('..') && !isAbsolute(relativeToUploadDir);
+            if (isWithinUploadDir && fs.existsSync(oldPath)) {
                 fs.unlinkSync(oldPath);
             }
         }
