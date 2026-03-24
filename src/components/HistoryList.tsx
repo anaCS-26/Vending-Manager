@@ -63,7 +63,8 @@ export default function HistoryList({ dispatches, hideHeader }: HistoryListProps
                 const totalGiven = d.DispatchItems.reduce((acc: number, curr: DispatchItemWithItem) => acc + curr.quantity_given, 0);
                 const totalReturned = d.DispatchItems.reduce((acc: number, curr: DispatchItemWithItem) => acc + curr.quantity_returned, 0);
                 const totalRefilled = (d.RefillLogs as RefillLogWithMachine[]).reduce((acc: number, curr) => acc + curr.quantity_refilled, 0);
-                const hasAnomaly = (totalGiven - (totalRefilled + totalReturned)) !== 0;
+                const totalRouteReturned = (d.RefillLogs as any[]).reduce((acc: number, curr: any) => acc + (curr.expired_quantity || 0) + (curr.damaged_quantity || 0), 0);
+                const hasAnomaly = (totalGiven - (totalRefilled + totalReturned + totalRouteReturned)) !== 0;
                 if (activeFilter === "ISSUES") return hasAnomaly;
                 if (activeFilter === "MATCHES") return !hasAnomaly;
                 return true;
@@ -189,9 +190,10 @@ export default function HistoryList({ dispatches, hideHeader }: HistoryListProps
                         const totalGiven = dispatch.DispatchItems.reduce((acc: number, curr: DispatchItemWithItem) => acc + curr.quantity_given, 0);
                         const totalReturned = dispatch.DispatchItems.reduce((acc: number, curr: DispatchItemWithItem) => acc + curr.quantity_returned, 0);
                         const totalRefilled = (dispatch.RefillLogs as RefillLogWithMachine[]).reduce((acc: number, curr) => acc + curr.quantity_refilled, 0);
+                        const totalRouteReturned = (dispatch.RefillLogs as any[]).reduce((acc: number, curr: any) => acc + (curr.expired_quantity || 0) + (curr.damaged_quantity || 0), 0);
 
-                        // Shrinkage Variance = Given - (Refilled + Returned)
-                        const variance = totalGiven - (totalRefilled + totalReturned);
+                        // Shrinkage Variance = Given - (Refilled + RouteReturned + EndReturned)
+                        const variance = totalGiven - (totalRefilled + totalRouteReturned + totalReturned);
                         const hasAnomaly = variance !== 0;
 
                         // Calculate Financial Impact
@@ -262,6 +264,11 @@ export default function HistoryList({ dispatches, hideHeader }: HistoryListProps
                                         </div>
                                         <div className="w-px h-8 bg-slate-100 dark:bg-white/5"></div>
                                         <div className="text-center px-4">
+                                            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Route Returned</div>
+                                            <div className="text-xl font-semibold text-accent-orange">{totalRouteReturned}</div>
+                                        </div>
+                                        <div className="w-px h-8 bg-slate-100 dark:bg-white/5"></div>
+                                        <div className="text-center px-4">
                                             <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Returned</div>
                                             <div className="text-xl font-semibold text-accent-green">{totalReturned}</div>
                                         </div>
@@ -297,7 +304,8 @@ export default function HistoryList({ dispatches, hideHeader }: HistoryListProps
                                             {dispatch.DispatchItems.map((di: any) => {
                                                 const relatedRefills = (dispatch.RefillLogs as RefillLogWithMachine[]).filter((rl) => rl.itemId === di.itemId);
                                                 const totalItemRefilled = relatedRefills.reduce((a: number, c) => a + c.quantity_refilled, 0);
-                                                const itemVariance = di.quantity_given - (totalItemRefilled + di.quantity_returned);
+                                                const totalItemRouteReturned = (relatedRefills as any[]).reduce((a: number, c: any) => a + (c.expired_quantity || 0) + (c.damaged_quantity || 0), 0);
+                                                const itemVariance = di.quantity_given - (totalItemRefilled + totalItemRouteReturned + di.quantity_returned);
 
                                                 const varianceValue = itemVariance * (di.price_at_dispatch || 0);
 
@@ -323,6 +331,8 @@ export default function HistoryList({ dispatches, hideHeader }: HistoryListProps
                                                             <span>Out: {di.quantity_given}</span>
                                                             <span className="text-slate-900 dark:text-white/20">|</span>
                                                             <span>Refill: {totalItemRefilled}</span>
+                                                            <span className="text-slate-900 dark:text-white/20">|</span>
+                                                            <span>Rtn(Route): {totalItemRouteReturned}</span>
                                                             <span className="text-slate-900 dark:text-white/20">|</span>
                                                             {editingDispatchId === dispatch.id ? (
                                                                 <div className="flex items-center gap-2 bg-slate-100 dark:bg-black/40 px-2 py-1 rounded-md border border-accent-blue/50">

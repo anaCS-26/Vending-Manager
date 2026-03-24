@@ -76,7 +76,7 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                             <Check className="w-8 h-8 text-slate-500 dark:text-slate-400 opacity-50" />
                         </div>
                         <h3 className="text-slate-900 dark:text-white font-bold mb-1">All Caught Up</h3>
-                        <p className="text-slate-600 dark:text-slate-400 text-sm">No pending damaged or expired item reports.</p>
+                        <p className="text-slate-600 dark:text-slate-400 text-sm">No pending returned-item reports.</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -92,7 +92,7 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                 >
                                     <div>
                                         <div className="flex items-center justify-between mb-4">
-                                            <span className={`text-[10px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-full border ${ret.reason === 'DAMAGED' ? 'text-accent-orange bg-accent-orange/10 border-accent-orange/20' : 'text-accent-pink bg-accent-pink/10 border-accent-pink/20'}`}>
+                                            <span className={`text-[10px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-full border ${ret.reason === 'DAMAGED' ? 'text-accent-orange bg-accent-orange/10 border-accent-orange/20' : ret.reason === 'RETURNED' ? 'text-accent-blue bg-accent-blue/10 border-accent-blue/20' : 'text-accent-pink bg-accent-pink/10 border-accent-pink/20'}`}>
                                                 {ret.reason}
                                             </span>
                                             <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
@@ -176,7 +176,7 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                             </td>
                                             <td className="px-6 py-4 text-sm text-slate-900 dark:text-white">
                                                 {his.quantity}
-                                                <span className={`ml-2 text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${his.reason === 'DAMAGED' ? 'text-accent-orange bg-accent-orange/10' : 'text-accent-pink bg-accent-pink/10'}`}>
+                                                <span className={`ml-2 text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${his.reason === 'DAMAGED' ? 'text-accent-orange bg-accent-orange/10' : his.reason === 'RETURNED' ? 'text-accent-blue bg-accent-blue/10' : 'text-accent-pink bg-accent-pink/10'}`}>
                                                     {his.reason}
                                                 </span>
                                             </td>

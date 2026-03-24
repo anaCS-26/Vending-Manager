@@ -42,6 +42,16 @@ export async function getItems() {
     })
 }
 
+function getRefillRouteReturnQty(log: { expired_quantity?: number | null, damaged_quantity?: number | null }) {
+    return (log.expired_quantity || 0) + (log.damaged_quantity || 0);
+}
+
+function assertWholeNonNegative(value: number, label: string) {
+    if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
+        throw new Error(`${label} must be a whole number >= 0`)
+    }
+}
+
 // ==========================================
 // DISPATCH ACTIONS (Admin Assigning to Driver)
 // ==========================================
@@ -116,7 +126,8 @@ export async function getClosedDispatchesPaginated(
             const totalGiven = d.DispatchItems.reduce((acc, curr) => acc + curr.quantity_given, 0)
             const totalReturned = d.DispatchItems.reduce((acc, curr) => acc + curr.quantity_returned, 0)
             const totalRefilled = d.RefillLogs.reduce((acc, curr) => acc + curr.quantity_refilled, 0)
-            const hasAnomaly = (totalGiven - (totalRefilled + totalReturned)) !== 0
+            const totalRouteReturned = d.RefillLogs.reduce((acc, curr: any) => acc + getRefillRouteReturnQty(curr), 0)
+            const hasAnomaly = (totalGiven - (totalRefilled + totalReturned + totalRouteReturned)) !== 0
 
             if (filter === "ISSUES") return hasAnomaly
             if (filter === "MATCHES") return !hasAnomaly
@@ -146,18 +157,37 @@ export async function dispatchToDriver(
 ): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
+            if (!items.length) {
+                throw new Error("Dispatch must include at least one item")
+            }
+
+            // Normalize/merge duplicate lines and reject invalid quantities.
+            const merged = new Map<number, number>()
+            for (const item of items) {
+                assertWholeNonNegative(item.quantity, `Dispatch quantity for item ${item.itemId}`)
+                if (item.quantity === 0) continue
+                merged.set(item.itemId, (merged.get(item.itemId) || 0) + item.quantity)
+            }
+            const normalizedItems = [...merged.entries()].map(([itemId, quantity]) => ({ itemId, quantity }))
+            if (!normalizedItems.length) {
+                throw new Error("Dispatch must include at least one quantity > 0")
+            }
+
             // Fetch current item prices to lock them into the dispatch
-            const itemIds = items.map(i => i.itemId)
+            const itemIds = normalizedItems.map(i => i.itemId)
             const dbItems = await tx.item.findMany({
                 where: { id: { in: itemIds } }
             })
+            if (dbItems.length !== itemIds.length) {
+                throw new Error("One or more dispatch items are invalid")
+            }
 
             await tx.dispatch.create({
                 data: {
                     driverId,
                     warehouseId,
                     DispatchItems: {
-                        create: items.map(i => {
+                        create: normalizedItems.map(i => {
                             const matchedItem = dbItems.find(dbI => dbI.id === i.itemId)
                             return {
                                 itemId: i.itemId,
@@ -170,19 +200,18 @@ export async function dispatchToDriver(
             })
 
             // Deduct warehouse stock strictly from the originating warehouse
-            for (const item of items) {
-                const warehouseStock = await tx.warehouseStock.findFirst({
-                    where: { itemId: item.itemId, warehouseId: warehouseId }
-                })
-
-                if (!warehouseStock || warehouseStock.quantity_on_hand < item.quantity) {
-                    throw new Error(`Insufficient stock for item ${item.itemId} at selected warehouse`)
-                }
-
-                await tx.warehouseStock.update({
-                    where: { id: warehouseStock.id },
+            for (const item of normalizedItems) {
+                const updated = await tx.warehouseStock.updateMany({
+                    where: {
+                        itemId: item.itemId,
+                        warehouseId,
+                        quantity_on_hand: { gte: item.quantity }
+                    },
                     data: { quantity_on_hand: { decrement: item.quantity } }
                 })
+                if (updated.count === 0) {
+                    throw new Error(`Insufficient stock for item ${item.itemId} at selected warehouse`)
+                }
             }
         })
 
@@ -210,13 +239,44 @@ export async function logRefill(
     quantity_refilled: number,
     quantity_before: number = 0,
     damaged: number = 0,
-    expired: number = 0
+    returned: number = 0
 ): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
+            assertWholeNonNegative(quantity_refilled, "Refilled quantity")
+            assertWholeNonNegative(returned, "Returned quantity")
+
+            const dispatch = await tx.dispatch.findUnique({
+                where: { id: dispatchId },
+                include: { DispatchItems: true }
+            })
+            if (!dispatch) throw new Error("Dispatch not found")
+            if (dispatch.status !== "OPEN") throw new Error("Dispatch is already closed")
+
+            const dispatchItem = dispatch.DispatchItems.find(di => di.itemId === itemId)
+            if (!dispatchItem) throw new Error("Item is not part of this dispatch")
+
+            const refillAgg = await tx.refillLog.aggregate({
+                where: { dispatchId, itemId },
+                _sum: {
+                    quantity_refilled: true,
+                    expired_quantity: true,
+                    damaged_quantity: true
+                }
+            })
+            const alreadyConsumed =
+                (refillAgg._sum.quantity_refilled || 0) +
+                (refillAgg._sum.expired_quantity || 0) +
+                (refillAgg._sum.damaged_quantity || 0)
+            const remaining = Math.max(0, dispatchItem.quantity_given - alreadyConsumed)
+            const currentlyConsuming = quantity_refilled + returned
+            if (currentlyConsuming > remaining) {
+                throw new Error(`Not enough remaining dispatch stock for item ${itemId}. Remaining: ${remaining}, attempted: ${currentlyConsuming}`)
+            }
+
             const itemData = await tx.item.findUnique({ where: { id: itemId } });
 
-            // Sales = What the driver refilled
+            // Keep financial continuity: refilled is treated as sold proxy in this prototype.
             const sales = quantity_refilled;
 
             // 2. Create the refill log
@@ -230,7 +290,8 @@ export async function logRefill(
                     price_at_refill: itemData?.price || 0,
                     cost_at_refill: (itemData as any)?.cost || 0,
                     damaged_quantity: damaged,
-                    expired_quantity: expired
+                    // Reusing expired_quantity as route-returned quantity for compatibility.
+                    expired_quantity: returned
                 } as any
             })
 
@@ -239,32 +300,34 @@ export async function logRefill(
                 where: { machineId_itemId: { machineId, itemId } }
             });
             const cap = currentStock?.capacity || 10;
+            const estimatedBase = currentStock?.estimated_stock ?? 0
+            const estimatedAfter = Math.min(cap, Math.max(0, estimatedBase - returned + quantity_refilled))
 
             await tx.machineStock.upsert({
                 where: { machineId_itemId: { machineId, itemId } },
                 update: {
-                    estimated_stock: cap,
+                    estimated_stock: estimatedAfter,
                     last_refilled_at: new Date()
                 },
                 create: {
                     machineId,
                     itemId,
                     capacity: cap,
-                    estimated_stock: cap,
+                    estimated_stock: Math.min(cap, Math.max(0, quantity_refilled - returned)),
                     last_refilled_at: new Date()
                 }
             });
 
-            // 4. Add Damaged/Expired items to Return Verification (existing logic)
+            // 4. Add route-returned items to Return Verification
             if (damaged > 0) {
                 await tx.returnVerification.create({
                     data: { dispatchId, itemId, quantity: damaged, reason: "DAMAGED", status: "PENDING" }
                 });
             }
 
-            if (expired > 0) {
+            if (returned > 0) {
                 await tx.returnVerification.create({
-                    data: { dispatchId, itemId, quantity: expired, reason: "EXPIRED", status: "PENDING" }
+                    data: { dispatchId, itemId, quantity: returned, reason: "RETURNED", status: "PENDING" }
                 });
             }
         })
@@ -283,16 +346,50 @@ export async function logRefill(
 export async function logBatchRefills(
     dispatchId: number,
     machineId: number,
-    items: { itemId: number, refilled: number, expired: number, capacity: number }[]
+    items: { itemId: number, refilled: number, returned: number, capacity: number }[]
 ): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
+            const dispatch = await tx.dispatch.findUnique({
+                where: { id: dispatchId },
+                include: { DispatchItems: true }
+            })
+            if (!dispatch) throw new Error("Dispatch not found")
+            if (dispatch.status !== "OPEN") throw new Error("Dispatch is already closed")
+
             for (const item of items) {
-                if (item.refilled === 0 && item.expired === 0) continue;
+                assertWholeNonNegative(item.refilled, `Refilled quantity for item ${item.itemId}`)
+                assertWholeNonNegative(item.returned, `Returned quantity for item ${item.itemId}`)
+                assertWholeNonNegative(item.capacity, `Capacity for item ${item.itemId}`)
+
+                if (item.refilled === 0 && item.returned === 0) continue;
+
+                const dispatchItem = dispatch.DispatchItems.find(di => di.itemId === item.itemId)
+                if (!dispatchItem) {
+                    throw new Error(`Item ${item.itemId} is not part of this dispatch`)
+                }
+
+                const refillAgg = await tx.refillLog.aggregate({
+                    where: { dispatchId, itemId: item.itemId },
+                    _sum: {
+                        quantity_refilled: true,
+                        expired_quantity: true,
+                        damaged_quantity: true
+                    }
+                })
+                const alreadyConsumed =
+                    (refillAgg._sum.quantity_refilled || 0) +
+                    (refillAgg._sum.expired_quantity || 0) +
+                    (refillAgg._sum.damaged_quantity || 0)
+                const remaining = Math.max(0, dispatchItem.quantity_given - alreadyConsumed)
+                const currentlyConsuming = item.refilled + item.returned
+                if (currentlyConsuming > remaining) {
+                    throw new Error(`Not enough remaining dispatch stock for item ${item.itemId}. Remaining: ${remaining}, attempted: ${currentlyConsuming}`)
+                }
 
                 const itemData = await tx.item.findUnique({ where: { id: item.itemId } });
 
-                // Sales is now accurately reflected just by what they put in to fill it
+                // Keep financial continuity: refilled is treated as sold proxy in this prototype.
                 const sales = item.refilled;
 
                 await tx.refillLog.create({
@@ -305,29 +402,37 @@ export async function logBatchRefills(
                         price_at_refill: itemData?.price || 0,
                         cost_at_refill: (itemData as any)?.cost || 0,
                         damaged_quantity: 0,
-                        expired_quantity: item.expired
+                        // Reusing expired_quantity as route-returned quantity for compatibility.
+                        expired_quantity: item.returned
                     } as any
                 });
+
+                const currentStock = await tx.machineStock.findUnique({
+                    where: { machineId_itemId: { machineId, itemId: item.itemId } }
+                })
+                const safeCapacity = Math.max(1, item.capacity)
+                const estimatedBase = currentStock?.estimated_stock ?? 0
+                const estimatedAfter = Math.min(safeCapacity, Math.max(0, estimatedBase - item.returned + item.refilled))
 
                 await tx.machineStock.upsert({
                     where: { machineId_itemId: { machineId, itemId: item.itemId } },
                     update: {
-                        capacity: item.capacity,
-                        estimated_stock: item.capacity,
+                        capacity: safeCapacity,
+                        estimated_stock: estimatedAfter,
                         last_refilled_at: new Date()
                     },
                     create: {
                         machineId,
                         itemId: item.itemId,
-                        capacity: item.capacity,
-                        estimated_stock: item.capacity,
+                        capacity: safeCapacity,
+                        estimated_stock: Math.min(safeCapacity, Math.max(0, item.refilled - item.returned)),
                         last_refilled_at: new Date()
                     }
                 });
 
-                if (item.expired > 0) {
+                if (item.returned > 0) {
                     await tx.returnVerification.create({
-                        data: { dispatchId, itemId: item.itemId, quantity: item.expired, reason: "EXPIRED", status: "PENDING" }
+                        data: { dispatchId, itemId: item.itemId, quantity: item.returned, reason: "RETURNED", status: "PENDING" }
                     });
                 }
             }
@@ -353,9 +458,38 @@ export async function returnDispatch(
 ): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
+            const dispatch = await tx.dispatch.findUnique({
+                where: { id: dispatchId },
+                include: { DispatchItems: true }
+            })
+            if (!dispatch) throw new Error("Dispatch not found")
+            if (dispatch.status !== "OPEN") throw new Error("Dispatch is already closed")
+
             for (const ret of returns) {
                 if (ret.quantity_returned < 0 || ret.quantity_damaged < 0) {
                     throw new Error("Quantities cannot be negative")
+                }
+
+                const existingDispatchItem = dispatch.DispatchItems.find(di => di.id === ret.dispatchItemId)
+                if (!existingDispatchItem) {
+                    throw new Error(`Dispatch item ${ret.dispatchItemId} does not belong to dispatch ${dispatchId}`)
+                }
+
+                const refillAgg = await tx.refillLog.aggregate({
+                    where: { dispatchId, itemId: existingDispatchItem.itemId },
+                    _sum: {
+                        quantity_refilled: true,
+                        expired_quantity: true,
+                        damaged_quantity: true
+                    }
+                })
+                const usedInRoute =
+                    (refillAgg._sum.quantity_refilled || 0) +
+                    (refillAgg._sum.expired_quantity || 0) +
+                    (refillAgg._sum.damaged_quantity || 0)
+                const maxReturnable = Math.max(0, existingDispatchItem.quantity_given - usedInRoute)
+                if ((ret.quantity_returned + ret.quantity_damaged) > maxReturnable) {
+                    throw new Error(`Return quantities exceed remaining dispatch stock for item ${existingDispatchItem.itemId}`)
                 }
 
                 const dispatchItem = await tx.dispatchItem.update({
@@ -364,10 +498,6 @@ export async function returnDispatch(
                         quantity_returned: ret.quantity_returned,
                         quantity_damaged: ret.quantity_damaged
                     } as any
-                })
-
-                const dispatch = await tx.dispatch.findUnique({
-                    where: { id: dispatchId }
                 })
 
                 if (!dispatch || !dispatch.warehouseId) continue;
@@ -406,6 +536,12 @@ export async function editDispatchReturn(
 ): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
+            const dispatch = await tx.dispatch.findUnique({
+                where: { id: dispatchId },
+                include: { DispatchItems: true }
+            })
+            if (!dispatch) throw new Error("Dispatch not found")
+
             for (const edit of edits) {
                 if (edit.new_quantity_returned < 0) {
                     throw new Error("Return quantity cannot be negative")
@@ -418,6 +554,26 @@ export async function editDispatchReturn(
                 if (!dispatchItem) {
                     throw new Error(`DispatchItem ${edit.dispatchItemId} not found`)
                 }
+                if (dispatchItem.dispatchId !== dispatchId) {
+                    throw new Error(`Dispatch item ${edit.dispatchItemId} does not belong to dispatch ${dispatchId}`)
+                }
+
+                const refillAgg = await tx.refillLog.aggregate({
+                    where: { dispatchId, itemId: dispatchItem.itemId },
+                    _sum: {
+                        quantity_refilled: true,
+                        expired_quantity: true,
+                        damaged_quantity: true
+                    }
+                })
+                const usedInRoute =
+                    (refillAgg._sum.quantity_refilled || 0) +
+                    (refillAgg._sum.expired_quantity || 0) +
+                    (refillAgg._sum.damaged_quantity || 0)
+                const maxReturnable = Math.max(0, dispatchItem.quantity_given - usedInRoute)
+                if (edit.new_quantity_returned > maxReturnable) {
+                    throw new Error(`Edited return exceeds remaining dispatch stock for item ${dispatchItem.itemId}`)
+                }
 
                 const delta = edit.new_quantity_returned - dispatchItem.quantity_returned;
 
@@ -425,10 +581,6 @@ export async function editDispatchReturn(
                     await tx.dispatchItem.update({
                         where: { id: edit.dispatchItemId },
                         data: { quantity_returned: edit.new_quantity_returned }
-                    })
-
-                    const dispatch = await tx.dispatch.findUnique({
-                        where: { id: dispatchId }
                     })
 
                     if (!dispatch || !dispatch.warehouseId) continue;

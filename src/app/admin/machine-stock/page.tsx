@@ -17,7 +17,7 @@ export default async function MachineStockPage() {
                         Machine Inventory
                     </h1>
                     <p className="text-slate-600 dark:text-slate-400 mt-1 text-sm">
-                        Estimated machine stock levels based on driver restocks and sales declarations
+                        Estimated machine stock levels based on driver restocks and route return declarations
                     </p>
                 </div>
                 <div className="hidden md:flex w-12 h-12 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 items-center justify-center">

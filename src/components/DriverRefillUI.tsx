@@ -24,7 +24,7 @@ type ItemFormState = {
     itemId: number;
     item: any;
     refilled: number;
-    expired: number;
+    returned: number;
     capacity: number;
     bagQuantity: number;
     inBag: boolean;
@@ -67,11 +67,17 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
         toast.info(`Syncing ${queue.length} offline records...`);
         let successCount = 0;
-        let failedQueue = [];
+        const failedQueue = [];
 
         for (const log of queue) {
             try {
-                const result = await logBatchRefills(log.dispatchId, log.machineId, log.payload);
+                const normalizedPayload = (log.payload || []).map((p: any) => ({
+                    itemId: p.itemId,
+                    refilled: p.refilled || 0,
+                    returned: p.returned ?? p.expired ?? 0,
+                    capacity: p.capacity || 10
+                }));
+                const result = await logBatchRefills(log.dispatchId, log.machineId, normalizedPayload);
                 if (result.success) {
                     successCount++;
                 } else {
@@ -123,8 +129,10 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
     const getRemainingStock = (itemId: number, given: number) => {
         if (!currentDispatch) return 0;
-        const refilled = (currentDispatch.RefillLogs as RefillLogWithMachine[]).filter((r) => r.itemId === itemId).reduce((sum: number, log) => sum + log.quantity_refilled, 0);
-        return given - refilled;
+        const consumed = (currentDispatch.RefillLogs as RefillLogWithMachine[])
+            .filter((r) => r.itemId === itemId)
+            .reduce((sum: number, log: any) => sum + log.quantity_refilled + (log.expired_quantity || 0) + (log.damaged_quantity || 0), 0);
+        return Math.max(0, given - consumed);
     }
 
     // Initialize list when machine changes
@@ -144,7 +152,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                             itemId: ms.itemId,
                             item: ms.item,
                             refilled: 0,
-                            expired: 0,
+                            returned: 0,
                             capacity: (ms as any).capacity || 10, // Defaults to schema capacity
                             bagQuantity: bagRemaining,
                             inBag: !!bagMatched,
@@ -159,7 +167,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                 itemId: di.itemId,
                                 item: di.item,
                                 refilled: 0,
-                                expired: 0,
+                                returned: 0,
                                 capacity: 10,
                                 bagQuantity: getRemainingStock(di.itemId, di.quantity_given),
                                 inBag: true,
@@ -208,11 +216,11 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
     const handleBatchSubmit = async () => {
         if (!selectedMachine) return;
 
-        // Find items that were modified (refilled or expired > 0)
-        const modifiedItems = Object.values(machineItems).filter(item => item.refilled > 0 || item.expired > 0);
+        // Find items that were modified (refilled or returned > 0)
+        const modifiedItems = Object.values(machineItems).filter(item => item.refilled > 0 || item.returned > 0);
 
         if (modifiedItems.length === 0) {
-            toast.error("No changes made", { description: "You haven't added or expired any stock." });
+            toast.error("No changes made", { description: "You haven't added or returned any stock." });
             return;
         }
 
@@ -220,7 +228,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
             const payload = modifiedItems.map(m => ({
                 itemId: m.itemId,
                 refilled: m.refilled,
-                expired: m.expired,
+                returned: m.returned,
                 capacity: m.capacity
             }));
 
@@ -289,7 +297,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                 itemId: catalogItem.id,
                 item: catalogItem,
                 refilled: 0,
-                expired: 0,
+                returned: 0,
                 capacity: 10, // Defaults to 10
                 bagQuantity: bagRemaining,
                 inBag: !!bagMatched,
@@ -301,8 +309,9 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
     };
 
     const totalGiven = currentDispatch.DispatchItems.reduce((sum: number, item: DispatchItemWithItem) => sum + item.quantity_given, 0);
-    const totalRefilled = (currentDispatch.RefillLogs as RefillLogWithMachine[]).reduce((sum: number, log) => sum + log.quantity_refilled, 0);
-    const progressPercent = totalGiven > 0 ? (totalRefilled / totalGiven) * 100 : 0;
+    const totalConsumed = (currentDispatch.RefillLogs as RefillLogWithMachine[])
+        .reduce((sum: number, log: any) => sum + log.quantity_refilled + (log.expired_quantity || 0) + (log.damaged_quantity || 0), 0);
+    const progressPercent = totalGiven > 0 ? Math.min(100, (totalConsumed / totalGiven) * 100) : 0;
     const isComplete = progressPercent === 100;
 
     const activeMachineDetails = machines.find(m => m.id.toString() === selectedMachine);
@@ -340,7 +349,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                     Route {isComplete ? 'Complete' : 'Active'}
                 </p>
 
-                {userRole === 'admin' && activeDispatches.length > 1 ? (
+                {(userRole === 'admin' || userRole === 'super_admin') && activeDispatches.length > 1 ? (
                     <select
                         className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight leading-none mb-4 bg-transparent border-b border-slate-300 dark:border-slate-600 focus:outline-none focus:border-accent-blue cursor-pointer"
                         value={selectedDispatchIndex}
@@ -458,10 +467,10 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
                         <div className="space-y-3">
                             {Object.values(machineItems)
-                                .filter(row => viewMode === "BAG" ? row.inBag : (row.estimated_stock > 0 || row.refilled > 0 || row.expired > 0))
+                                .filter(row => viewMode === "BAG" ? row.inBag : (row.estimated_stock > 0 || row.refilled > 0 || row.returned > 0))
                                 .sort((a, b) => a.item.name.localeCompare(b.item.name))
                                 .map((row) => {
-                                    const isModified = row.refilled > 0 || row.expired > 0;
+                                    const isModified = row.refilled > 0 || row.returned > 0;
 
                                     return (
                                         <div key={row.itemId} className={`p-4 rounded-3xl transition-colors border ${isModified ? 'bg-accent-blue/5 border-accent-blue/40 shadow-sm' : 'bg-white dark:bg-[#1a1a1c] border-slate-200 dark:border-white/5'}`}>
@@ -549,21 +558,16 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
                                             <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-white/5">
 
-                                                {/* Expired Counter */}
+                                                {/* Returned Counter */}
                                                 <div className="flex flex-col flex-1 pl-1 border-r border-slate-100 dark:border-white/5">
-                                                    <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Expired</span>
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Returned</span>
                                                     <div className="flex items-center h-10 w-28 bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                        {userRole === 'driver' ? (
-                                                            <button onClick={() => updateItem(row.itemId, 'expired', Math.max(0, row.expired - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                        ) : (
-                                                            <div className="w-8 h-full"></div>
-                                                        )}
-                                                        <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.expired}</span>
-                                                        {userRole === 'driver' ? (
-                                                            <button onClick={() => updateItem(row.itemId, 'expired', row.expired + 1)} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
-                                                        ) : (
-                                                            <div className="w-8 h-full"></div>
-                                                        )}
+                                                        <button onClick={() => updateItem(row.itemId, 'returned', Math.max(0, row.returned - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
+                                                        <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.returned}</span>
+                                                        <button onClick={() => {
+                                                            const newVal = Math.min(row.bagQuantity - row.refilled, row.returned + 1);
+                                                            updateItem(row.itemId, 'returned', Math.max(0, newVal));
+                                                        }} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
                                                     </div>
                                                 </div>
 
@@ -571,20 +575,12 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                                 <div className="flex flex-col flex-1 pl-4">
                                                     <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1">Refilled</span>
                                                     <div className="flex items-center h-10 w-28 bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                        {userRole === 'driver' ? (
-                                                            <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                        ) : (
-                                                            <div className="w-8 h-full"></div>
-                                                        )}
+                                                        <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
                                                         <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.refilled}</span>
-                                                        {userRole === 'driver' ? (
-                                                            <button onClick={() => {
-                                                                const newVal = Math.min(row.bagQuantity, row.refilled + 1);
-                                                                updateItem(row.itemId, 'refilled', newVal);
-                                                            }} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
-                                                        ) : (
-                                                            <div className="w-8 h-full"></div>
-                                                        )}
+                                                        <button onClick={() => {
+                                                            const newVal = Math.min(Math.max(0, row.bagQuantity - row.returned), row.refilled + 1);
+                                                            updateItem(row.itemId, 'refilled', newVal);
+                                                        }} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
                                                     </div>
                                                 </div>
 
@@ -594,7 +590,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                     )
                                 })
                             }
-                            {Object.values(machineItems).filter(row => viewMode === "BAG" ? row.inBag : (row.estimated_stock > 0 || row.refilled > 0 || row.expired > 0)).length === 0 && (
+                            {Object.values(machineItems).filter(row => viewMode === "BAG" ? row.inBag : (row.estimated_stock > 0 || row.refilled > 0 || row.returned > 0)).length === 0 && (
                                 <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm font-medium">
                                     No items in this view.
                                 </div>
@@ -608,7 +604,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
             </div>
 
             {/* Bottom Sticky Action Bar */}
-            {selectedMachine && userRole === 'driver' && (
+            {selectedMachine && (
                 <div className="absolute bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-[#121214]/90 backdrop-blur-xl border-t border-slate-200 dark:border-white/10 z-50">
                     <motion.button
                         whileTap={{ scale: 0.98 }}

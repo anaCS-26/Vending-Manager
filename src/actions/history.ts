@@ -39,6 +39,18 @@ export async function updateRefillLog(
             // at the TIME of refill based on what the driver found. 
             // However, a change in 'refilled' amount directly changes the final stock.
             if (deltaRefilled !== 0) {
+                const machineStock = await tx.machineStock.findUnique({
+                    where: {
+                        machineId_itemId: {
+                            machineId: log.machineId,
+                            itemId: log.itemId
+                        }
+                    }
+                });
+
+                if (!machineStock) throw new Error("Machine stock record not found for this log");
+                const nextEstimated = Math.max(0, Math.min(machineStock.capacity, machineStock.estimated_stock + deltaRefilled));
+
                 await tx.machineStock.update({
                     where: {
                         machineId_itemId: {
@@ -47,7 +59,7 @@ export async function updateRefillLog(
                         }
                     },
                     data: {
-                        estimated_stock: { increment: deltaRefilled }
+                        estimated_stock: nextEstimated
                     }
                 });
             }

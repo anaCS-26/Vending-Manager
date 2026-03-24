@@ -48,9 +48,7 @@ export default auth((req) => {
     // If already logged in and visiting login page or home page
     if (pathname === '/login' || pathname === '/') {
         if (isLoggedIn) {
-            if (role === 'super_admin') {
-                return Response.redirect(new URL('/super', req.nextUrl));
-            } else if (role === 'admin') {
+            if (role === 'super_admin' || role === 'admin') {
                 return Response.redirect(new URL('/admin', req.nextUrl));
             } else if (role === 'driver') {
                 return Response.redirect(new URL('/driver', req.nextUrl));

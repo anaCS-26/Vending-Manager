@@ -235,23 +235,21 @@ function DispatchCard({ dispatch }: { dispatch: DispatchWithRelations }) {
     const [isReturning, setIsReturning] = useState(false);
     const [isPending, startTransition] = useTransition();
     const [returnQtys, setReturnQtys] = useState<Record<number, number>>({});
-    const [damagedQtys, setDamagedQtys] = useState<Record<number, number>>({});
 
     // Live Route Progress Calculation
     const totalGiven = dispatch.DispatchItems.reduce((sum: number, item: DispatchItemWithItem) => sum + item.quantity_given, 0);
-    const totalRefilled = (dispatch.RefillLogs as RefillLogWithMachine[]).reduce((sum: number, log) => sum + log.quantity_refilled, 0);
-    const progressPercent = totalGiven > 0 ? (totalRefilled / totalGiven) * 100 : 0;
+    const totalConsumedOnRoute = (dispatch.RefillLogs as any[]).reduce((sum: number, log: any) => sum + log.quantity_refilled + (log.expired_quantity || 0) + (log.damaged_quantity || 0), 0);
+    const progressPercent = totalGiven > 0 ? Math.min(100, (totalConsumedOnRoute / totalGiven) * 100) : 0;
     const isComplete = progressPercent === 100;
 
     const handleStartReturn = () => {
         const initialQtys = dispatch.DispatchItems.reduce((acc: Record<number, number>, curr: DispatchItemWithItem) => {
-            const itemRefills = (dispatch.RefillLogs as RefillLogWithMachine[]).filter((r) => r.itemId === curr.itemId).reduce((sum: number, log) => sum + log.quantity_refilled, 0);
-            const expectedReturn = Math.max(0, curr.quantity_given - itemRefills);
+            const itemConsumed = (dispatch.RefillLogs as any[]).filter((r: any) => r.itemId === curr.itemId).reduce((sum: number, log: any) => sum + log.quantity_refilled + (log.expired_quantity || 0) + (log.damaged_quantity || 0), 0);
+            const expectedReturn = Math.max(0, curr.quantity_given - itemConsumed);
             acc[curr.id] = expectedReturn;
             return acc;
         }, {});
         setReturnQtys(initialQtys);
-        setDamagedQtys(dispatch.DispatchItems.reduce((acc: Record<number, number>, curr: DispatchItemWithItem) => ({ ...acc, [curr.id]: 0 }), {}));
         setIsReturning(true);
     };
 
@@ -260,7 +258,7 @@ function DispatchCard({ dispatch }: { dispatch: DispatchWithRelations }) {
             const returns = Object.keys(returnQtys).map(id => ({
                 dispatchItemId: parseInt(id),
                 quantity_returned: returnQtys[parseInt(id)],
-                quantity_damaged: damagedQtys[parseInt(id)] || 0
+                quantity_damaged: 0
             }));
             const result = await returnDispatch(dispatch.id, returns);
             if (result.success) {
@@ -333,14 +331,14 @@ function DispatchCard({ dispatch }: { dispatch: DispatchWithRelations }) {
                 <div className="p-5 relative border-t-2 border-accent-orange/50 bg-accent-orange/[0.02]">
                     <h4 className="font-semibold text-accent-orange mb-4 text-sm flex items-center gap-2 tracking-tight">
                         <AlertTriangle className="w-4 h-4 text-accent-orange" />
-                        Verify Returning Items
+                        Verify End-of-Route Returns
                     </h4>
 
                     <div className="space-y-3 mb-6 relative z-10">
                         {dispatch.DispatchItems.map((di: DispatchItemWithItem) => {
-                            const itemRefills = (dispatch.RefillLogs as RefillLogWithMachine[]).filter((r) => r.itemId === di.itemId).reduce((sum: number, log) => sum + log.quantity_refilled, 0);
-                            const expectedValue = Math.max(0, di.quantity_given - itemRefills);
-                            const isMismatch = (returnQtys[di.id] + (damagedQtys[di.id] || 0)) !== expectedValue;
+                            const itemConsumed = (dispatch.RefillLogs as any[]).filter((r: any) => r.itemId === di.itemId).reduce((sum: number, log: any) => sum + log.quantity_refilled + (log.expired_quantity || 0) + (log.damaged_quantity || 0), 0);
+                            const expectedValue = Math.max(0, di.quantity_given - itemConsumed);
+                            const isMismatch = returnQtys[di.id] !== expectedValue;
 
                             return (
                                 <div key={di.id} className="flex items-center justify-between text-sm p-3 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-white/5">
@@ -357,16 +355,6 @@ function DispatchCard({ dispatch }: { dispatch: DispatchWithRelations }) {
                                                 value={returnQtys[di.id]}
                                                 onChange={e => setReturnQtys({ ...returnQtys, [di.id]: parseInt(e.target.value) || 0 })}
                                                 className={`w-16 bg-white dark:bg-black/50 border rounded-lg px-2 py-1.5 text-center font-bold text-sm focus:outline-none transition-colors ${isMismatch ? 'border-accent-orange text-accent-orange' : 'border-slate-200 dark:border-white/10 text-slate-900 dark:text-white hover:border-slate-300 dark:border-white/20 focus:border-accent-blue'}`}
-                                            />
-                                        </div>
-                                        <div className="flex flex-col items-center">
-                                            <span className="text-[10px] uppercase font-bold text-accent-pink mb-1">Damaged</span>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                value={damagedQtys[di.id] || 0}
-                                                onChange={e => setDamagedQtys({ ...damagedQtys, [di.id]: parseInt(e.target.value) || 0 })}
-                                                className="w-16 bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-center font-bold text-sm focus:outline-none focus:border-accent-pink text-accent-pink transition-colors hover:border-accent-pink/50"
                                             />
                                         </div>
                                     </div>

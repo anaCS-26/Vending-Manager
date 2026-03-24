@@ -83,7 +83,8 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
                 const totalGiven = d.DispatchItems.reduce((acc: number, curr: DispatchItemWithItem) => acc + curr.quantity_given, 0);
                 const totalReturned = d.DispatchItems.reduce((acc: number, curr: DispatchItemWithItem) => acc + curr.quantity_returned, 0);
                 const totalRefilled = (d.RefillLogs as RefillLogWithMachine[]).reduce((acc: number, curr) => acc + curr.quantity_refilled, 0);
-                const hasAnomaly = (totalGiven - (totalRefilled + totalReturned)) !== 0;
+                const totalRouteReturned = (d.RefillLogs as any[]).reduce((acc: number, curr: any) => acc + (curr.expired_quantity || 0) + (curr.damaged_quantity || 0), 0);
+                const hasAnomaly = (totalGiven - (totalRefilled + totalRouteReturned + totalReturned)) !== 0;
                 return activeFilter === "ISSUES" ? hasAnomaly : !hasAnomaly;
             });
         }
@@ -312,7 +313,8 @@ function RouteCard({ dispatch, isEditing, onEdit, onSave, onCancel, editQtys, se
     const totalGiven = dispatch.DispatchItems.reduce((acc: number, curr: any) => acc + curr.quantity_given, 0);
     const totalReturned = dispatch.DispatchItems.reduce((acc: number, curr: any) => acc + curr.quantity_returned, 0);
     const totalRefilled = (dispatch.RefillLogs as any[]).reduce((acc: number, curr: any) => acc + curr.quantity_refilled, 0);
-    const variance = totalGiven - (totalRefilled + totalReturned);
+    const totalRouteReturned = (dispatch.RefillLogs as any[]).reduce((acc: number, curr: any) => acc + (curr.expired_quantity || 0) + (curr.damaged_quantity || 0), 0);
+    const variance = totalGiven - (totalRefilled + totalRouteReturned + totalReturned);
     const hasAnomaly = variance !== 0;
 
     return (
@@ -353,9 +355,10 @@ function RouteCard({ dispatch, isEditing, onEdit, onSave, onCancel, editQtys, se
                         )}
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 bg-slate-50 dark:bg-black/20 rounded-3xl border border-slate-200 dark:border-white/5">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 p-5 bg-slate-50 dark:bg-black/20 rounded-3xl border border-slate-200 dark:border-white/5">
                         <StatItem label="Given" value={totalGiven} color="text-slate-600 dark:text-slate-400" />
                         <StatItem label="Refilled" value={totalRefilled} color="text-brand-500" />
+                        <StatItem label="Rtn(Route)" value={totalRouteReturned} color="text-accent-orange" />
                         <StatItem label="Returned" value={totalReturned} color="text-emerald-500" />
                         <StatItem label="Variance" value={variance > 0 ? `-${variance}` : `+${Math.abs(variance)}`} color={hasAnomaly ? "text-accent-pink" : "text-emerald-500"} />
                     </div>
@@ -370,7 +373,8 @@ function RouteCard({ dispatch, isEditing, onEdit, onSave, onCancel, editQtys, se
                     <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-2">
                         {dispatch.DispatchItems.map((di: any) => {
                             const refillQty = dispatch.RefillLogs.filter((rl: any) => rl.itemId === di.itemId).reduce((a: number, c: any) => a + c.quantity_refilled, 0);
-                            const itemVar = di.quantity_given - (refillQty + (isEditing ? (editQtys[di.id] ?? di.quantity_returned) : di.quantity_returned));
+                            const routeReturnedQty = dispatch.RefillLogs.filter((rl: any) => rl.itemId === di.itemId).reduce((a: number, c: any) => a + (c.expired_quantity || 0) + (c.damaged_quantity || 0), 0);
+                            const itemVar = di.quantity_given - (refillQty + routeReturnedQty + (isEditing ? (editQtys[di.id] ?? di.quantity_returned) : di.quantity_returned));
 
                             return (
                                 <div key={di.id} className="p-4 rounded-2xl bg-white dark:bg-black/30 border border-slate-200 dark:border-white/5 flex items-center justify-between group/item hover:border-slate-300 dark:hover:border-white/10 transition-all shadow-sm">
@@ -380,6 +384,8 @@ function RouteCard({ dispatch, isEditing, onEdit, onSave, onCancel, editQtys, se
                                             <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">OUT:</span> {di.quantity_given}</span>
                                             <span className="text-slate-300 dark:text-slate-600">|</span>
                                             <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">RL:</span> <span className="text-brand-500 font-bold">{refillQty}</span></span>
+                                            <span className="text-slate-300 dark:text-slate-600">|</span>
+                                            <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">RR:</span> <span className="text-accent-orange font-bold">{routeReturnedQty}</span></span>
                                             <span className="text-slate-300 dark:text-slate-600">|</span>
                                             {isEditing ? (
                                                 <div className="flex gap-1 items-center">
