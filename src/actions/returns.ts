@@ -56,7 +56,7 @@ export async function approveReturn(returnId: number): Promise<ActionResult> {
                     itemId: ret.itemId,
                     quantity: -ret.quantity, // Write off, so negative
                     reason: `Approved Driver Return: ${ret.reason}`,
-                    priceAtAdjustment: ret.item.price
+                    priceAtAdjustment: ret.item.price_standard
                 }
             });
         });

@@ -96,6 +96,8 @@ export default function AddStockModal({ isOpen, onClose, warehouses, existingIte
                     newItemForm.category,
                     newItemForm.sku,
                     newItemForm.price,
+                    newItemForm.price, // hospital fallback
+                    newItemForm.price, // hotel fallback
                     quantityToAdd,
                     newItemForm.bulk_format
                 );

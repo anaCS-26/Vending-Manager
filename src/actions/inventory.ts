@@ -56,7 +56,9 @@ function assertWholeNonNegative(value: number, label: string) {
 // DISPATCH ACTIONS (Admin Assigning to Driver)
 // ==========================================
 export async function getDrivers() {
-    return await prisma.driver.findMany()
+    return await prisma.driver.findMany({
+        include: { DriverStock: { include: { item: true } } }
+    })
 }
 
 export async function getActiveDispatches() {
@@ -192,25 +194,44 @@ export async function dispatchToDriver(
                             return {
                                 itemId: i.itemId,
                                 quantity_given: i.quantity,
-                                price_at_dispatch: matchedItem?.price || 0.0
+                                price_at_dispatch: matchedItem?.price_standard || 0.0
                             }
                         })
                     }
                 }
             })
 
-            // Deduct warehouse stock strictly from the originating warehouse
+            // Deduct warehouse stock strictly from the originating warehouse, but try Driver's bag first!
             for (const item of normalizedItems) {
-                const updated = await tx.warehouseStock.updateMany({
-                    where: {
-                        itemId: item.itemId,
-                        warehouseId,
-                        quantity_on_hand: { gte: item.quantity }
-                    },
-                    data: { quantity_on_hand: { decrement: item.quantity } }
-                })
-                if (updated.count === 0) {
-                    throw new Error(`Insufficient stock for item ${item.itemId} at selected warehouse`)
+                // 1. Check DriverStock first
+                const driverStock = await tx.driverStock.findUnique({
+                    where: { driverId_itemId: { driverId, itemId: item.itemId } }
+                });
+
+                let qtyToTakeFromWarehouse = item.quantity;
+
+                if (driverStock && driverStock.quantity_on_hand > 0) {
+                    const takeFromDriver = Math.min(driverStock.quantity_on_hand, item.quantity);
+                    await tx.driverStock.update({
+                        where: { id: driverStock.id },
+                        data: { quantity_on_hand: { decrement: takeFromDriver } }
+                    });
+                    qtyToTakeFromWarehouse -= takeFromDriver;
+                }
+
+                // 2. Take remainder from Warehouse
+                if (qtyToTakeFromWarehouse > 0) {
+                    const updated = await tx.warehouseStock.updateMany({
+                        where: {
+                            itemId: item.itemId,
+                            warehouseId,
+                            quantity_on_hand: { gte: qtyToTakeFromWarehouse }
+                        },
+                        data: { quantity_on_hand: { decrement: qtyToTakeFromWarehouse } }
+                    })
+                    if (updated.count === 0) {
+                        throw new Error(`Insufficient stock for item ${item.itemId} at selected warehouse. Missing: ${qtyToTakeFromWarehouse}`)
+                    }
                 }
             }
         })
@@ -275,6 +296,11 @@ export async function logRefill(
             }
 
             const itemData = await tx.item.findUnique({ where: { id: itemId } });
+            const machineData = await tx.machine.findUnique({ where: { id: machineId } });
+
+            let priceToUse = itemData?.price_standard || 0;
+            if (machineData?.tier === 'HOSPITAL') priceToUse = itemData?.price_hospital || 0;
+            else if (machineData?.tier === 'HOTEL') priceToUse = itemData?.price_hotel || 0;
 
             // Keep financial continuity: refilled is treated as sold proxy in this prototype.
             const sales = quantity_refilled;
@@ -287,7 +313,7 @@ export async function logRefill(
                     itemId,
                     quantity_refilled,
                     items_sold_since_last_refill: sales,
-                    price_at_refill: itemData?.price || 0,
+                    price_at_refill: priceToUse,
                     cost_at_refill: (itemData as any)?.cost || 0,
                     damaged_quantity: damaged,
                     // Reusing expired_quantity as route-returned quantity for compatibility.
@@ -357,6 +383,8 @@ export async function logBatchRefills(
             if (!dispatch) throw new Error("Dispatch not found")
             if (dispatch.status !== "OPEN") throw new Error("Dispatch is already closed")
 
+            const machineData = await tx.machine.findUnique({ where: { id: machineId } });
+
             for (const item of items) {
                 assertWholeNonNegative(item.refilled, `Refilled quantity for item ${item.itemId}`)
                 assertWholeNonNegative(item.returned, `Returned quantity for item ${item.itemId}`)
@@ -389,6 +417,10 @@ export async function logBatchRefills(
 
                 const itemData = await tx.item.findUnique({ where: { id: item.itemId } });
 
+                let priceToUse = itemData?.price_standard || 0;
+                if (machineData?.tier === 'HOSPITAL') priceToUse = itemData?.price_hospital || 0;
+                else if (machineData?.tier === 'HOTEL') priceToUse = itemData?.price_hotel || 0;
+
                 // Keep financial continuity: refilled is treated as sold proxy in this prototype.
                 const sales = item.refilled;
 
@@ -399,7 +431,7 @@ export async function logBatchRefills(
                         itemId: item.itemId,
                         quantity_refilled: item.refilled,
                         items_sold_since_last_refill: sales,
-                        price_at_refill: itemData?.price || 0,
+                        price_at_refill: priceToUse,
                         cost_at_refill: (itemData as any)?.cost || 0,
                         damaged_quantity: 0,
                         // Reusing expired_quantity as route-returned quantity for compatibility.
@@ -514,6 +546,45 @@ export async function returnDispatch(
                 }
             }
 
+            // --- INJECT REMAINING ITEMS INTO DRIVER STOCK ---
+            for (const dispatchItem of dispatch.DispatchItems) {
+                const retParams = returns.find(r => r.dispatchItemId === dispatchItem.id);
+                const finalReturned = retParams?.quantity_returned || 0;
+                const finalDamaged = retParams?.quantity_damaged || 0;
+
+                const refillAgg = await tx.refillLog.aggregate({
+                    where: { dispatchId, itemId: dispatchItem.itemId },
+                    _sum: {
+                        quantity_refilled: true,
+                        expired_quantity: true,
+                        damaged_quantity: true
+                    }
+                })
+
+                const usedInRoute =
+                    (refillAgg._sum.quantity_refilled || 0) +
+                    (refillAgg._sum.expired_quantity || 0) +
+                    (refillAgg._sum.damaged_quantity || 0)
+
+                const remaining = dispatchItem.quantity_given - usedInRoute - finalReturned - finalDamaged;
+
+                if (remaining > 0 && dispatch.driverId) {
+                    await tx.driverStock.upsert({
+                        where: {
+                            driverId_itemId: { driverId: dispatch.driverId, itemId: dispatchItem.itemId }
+                        },
+                        update: {
+                            quantity_on_hand: { increment: remaining }
+                        },
+                        create: {
+                            driverId: dispatch.driverId,
+                            itemId: dispatchItem.itemId,
+                            quantity_on_hand: remaining
+                        }
+                    });
+                }
+            }
+
             await tx.dispatch.update({
                 where: { id: dispatchId },
                 data: { status: "CLOSED" }
@@ -594,6 +665,22 @@ export async function editDispatchReturn(
                             where: { id: warehouseStock.id },
                             data: { quantity_on_hand: { increment: delta } }
                         })
+                    }
+
+                    // Delta is > 0 if they returned MORE than previously recorded.
+                    // This means what went to DriverStock was TOO MUCH by `delta`. So we must decrement `DriverStock`.
+                    // If delta < 0, they returned LESS, so we increment DriverStock.
+                    if (dispatch.driverId) {
+                        const existingDriverStock = await tx.driverStock.findUnique({
+                            where: { driverId_itemId: { driverId: dispatch.driverId, itemId: dispatchItem.itemId } }
+                        });
+                        
+                        if (existingDriverStock) {
+                            await tx.driverStock.update({
+                                where: { id: existingDriverStock.id },
+                                data: { quantity_on_hand: { decrement: delta } }
+                            });
+                        }
                     }
                 }
             }
@@ -691,7 +778,7 @@ export async function deleteDriver(id: number): Promise<ActionResult> {
     }
 }
 
-export async function createMachine(location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string, operating_cost?: number, rental_cost?: number): Promise<ActionResult> {
+export async function createMachine(location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string, operating_cost?: number, rental_cost?: number, tier?: string): Promise<ActionResult> {
     try {
         let finalLat = latitude;
         let finalLon = longitude;
@@ -713,7 +800,8 @@ export async function createMachine(location_name: string, district: string, add
                 latitude: finalLat,
                 longitude: finalLon,
                 operating_cost: operating_cost || 0,
-                rental_cost: rental_cost || 0
+                rental_cost: rental_cost || 0,
+                tier: tier || "STANDARD"
             } as any
         })
         revalidatePath('/admin/manage')
@@ -723,7 +811,7 @@ export async function createMachine(location_name: string, district: string, add
     }
 }
 
-export async function updateMachine(id: number, location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string, operating_cost?: number, rental_cost?: number): Promise<ActionResult> {
+export async function updateMachine(id: number, location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string, operating_cost?: number, rental_cost?: number, tier?: string): Promise<ActionResult> {
     try {
         let finalLat = latitude;
         let finalLon = longitude;
@@ -746,7 +834,8 @@ export async function updateMachine(id: number, location_name: string, district:
                 latitude: finalLat,
                 longitude: finalLon,
                 operating_cost: operating_cost || 0,
-                rental_cost: rental_cost || 0
+                rental_cost: rental_cost || 0,
+                tier: tier || "STANDARD"
             } as any
         })
         revalidatePath('/admin/manage')
@@ -766,7 +855,7 @@ export async function deleteMachine(id: number): Promise<ActionResult> {
     }
 }
 
-export async function createItem(name: string, category: string, sku: string, price: number, warehouseId?: number, initialStock: number = 0, bulk_format?: string): Promise<ActionResult> {
+export async function createItem(name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, warehouseId?: number, initialStock: number = 0, bulk_format?: string): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
             let targetItem: any = null;
@@ -785,7 +874,7 @@ export async function createItem(name: string, category: string, sku: string, pr
                     // Update this specific item's metadata and increment its stock
                     targetItem = await tx.item.update({
                         where: { id: existingStockWithItem.itemId },
-                        data: { name, category, price, bulk_format }
+                        data: { name, category, price_standard, price_hospital, price_hotel, bulk_format }
                     });
 
                     await tx.warehouseStock.update({
@@ -798,7 +887,7 @@ export async function createItem(name: string, category: string, sku: string, pr
             // If we didn't find an existing match in the target warehouse, create a new item record
             if (!targetItem) {
                 targetItem = await tx.item.create({
-                    data: { name, category, sku, price, bulk_format }
+                    data: { name, category, sku, price_standard, price_hospital, price_hotel, bulk_format }
                 });
 
                 if (warehouseId) {
@@ -819,9 +908,9 @@ export async function createItem(name: string, category: string, sku: string, pr
     }
 }
 
-export async function updateItem(id: number, name: string, category: string, sku: string, price: number, bulk_format?: string): Promise<ActionResult> {
+export async function updateItem(id: number, name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, bulk_format?: string): Promise<ActionResult> {
     try {
-        await prisma.item.update({ where: { id }, data: { name, category, sku, price, bulk_format } })
+        await prisma.item.update({ where: { id }, data: { name, category, sku, price_standard, price_hospital, price_hotel, bulk_format } })
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
@@ -879,14 +968,14 @@ export async function updateWarehouseItemStock(warehouseId: number, itemId: numb
     }
 }
 
-export async function createWarehouseItem(warehouseId: number, name: string, category: string, sku: string, price: number, initialStock: number, bulk_format?: string): Promise<ActionResult> {
+export async function createWarehouseItem(warehouseId: number, name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, initialStock: number, bulk_format?: string): Promise<ActionResult> {
     try {
         if (initialStock < 0) throw new Error("Initial stock cannot be negative");
 
         await prisma.$transaction(async (tx) => {
             // First create the unified item
             const item = await tx.item.create({
-                data: { name, category, sku, price, bulk_format }
+                data: { name, category, sku, price_standard, price_hospital, price_hotel, bulk_format }
             });
 
             // Map it specifically to the requested warehouse

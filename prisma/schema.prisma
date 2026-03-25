@@ -14,7 +14,9 @@ model Item {
   category             String
   bulk_format          String?
   sku                  String
-  price                Float                 @default(0.0)
+  price_standard       Float                 @default(0.0)
+  price_hospital       Float                 @default(0.0)
+  price_hotel          Float                 @default(0.0)
   cost                 Float                 @default(0.0)
   imageUrl             String?
   DispatchItems        DispatchItem[]
@@ -25,6 +27,7 @@ model Item {
   RefillLogs           RefillLog[]
   ReturnVerifications  ReturnVerification[]
   WarehouseStock       WarehouseStock[]
+  DriverStock          DriverStock[]
 }
 
 model Warehouse {
@@ -62,8 +65,11 @@ model Machine {
   longitude      Float?
   notes          String?
   terminalId     String?        @unique
+  serial_number  String?
+  manufacturer   String?
   operating_cost Float          @default(0.0)
   rental_cost    Float          @default(0.0)
+  tier           String         @default("STANDARD") // STANDARD, HOSPITAL, HOTEL
   Stock          MachineStock[]
   RefillLogs     RefillLog[]
 }
@@ -82,12 +88,24 @@ model MachineStock {
 }
 
 model Driver {
-  id         Int        @id @default(autoincrement())
-  name       String
-  phone      String?    @unique
-  email      String?
-  pin        String?
-  Dispatches Dispatch[]
+  id          Int           @id @default(autoincrement())
+  name        String
+  phone       String?       @unique
+  email       String?
+  pin         String?
+  Dispatches  Dispatch[]
+  DriverStock DriverStock[]
+}
+
+model DriverStock {
+  id               Int    @id @default(autoincrement())
+  driverId         Int
+  itemId           Int
+  quantity_on_hand Int    @default(0)
+  driver           Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  item             Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([driverId, itemId])
 }
 
 model Dispatch {

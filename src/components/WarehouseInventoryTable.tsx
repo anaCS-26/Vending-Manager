@@ -78,10 +78,12 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                             <tr className="border-b border-slate-200 dark:border-white/5 text-[11px] text-slate-600 dark:text-slate-400 font-bold bg-slate-50 dark:bg-black/20 tracking-wider">
                                 <th className="px-6 py-4 uppercase w-16 text-center">SR #</th>
                                 <th className="px-6 py-4 uppercase">Items Name</th>
-                                <th className="px-6 py-4 uppercase text-right">Store Remain / Pcs</th>
-                                <th className="px-6 py-4 uppercase text-right">COG Per Pcs</th>
-                                <th className="px-6 py-4 uppercase text-right">Price Per Pcs</th>
-                                <th className="px-6 py-4 uppercase text-right">Total Amount</th>
+                                <th className="px-6 py-4 uppercase text-right w-28 leading-snug">Store Remain<br />/ Pcs</th>
+                                <th className="px-6 py-4 uppercase text-right w-24 leading-snug">COG Price<br />/ Pcs</th>
+                                <th className="px-6 py-4 uppercase text-right w-24 leading-snug">Standard<br />Tier Price</th>
+                                <th className="px-6 py-4 uppercase text-right text-slate-400 w-24 leading-snug">Hospital<br />Tier Price</th>
+                                <th className="px-6 py-4 uppercase text-right text-slate-400 w-24 leading-snug">Hotel<br />Tier Price</th>
+                                <th className="px-6 py-4 uppercase text-right w-28 leading-snug">Total<br />Amount</th>
                                 {selectedWarehouseId === "all" && <th className="px-6 py-4 uppercase text-center w-32">Location</th>}
                             </tr>
                         </thead>
@@ -123,17 +125,27 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 font-mono" dir="ltr">
+                                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
                                                 {formatCurrency((stock.item as any).cost || 0)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className="text-sm font-bold text-slate-900 dark:text-white font-mono" dir="ltr">
-                                                {formatCurrency(stock.item.price)}
+                                            <span className="text-sm font-bold text-slate-900 dark:text-white font-mono whitespace-nowrap" dir="ltr">
+                                                {formatCurrency((stock.item as any).price_standard)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className={`text-sm font-bold font-mono ${isZero ? 'text-yellow-600/80' : 'text-slate-600 dark:text-slate-400'}`} dir="ltr">
+                                            <span className="text-sm font-bold text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
+                                                {formatCurrency((stock.item as any).price_hospital || 0)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="text-sm font-bold text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
+                                                {formatCurrency((stock.item as any).price_hotel || 0)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className={`text-sm font-bold font-mono whitespace-nowrap ${isZero ? 'text-yellow-600/80' : 'text-slate-600 dark:text-slate-400'}`} dir="ltr">
                                                 {formatCurrency(totalAmount)}
                                             </span>
                                         </td>

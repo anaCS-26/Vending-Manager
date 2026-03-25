@@ -28,7 +28,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
     let totalCOGS = 0;
     refillLogsRaw.forEach(log => {
         const sold = log.items_sold_since_last_refill || 0;
-        const price = (log as any).price_at_refill ?? log.item.price ?? 0;
+        const price = (log as any).price_at_refill ?? log.item.price_standard ?? 0;
         const cost = (log as any).cost_at_refill ?? (log.item as any).cost ?? 0;
         totalRevenue += sold * price;
         totalCOGS += sold * cost;
@@ -49,7 +49,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
             let cogs = 0;
             mLogs.forEach(l => {
                 const sold = l.items_sold_since_last_refill || 0;
-                revenue += sold * ((l as any).price_at_refill ?? l.item.price ?? 0);
+                revenue += sold * ((l as any).price_at_refill ?? l.item.price_standard ?? 0);
                 cogs += sold * ((l as any).cost_at_refill ?? (l.item as any).cost ?? 0);
             });
             const expenses = ((m as any).operating_cost || 0) + ((m as any).rental_cost || 0);
@@ -71,7 +71,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
             let cogs = 0;
             wLogs.forEach(l => {
                 const sold = l.items_sold_since_last_refill || 0;
-                revenue += sold * ((l as any).price_at_refill ?? l.item.price ?? 0);
+                revenue += sold * ((l as any).price_at_refill ?? l.item.price_standard ?? 0);
                 cogs += sold * ((l as any).cost_at_refill ?? (l.item as any).cost ?? 0);
             });
             const expenses = ((w as any).operating_cost || 0) + ((w as any).rental_cost || 0);
@@ -95,7 +95,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
             iLogs.forEach(l => {
                 const sold = l.items_sold_since_last_refill || 0;
                 unitsSold += sold;
-                revenue += sold * ((l as any).price_at_refill ?? l.item.price ?? 0);
+                revenue += sold * ((l as any).price_at_refill ?? l.item.price_standard ?? 0);
                 cogs += sold * ((l as any).cost_at_refill ?? (l.item as any).cost ?? 0);
             });
             return {

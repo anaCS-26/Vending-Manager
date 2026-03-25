@@ -85,6 +85,24 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
                         </div>
                     </div>
 
+                    {/* Show what the driver is currently carrying via their DriverStock */}
+                    {selectedDriver && (drivers.find(d => d.id.toString() === selectedDriver)?.DriverStock?.length ?? 0) > 0 && (
+                        <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl p-4 mt-4 relative z-50">
+                            <div className="flex items-center gap-2 mb-2">
+                                <PackageOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                <span className="text-sm font-bold text-amber-800 dark:text-amber-300">Currently in Driver's Bag</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {drivers.find(d => d.id.toString() === selectedDriver)?.DriverStock?.map(stock => (
+                                    <span key={stock.id} className="text-xs bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-2 py-1 rounded font-medium">
+                                        {stock.item.name}: {stock.quantity_on_hand}
+                                    </span>
+                                ))}
+                            </div>
+                            <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80 mt-2">These items will be automatically prioritized and deducted from their bag during route assignment.</p>
+                        </div>
+                    )}
+
                     <div className="relative z-0">
                         <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300 mb-2">
                             Available Inventory {selectedWarehouseId && `- ${warehouses.find(w => w.id === selectedWarehouseId)?.name}`}

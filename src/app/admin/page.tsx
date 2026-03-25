@@ -72,7 +72,7 @@ export default async function AdminDashboard() {
 
     // --- Processing Logic ---
     const totalRevenueToday = todaysLogs.reduce((acc, log) =>
-        acc + ((log.items_sold_since_last_refill || 0) * (log.item.price || 0)), 0
+        acc + ((log.items_sold_since_last_refill || 0) * (log.item.price_standard || 0)), 0
     );
 
     const todayVolume = todaysLogs.reduce((acc, log) => acc + log.quantity_refilled, 0);
@@ -89,7 +89,7 @@ export default async function AdminDashboard() {
     const itemSales: Record<number, { name: string, quantity: number, category: string, price: number }> = {};
     recentLogsForSales.forEach(log => {
         if (!itemSales[log.itemId]) {
-            itemSales[log.itemId] = { name: log.item.name, quantity: 0, category: log.item.category, price: log.item.price };
+            itemSales[log.itemId] = { name: log.item.name, quantity: 0, category: log.item.category, price: log.item.price_standard };
         }
         itemSales[log.itemId].quantity += (log.items_sold_since_last_refill || 0);
     });

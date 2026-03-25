@@ -42,7 +42,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
     // -- Receive Order State --
     const [receivingOrderId, setReceivingOrderId] = useState<number | null>(null);
     const [receivedQtys, setReceivedQtys] = useState<Record<number, number>>({});
-    const [receivedPrices, setReceivedPrices] = useState<Record<number, { cost: number, price: number }>>({});
+    const [receivedPrices, setReceivedPrices] = useState<Record<number, { cost: number, price_standard: number, price_hospital: number, price_hotel: number }>>({});
 
     // -- Order History State --
     const [historySearchQuery, setHistorySearchQuery] = useState("");
@@ -95,8 +95,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
         }
         startTransition(async () => {
             const res = await createQuickItem({
-                ...newItemForm,
-                price: 0
+                ...newItemForm
             });
             if (res.success && res.item) {
                 toast.success("New product registered!");
@@ -124,10 +123,10 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
             return acc;
         }, {} as Record<number, number>);
 
-        const initialPrices = order.Items.reduce((acc: Record<number, { cost: number, price: number }>, curr: any) => {
-            acc[curr.id] = { cost: (curr.item as any).cost || 0, price: curr.item.price || 0 };
+        const initialPrices = order.Items.reduce((acc: Record<number, { cost: number, price_standard: number, price_hospital: number, price_hotel: number }>, curr: any) => {
+            acc[curr.id] = { cost: (curr.item as any).cost || 0, price_standard: curr.item.price_standard || 0, price_hospital: curr.item.price_hospital || 0, price_hotel: curr.item.price_hotel || 0 };
             return acc;
-        }, {} as Record<number, { cost: number, price: number }>);
+        }, {} as Record<number, { cost: number, price_standard: number, price_hospital: number, price_hotel: number }>);
 
         setReceivedQtys(initialQtys);
         setReceivedPrices(initialPrices);
@@ -140,7 +139,9 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                 purchaseOrderItemId: Number(k),
                 quantityReceived: receivedQtys[Number(k)],
                 costPerUnit: receivedPrices[Number(k)]?.cost || 0,
-                retailPrice: receivedPrices[Number(k)]?.price || 0
+                price_standard: receivedPrices[Number(k)]?.price_standard || 0,
+                price_hospital: receivedPrices[Number(k)]?.price_hospital || 0,
+                price_hotel: receivedPrices[Number(k)]?.price_hotel || 0
             }));
             const res = await completePurchaseOrder(orderId, payload);
             if (res.success) {
@@ -312,7 +313,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                             </div>
                                                             <div className="flex items-center gap-4">
                                                                 <p className="font-bold text-slate-700 dark:text-slate-300">
-                                                                    {formatCurrency(item.price)}
+                                                                    {formatCurrency((item as any).price_standard || 0)}
                                                                 </p>
                                                                 <Plus className="w-5 h-5 text-slate-400 group-hover:text-accent-purple transition-all" />
                                                             </div>
@@ -516,14 +517,15 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                     <div className="flex justify-between items-start mb-2">
                                                                         <div>
                                                                             <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight mb-1">{oi.item.name}</p>
-                                                                            <div className="flex items-center gap-2 text-[10px] font-mono font-semibold text-slate-500">
-                                                                                <span>#{oi.item.sku}</span>
-                                                                                <span>•</span>
-                                                                                <span>{formatCurrency(oi.costPerUnit)}</span>
-                                                                                <span>•</span>
-                                                                                <span>{oi.item.bulk_format || 'Unit'}</span>
-                                                                                <span>•</span>
-                                                                                <span>{oi.item.category || 'Uncategorized'}</span>
+                                                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono font-semibold text-slate-500 mb-2">
+                                                                                <span className="flex items-center gap-2 whitespace-nowrap">#{oi.item.sku} <span className="opacity-50">•</span></span>
+                                                                                <span className="flex items-center gap-2 whitespace-nowrap">{formatCurrency(oi.costPerUnit)} <span className="opacity-50">•</span></span>
+                                                                                <span className="flex items-center gap-2 whitespace-nowrap">{oi.item.bulk_format || 'Unit'} <span className="opacity-50">•</span></span>
+                                                                                <span className="whitespace-nowrap">{oi.item.category || 'Uncategorized'}</span>
+                                                                            </div>
+                                                                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold tracking-widest bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 uppercase">
+                                                                                <Package className="w-3 h-3 opacity-70" />
+                                                                                Live WH Stock: <span className="font-mono text-emerald-700 dark:text-emerald-300">{items.find(i => i.id === oi.itemId)?.WarehouseStock?.find(ws => ws.warehouseId === order.warehouseId)?.quantity_on_hand || 0}</span>
                                                                             </div>
                                                                         </div>
                                                                         {isReceiving && (
@@ -540,31 +542,55 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                                         className="w-20 px-2 py-1 bg-white dark:bg-[#18181b] border border-accent-orange/50 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-accent-orange/50"
                                                                                     />
                                                                                 </div>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <label className="text-[10px] font-bold text-slate-500 uppercase flex-1 text-right">Cost (COG):</label>
-                                                                                    <input
-                                                                                        type="number"
-                                                                                        step="0.01"
-                                                                                        value={receivedPrices[oi.id]?.cost === 0 ? "" : receivedPrices[oi.id]?.cost}
-                                                                                        onChange={e => setReceivedPrices({
-                                                                                            ...receivedPrices,
-                                                                                            [oi.id]: { ...receivedPrices[oi.id], cost: parseFloat(e.target.value) || 0 }
-                                                                                        })}
-                                                                                        className="w-20 px-2 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
-                                                                                    />
-                                                                                </div>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <label className="text-[10px] font-bold text-slate-500 uppercase flex-1 text-right">Retail Pr:</label>
-                                                                                    <input
-                                                                                        type="number"
-                                                                                        step="0.01"
-                                                                                        value={receivedPrices[oi.id]?.price === 0 ? "" : receivedPrices[oi.id]?.price}
-                                                                                        onChange={e => setReceivedPrices({
-                                                                                            ...receivedPrices,
-                                                                                            [oi.id]: { ...receivedPrices[oi.id], price: parseFloat(e.target.value) || 0 }
-                                                                                        })}
-                                                                                        className="w-20 px-2 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
-                                                                                    />
+                                                                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Cost:</label>
+                                                                                        <input
+                                                                                            type="number" step="0.01"
+                                                                                            value={receivedPrices[oi.id]?.cost === 0 ? "" : receivedPrices[oi.id]?.cost}
+                                                                                            onChange={e => setReceivedPrices({
+                                                                                                ...receivedPrices,
+                                                                                                [oi.id]: { ...receivedPrices[oi.id], cost: parseFloat(e.target.value) || 0 }
+                                                                                            })}
+                                                                                            className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
+                                                                                        />
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Standard:</label>
+                                                                                        <input
+                                                                                            type="number" step="0.01"
+                                                                                            value={receivedPrices[oi.id]?.price_standard === 0 ? "" : receivedPrices[oi.id]?.price_standard}
+                                                                                            onChange={e => setReceivedPrices({
+                                                                                                ...receivedPrices,
+                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_standard: parseFloat(e.target.value) || 0 }
+                                                                                            })}
+                                                                                            className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
+                                                                                        />
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Hospital:</label>
+                                                                                        <input
+                                                                                            type="number" step="0.01"
+                                                                                            value={receivedPrices[oi.id]?.price_hospital === 0 ? "" : receivedPrices[oi.id]?.price_hospital}
+                                                                                            onChange={e => setReceivedPrices({
+                                                                                                ...receivedPrices,
+                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_hospital: parseFloat(e.target.value) || 0 }
+                                                                                            })}
+                                                                                            className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
+                                                                                        />
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Hotel:</label>
+                                                                                        <input
+                                                                                            type="number" step="0.01"
+                                                                                            value={receivedPrices[oi.id]?.price_hotel === 0 ? "" : receivedPrices[oi.id]?.price_hotel}
+                                                                                            onChange={e => setReceivedPrices({
+                                                                                                ...receivedPrices,
+                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_hotel: parseFloat(e.target.value) || 0 }
+                                                                                            })}
+                                                                                            className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
+                                                                                        />
+                                                                                    </div>
                                                                                 </div>
                                                                             </div>
                                                                         )}

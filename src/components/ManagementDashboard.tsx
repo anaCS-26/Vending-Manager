@@ -12,13 +12,15 @@ import AddressAutocomplete from "./AddressAutocomplete";
 import ExportExcelButton from "./ExportExcelButton";
 
 type Driver = { id: number; name: string; phone?: string | null; email?: string | null; pin?: string | null; };
-type Machine = { id: number; location_name: string; district: string; address?: string | null; notes?: string | null; terminalId?: string | null; operating_cost: number; rental_cost: number; };
+type Machine = { id: number; location_name: string; district: string; address?: string | null; notes?: string | null; terminalId?: string | null; operating_cost: number; rental_cost: number; tier: string; };
 type ItemWithWarehouse = {
     id: number;
     name: string;
     sku: string;
     category: string;
-    price: number;
+    price_standard: number;
+    price_hospital: number;
+    price_hotel: number;
     cost: number;
     imageUrl?: string | null;
     bulk_format?: string | null;
@@ -100,8 +102,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
 
     // Forms
     const [driverForm, setDriverForm] = useState({ name: "", phone: "", email: "", pin: "" });
-    const [machineForm, setMachineForm] = useState({ location_name: "", district: "", address: "", notes: "", terminalId: "", latitude: undefined as number | undefined, longitude: undefined as number | undefined, operating_cost: 0, rental_cost: 0 });
-    const [itemForm, setItemForm] = useState({ name: "", category: "", sku: "", price: 0, bulk_format: "", warehouseId: undefined as number | undefined, initialStock: 0 });
+    const [machineForm, setMachineForm] = useState({ location_name: "", district: "", address: "", notes: "", terminalId: "", latitude: undefined as number | undefined, longitude: undefined as number | undefined, operating_cost: 0, rental_cost: 0, tier: "STANDARD" });
+    const [itemForm, setItemForm] = useState({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", warehouseId: undefined as number | undefined, initialStock: 0 });
     const [warehouseForm, setWarehouseForm] = useState({ name: "", location: "", address: "", latitude: undefined as number | undefined, longitude: undefined as number | undefined, operating_cost: 0, rental_cost: 0 });
 
     // Reset forms when switching tabs or canceling
@@ -109,8 +111,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
         setIsAdding(false);
         setEditingId(null);
         setDriverForm({ name: "", phone: "", email: "", pin: "" });
-        setMachineForm({ location_name: "", district: "", address: "", notes: "", terminalId: "", latitude: undefined, longitude: undefined, operating_cost: 0, rental_cost: 0 });
-        setItemForm({ name: "", category: "", sku: "", price: 0, bulk_format: "", warehouseId: undefined, initialStock: 0 });
+        setMachineForm({ location_name: "", district: "", address: "", notes: "", terminalId: "", latitude: undefined, longitude: undefined, operating_cost: 0, rental_cost: 0, tier: "STANDARD" });
+        setItemForm({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", warehouseId: undefined, initialStock: 0 });
         setWarehouseForm({ name: "", location: "", address: "", latitude: undefined, longitude: undefined, operating_cost: 0, rental_cost: 0 });
     };
 
@@ -150,8 +152,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
     const handleSaveMachine = (id?: number) => {
         startTransition(async () => {
             let res;
-            if (id) res = await updateMachine(id, machineForm.location_name, machineForm.district, machineForm.address, machineForm.notes, machineForm.latitude, machineForm.longitude, machineForm.terminalId || undefined, machineForm.operating_cost, machineForm.rental_cost);
-            else res = await createMachine(machineForm.location_name, machineForm.district, machineForm.address, machineForm.notes, machineForm.latitude, machineForm.longitude, machineForm.terminalId || undefined, machineForm.operating_cost, machineForm.rental_cost);
+            if (id) res = await updateMachine(id, machineForm.location_name, machineForm.district, machineForm.address, machineForm.notes, machineForm.latitude, machineForm.longitude, machineForm.terminalId || undefined, machineForm.operating_cost, machineForm.rental_cost, machineForm.tier);
+            else res = await createMachine(machineForm.location_name, machineForm.district, machineForm.address, machineForm.notes, machineForm.latitude, machineForm.longitude, machineForm.terminalId || undefined, machineForm.operating_cost, machineForm.rental_cost, machineForm.tier);
 
             if (res.success) {
                 toast.success(`Machine ${id ? 'updated' : 'added'} successfully`);
@@ -168,8 +170,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
     const handleSaveItem = (id?: number) => {
         startTransition(async () => {
             let res;
-            if (id) res = await updateItem(id, itemForm.name, itemForm.category, itemForm.sku, itemForm.price, itemForm.bulk_format);
-            else res = await createItem(itemForm.name, itemForm.category, itemForm.sku, itemForm.price, itemForm.warehouseId, itemForm.initialStock, itemForm.bulk_format);
+            if (id) res = await updateItem(id, itemForm.name, itemForm.category, itemForm.sku, itemForm.price_standard, itemForm.price_hospital, itemForm.price_hotel, itemForm.bulk_format);
+            else res = await createItem(itemForm.name, itemForm.category, itemForm.sku, itemForm.price_standard, itemForm.price_hospital, itemForm.price_hotel, itemForm.warehouseId, itemForm.initialStock, itemForm.bulk_format);
 
             if (res.success) {
                 toast.success(`Item ${id ? 'updated' : 'added'} successfully`);
@@ -283,7 +285,9 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                     "Category": i.category,
                                     "SKU": i.sku,
                                     "Bulk Format": i.bulk_format || "N/A",
-                                    "Retail Price": formatCurrency(i.price),
+                                    "Standard Price": formatCurrency(i.price_standard),
+                                    "Hospital Price": formatCurrency(i.price_hospital),
+                                    "Hotel Price": formatCurrency(i.price_hotel),
                                     "Cost of Goods": formatCurrency(i.cost || 0),
                                     "Total System Stock": (i.WarehouseStock || []).reduce((acc: number, ws: any) => acc + ws.quantity_on_hand, 0) + (i.MachineStock || []).reduce((acc: number, ms: any) => acc + ms.estimated_stock, 0)
                                 }))}
@@ -316,8 +320,16 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         <input type="text" value={itemForm.bulk_format} onChange={e => setItemForm({ ...itemForm, bulk_format: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="14x1" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Price</label>
-                                                        <input type="number" step="0.01" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Price" />
+                                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Std Pr</label>
+                                                        <input type="number" step="0.01" value={itemForm.price_standard} onChange={e => setItemForm({ ...itemForm, price_standard: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Standard" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Hosp Pr</label>
+                                                        <input type="number" step="0.01" value={itemForm.price_hospital} onChange={e => setItemForm({ ...itemForm, price_hospital: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Hospital" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Hotel Pr</label>
+                                                        <input type="number" step="0.01" value={itemForm.price_hotel} onChange={e => setItemForm({ ...itemForm, price_hotel: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Hotel" />
                                                     </div>
                                                 </div>
                                                 <div>
@@ -361,8 +373,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                                         <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">{formatCurrency(item.cost || 0)}</span>
                                                                     </div>
                                                                     <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight">Price</span>
-                                                                        <span className="text-[11px] text-brand-400 font-bold">{formatCurrency(item.price)}</span>
+                                                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight">Std</span>
+                                                                        <span className="text-[11px] text-brand-400 font-bold">{formatCurrency(item.price_standard)}</span>
                                                                     </div>
                                                                     {(item as any).bulk_format && (
                                                                         <div className="flex items-center gap-1.5 whitespace-nowrap">
@@ -375,7 +387,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
-                                                        <button onClick={() => { setEditingId(item.id); setItemForm({ name: item.name, sku: item.sku, category: item.category, price: item.price, bulk_format: (item as any).bulk_format || "", warehouseId: undefined, initialStock: 0 }); }} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-md transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                        <button onClick={() => { setEditingId(item.id); setItemForm({ name: item.name, sku: item.sku, category: item.category, price_standard: item.price_standard || 0, price_hospital: item.price_hospital || 0, price_hotel: item.price_hotel || 0, bulk_format: (item as any).bulk_format || "", warehouseId: undefined, initialStock: 0 }); }} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-md transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
                                                         <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-accent-pink bg-slate-100 dark:bg-white/5 hover:bg-accent-pink/20 rounded-md transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                                     </div>
                                                 </div>
@@ -432,6 +444,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                         "Address": m.address || "N/A",
                                         "Operating Cost": formatCurrency(m.operating_cost || 0),
                                         "Rental Cost": formatCurrency(m.rental_cost || 0),
+                                        "Tier": m.tier,
                                         "Notes": m.notes || "None"
                                     }))}
                                     filename="Machines_Export"
@@ -472,6 +485,14 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Rental Cost (/mo)</label>
                                         <input type="number" step="0.01" value={machineForm.rental_cost} onChange={e => setMachineForm({ ...machineForm, rental_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="0.00" />
                                     </div>
+                                    <div>
+                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Pricing Tier</label>
+                                        <select value={machineForm.tier} onChange={e => setMachineForm({ ...machineForm, tier: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none">
+                                            <option value="STANDARD">Standard</option>
+                                            <option value="HOSPITAL">Hospital</option>
+                                            <option value="HOTEL">Hotel</option>
+                                        </select>
+                                    </div>
                                     <div className="col-span-full">
                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Full Physical Address</label>
                                         <AddressAutocomplete value={machineForm.address} onChange={(address, lat, lon) => setMachineForm({ ...machineForm, address, latitude: lat, longitude: lon })} />
@@ -501,6 +522,14 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Notes</label><input type="text" value={machineForm.notes} onChange={e => setMachineForm({ ...machineForm, notes: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Notes" /></div>
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Op Cost (/mo)</label><input type="number" step="0.01" value={machineForm.operating_cost} onChange={e => setMachineForm({ ...machineForm, operating_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Operating Cost" /></div>
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Rental Cost (/mo)</label><input type="number" step="0.01" value={machineForm.rental_cost} onChange={e => setMachineForm({ ...machineForm, rental_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Rental Cost" /></div>
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Tier</label>
+                                                        <select value={machineForm.tier} onChange={e => setMachineForm({ ...machineForm, tier: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none">
+                                                            <option value="STANDARD">Standard</option>
+                                                            <option value="HOSPITAL">Hospital</option>
+                                                            <option value="HOTEL">Hotel</option>
+                                                        </select>
+                                                    </div>
                                                 </div>
                                                 <AddressAutocomplete value={machineForm.address} onChange={(address, lat, lon) => setMachineForm({ ...machineForm, address, latitude: lat, longitude: lon })} />
                                                 <div className="flex gap-2">
@@ -518,10 +547,11 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         <div>
                                                             <h3 className="font-bold text-slate-900 dark:text-white text-lg leading-tight">{machine.location_name}</h3>
                                                             <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded border border-slate-200 dark:border-white/5">{machine.district}</span>
+                                                            <span className="text-[10px] ml-2 uppercase font-bold text-brand-500 tracking-wider bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20">{machine.tier || "STANDARD"}</span>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => { setEditingId(machine.id); setMachineForm({ location_name: machine.location_name, district: machine.district, address: machine.address || "", notes: machine.notes || "", terminalId: machine.terminalId || "", latitude: undefined, longitude: undefined, operating_cost: machine.operating_cost || 0, rental_cost: machine.rental_cost || 0 }) }} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-all"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                        <button onClick={() => { setEditingId(machine.id); setMachineForm({ location_name: machine.location_name, district: machine.district, address: machine.address || "", notes: machine.notes || "", terminalId: machine.terminalId || "", latitude: undefined, longitude: undefined, operating_cost: machine.operating_cost || 0, rental_cost: machine.rental_cost || 0, tier: machine.tier || "STANDARD" }) }} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-all"><Edit2 className="w-3.5 h-3.5" /></button>
                                                         <button onClick={() => handleDeleteMachine(machine.id)} className="p-2 text-slate-600 dark:text-slate-400 hover:text-accent-pink bg-slate-100 dark:bg-white/5 hover:bg-accent-pink/20 rounded-xl transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
                                                     </div>
                                                 </div>

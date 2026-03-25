@@ -42,7 +42,7 @@ export async function createPurchaseOrder(data: {
 
 export async function completePurchaseOrder(
     orderId: number,
-    receivedData: Array<{ purchaseOrderItemId: number; quantityReceived: number; costPerUnit: number; retailPrice: number }>
+    receivedData: Array<{ purchaseOrderItemId: number; quantityReceived: number; costPerUnit: number; price_standard: number; price_hospital: number; price_hotel: number }>
 ) {
     try {
         await prisma.$transaction(async (tx) => {
@@ -106,7 +106,9 @@ export async function completePurchaseOrder(
                     where: { id: orderItem.itemId },
                     data: {
                         cost: item.costPerUnit,
-                        price: item.retailPrice
+                        price_standard: item.price_standard,
+                        price_hospital: item.price_hospital,
+                        price_hotel: item.price_hotel
                     }
                 });
             }
@@ -146,15 +148,14 @@ export async function cancelPurchaseOrder(orderId: number) {
 }
 
 // Quick action to create an Item if it doesn't exist
-export async function createQuickItem(data: { name: string; sku: string; category: string; bulk_format?: string, price: number }) {
+export async function createQuickItem(data: { name: string; sku: string; category: string; bulk_format?: string }) {
     try {
         const item = await prisma.item.create({
             data: {
                 name: data.name,
                 sku: data.sku,
                 category: data.category,
-                bulk_format: data.bulk_format || null,
-                price: data.price
+                bulk_format: data.bulk_format || null
             }
         });
         return { success: true, item: { ...item, WarehouseStock: [], _count: { DispatchItems: 0 } } };

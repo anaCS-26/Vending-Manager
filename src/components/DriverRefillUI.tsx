@@ -467,7 +467,13 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
                         <div className="space-y-3">
                             {Object.values(machineItems)
-                                .filter(row => viewMode === "BAG" ? row.inBag : (row.estimated_stock > 0 || row.refilled > 0 || row.returned > 0))
+                                .filter(row => {
+                                    if (viewMode === "BAG") {
+                                        return row.bagQuantity > 0 || row.refilled > 0;
+                                    } else {
+                                        return row.estimated_stock > 0 || row.returned > 0;
+                                    }
+                                })
                                 .sort((a, b) => a.item.name.localeCompare(b.item.name))
                                 .map((row) => {
                                     const isModified = row.refilled > 0 || row.returned > 0;
@@ -556,33 +562,37 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
                                             </div>
 
-                                            <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-white/5">
+                                            <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-white/5 w-full">
 
-                                                {/* Returned Counter */}
-                                                <div className="flex flex-col flex-1 pl-1 border-r border-slate-100 dark:border-white/5">
-                                                    <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Returned</span>
-                                                    <div className="flex items-center h-10 w-28 bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                        <button onClick={() => updateItem(row.itemId, 'returned', Math.max(0, row.returned - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                        <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.returned}</span>
-                                                        <button onClick={() => {
-                                                            const newVal = Math.min(row.bagQuantity - row.refilled, row.returned + 1);
-                                                            updateItem(row.itemId, 'returned', Math.max(0, newVal));
-                                                        }} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
+                                                {/* Returned Counter (Machine View Only) */}
+                                                {viewMode === "MACHINE" && (
+                                                    <div className="flex flex-col flex-1 pl-1">
+                                                        <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Returned (Warehouse)</span>
+                                                        <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
+                                                            <button onClick={() => updateItem(row.itemId, 'returned', Math.max(0, row.returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
+                                                            <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.returned}</span>
+                                                            <button onClick={() => {
+                                                                const newVal = row.returned + 1; // Can return up to whatever they extracted, but conceptually it reduces estimated stock in UI (not enforced tightly here, backend checks it).
+                                                                updateItem(row.itemId, 'returned', Math.max(0, newVal));
+                                                            }} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
 
-                                                {/* Refilled Counter */}
-                                                <div className="flex flex-col flex-1 pl-4">
-                                                    <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1">Refilled</span>
-                                                    <div className="flex items-center h-10 w-28 bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                        <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                        <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.refilled}</span>
-                                                        <button onClick={() => {
-                                                            const newVal = Math.min(Math.max(0, row.bagQuantity - row.returned), row.refilled + 1);
-                                                            updateItem(row.itemId, 'refilled', newVal);
-                                                        }} className="w-8 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
+                                                {/* Refilled Counter (Bag View Only) */}
+                                                {viewMode === "BAG" && (
+                                                    <div className="flex flex-col flex-1 pl-4">
+                                                        <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1">Refilled (Machine)</span>
+                                                        <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
+                                                            <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
+                                                            <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.refilled}</span>
+                                                            <button onClick={() => {
+                                                                const newVal = Math.min(row.bagQuantity, row.refilled + 1); // Can only refill up to what is in the bag
+                                                                updateItem(row.itemId, 'refilled', newVal);
+                                                            }} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
 
                                             </div>
 
@@ -590,7 +600,13 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                     )
                                 })
                             }
-                            {Object.values(machineItems).filter(row => viewMode === "BAG" ? row.inBag : (row.estimated_stock > 0 || row.refilled > 0 || row.returned > 0)).length === 0 && (
+                            {Object.values(machineItems).filter(row => {
+                                    if (viewMode === "BAG") {
+                                        return row.bagQuantity > 0 || row.refilled > 0;
+                                    } else {
+                                        return row.estimated_stock > 0 || row.returned > 0;
+                                    }
+                                }).length === 0 && (
                                 <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm font-medium">
                                     No items in this view.
                                 </div>

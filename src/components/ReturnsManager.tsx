@@ -19,7 +19,7 @@ type ReturnVerificationType = {
     verified_at: Date | null;
     item: {
         name: string;
-        price: number;
+        price_standard: number;
     };
     dispatch: {
         driver: {

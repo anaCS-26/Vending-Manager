@@ -36,8 +36,12 @@ export type RefillLogWithMachine = Prisma.RefillLogGetPayload<{
     include: { machine: true };
 }>;
 
-/** A driver record */
-export type DriverType = Prisma.DriverGetPayload<{}>;
+/** A driver record with their current bag stock */
+export type DriverType = Prisma.DriverGetPayload<{
+    include: {
+        DriverStock: { include: { item: true } };
+    };
+}>;
 
 /** A machine record */
 export type MachineType = Prisma.MachineGetPayload<{}>;
