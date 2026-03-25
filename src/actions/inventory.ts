@@ -62,7 +62,7 @@ function assertWholeNonNegative(value: number, label: string) {
 // ==========================================
 export async function getDrivers() {
     return await prisma.driver.findMany({
-        include: { driverStock: { include: { item: true } } },
+        include: { DriverStock: { include: { item: true } } },
         orderBy: { name: 'asc' }
     })
 }
@@ -210,7 +210,7 @@ export async function dispatchToDriver(
             // Deduct warehouse stock strictly from the originating warehouse, but try Driver's bag first!
             for (const item of normalizedItems) {
                 // 1. Check DriverStock first
-                const driverStock = await tx.driverStock.findUnique({
+                const driverStock = await tx.DriverStock.findUnique({
                     where: { driverId_itemId: { driverId, itemId: item.itemId } }
                 });
 
@@ -218,7 +218,7 @@ export async function dispatchToDriver(
 
                 if (driverStock && driverStock.quantity_on_hand > 0) {
                     const takeFromDriver = Math.min(driverStock.quantity_on_hand, item.quantity);
-                    await tx.driverStock.update({
+                    await tx.DriverStock.update({
                         where: { id: driverStock.id },
                         data: { quantity_on_hand: { decrement: takeFromDriver } }
                     });
@@ -679,12 +679,12 @@ export async function editDispatchReturn(
                     // This means what went to DriverStock was TOO MUCH by `delta`. So we must decrement `DriverStock`.
                     // If delta < 0, they returned LESS, so we increment DriverStock.
                     if (dispatch.driverId) {
-                        const existingDriverStock = await tx.driverStock.findUnique({
+                        const existingDriverStock = await tx.DriverStock.findUnique({
                             where: { driverId_itemId: { driverId: dispatch.driverId, itemId: dispatchItem.itemId } }
                         });
                         
                         if (existingDriverStock) {
-                            await tx.driverStock.update({
+                            await tx.DriverStock.update({
                                 where: { id: existingDriverStock.id },
                                 data: { quantity_on_hand: { decrement: delta } }
                             });
