@@ -4,10 +4,11 @@ import ManagementDashboard from "@/components/ManagementDashboard";
 
 export default async function ManagePage() {
     const [drivers, machines, warehouses, items] = await Promise.all([
-        prisma.driver.findMany(),
-        prisma.machine.findMany(),
-        prisma.warehouse.findMany(),
+        prisma.driver.findMany({ orderBy: { name: 'asc' } }),
+        prisma.machine.findMany({ orderBy: { location_name: 'asc' } }),
+        prisma.warehouse.findMany({ orderBy: { name: 'asc' } }),
         prisma.item.findMany({
+            orderBy: { name: 'asc' },
             include: {
                 WarehouseStock: {
                     include: {

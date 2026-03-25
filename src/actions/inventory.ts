@@ -19,13 +19,18 @@ export async function getVersion(): Promise<number> {
 // ==========================================
 export async function getWarehouseInventory() {
     return await prisma.warehouseStock.findMany({
-        include: { item: true, warehouse: true }
+        include: { item: true, warehouse: true },
+        orderBy: { item: { name: 'asc' } }
     })
 }
 
 export async function getMachineInventory() {
     return await prisma.machineStock.findMany({
-        include: { item: true, machine: true }
+        include: { item: true, machine: true },
+        orderBy: [
+            { machine: { location_name: 'asc' } },
+            { item: { name: 'asc' } }
+        ]
     })
 }
 
@@ -57,7 +62,8 @@ function assertWholeNonNegative(value: number, label: string) {
 // ==========================================
 export async function getDrivers() {
     return await prisma.driver.findMany({
-        include: { DriverStock: { include: { item: true } } }
+        include: { driverStock: { include: { item: true } } },
+        orderBy: { name: 'asc' }
     })
 }
 
@@ -250,7 +256,9 @@ export async function dispatchToDriver(
 // REFILL ACTIONS (Driver refilling Machine)
 // ==========================================
 export async function getMachines() {
-    return await prisma.machine.findMany()
+    return await prisma.machine.findMany({
+        orderBy: { location_name: 'asc' }
+    })
 }
 
 export async function logRefill(
