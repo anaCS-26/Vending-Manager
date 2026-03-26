@@ -1,7 +1,36 @@
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 
 const prismaClientSingleton = () => {
-  return new PrismaClient()
+  const client = new PrismaClient({
+    log: [
+      {
+        emit: 'event',
+        level: 'query',
+      },
+      {
+        emit: 'stdout',
+        level: 'error',
+      },
+      {
+        emit: 'stdout',
+        level: 'info',
+      },
+      {
+        emit: 'stdout',
+        level: 'warn',
+      },
+    ],
+  })
+
+  if (process.env.NODE_ENV !== 'production') {
+    // @ts-ignore
+    client.$on('query', (e: Prisma.QueryEvent) => {
+      console.log(`⏱️  Query Duration: ${e.duration}ms`)
+      // console.log(`📡 Query: ${e.query}`) // Option: uncomment this to see the SQL again
+    })
+  }
+
+  return client
 }
 
 declare const globalThis: {
