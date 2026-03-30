@@ -386,9 +386,11 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                             onChange={(e) => setSelectedMachine(e.target.value)}
                             className="w-full appearance-none bg-white dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-2xl py-4 pl-12 pr-12 text-slate-900 dark:text-white font-bold text-lg focus:outline-none focus:border-accent-purple shadow-sm transition-all"
                         >
-                            <option value="" className="text-slate-500">Pick Machine Location...</option>
+                            <option value="" className="text-slate-500 bg-white dark:bg-slate-900">Pick Machine Location...</option>
                             {machines.map((m) => (
-                                <option key={m.id} value={m.id} className="text-slate-900 dark:text-white">{m.location_name}</option>
+                                <option key={m.id} value={m.id} className="text-slate-900 dark:text-white bg-white dark:bg-slate-900">
+                                    {m.id} - {m.location_name}
+                                </option>
                             ))}
                         </select>
                         <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-accent-purple w-5 h-5 pointer-events-none" />

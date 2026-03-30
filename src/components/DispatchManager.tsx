@@ -19,6 +19,7 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
     const [selectedDriver, setSelectedDriver] = useState<string>("");
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | "">("");
     const [selectedItems, setSelectedItems] = useState<{ itemId: number, quantity: number }[]>([]);
+    const [searchQuery, setSearchQuery] = useState("");
     const [isPending, startTransition] = useTransition();
 
     // SSE-based real-time refresh (replaces 5s polling)
@@ -103,20 +104,46 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
                         </div>
                     )}
 
-                    <div className="relative z-0">
-                        <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300 mb-2">
+                    <div className="flex flex-col gap-3 mb-4">
+                        <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300">
                             Available Inventory {selectedWarehouseId && `- ${warehouses.find(w => w.id === selectedWarehouseId)?.name}`}
                         </label>
-                        <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                            {!selectedWarehouseId ? (
-                                <div className="col-span-2 p-4 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
-                                    Please select an origin warehouse first.
+                        
+                        {selectedWarehouseId && (
+                            <div className="relative group">
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent-blue transition-colors">
+                                    <Truck className="w-4 h-4" />
                                 </div>
-                            ) : inventory.filter(inv => inv.warehouseId === selectedWarehouseId).length === 0 ? (
-                                <div className="col-span-2 p-4 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
-                                    No stock available in this warehouse.
-                                </div>
-                            ) : inventory.filter(inv => inv.warehouseId === selectedWarehouseId).map((inv) => {
+                                <input 
+                                    type="text"
+                                    placeholder="Search items by name or SKU..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-accent-blue transition-all"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                        {!selectedWarehouseId ? (
+                            <div className="col-span-2 p-4 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
+                                Please select an origin warehouse first.
+                            </div>
+                        ) : inventory.filter(inv => 
+                            inv.warehouseId === selectedWarehouseId && 
+                            (inv.item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                inv.item.sku.toLowerCase().includes(searchQuery.toLowerCase()))
+                        ).length === 0 ? (
+                            <div className="col-span-2 p-4 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
+                                {searchQuery ? "No items match your search." : "No stock available in this warehouse."}
+                            </div>
+                        ) : (
+                            inventory.filter(inv => 
+                                inv.warehouseId === selectedWarehouseId && 
+                                (inv.item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                    inv.item.sku.toLowerCase().includes(searchQuery.toLowerCase()))
+                            ).map((inv) => {
                                 const isSelected = selectedItems.find(i => i.itemId === inv.itemId);
                                 return (
                                     <button
@@ -137,8 +164,8 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
                                         </span>
                                     </button>
                                 );
-                            })}
-                        </div>
+                            })
+                        )}
                     </div>
 
                     <div className="bg-slate-100 dark:bg-white/5 rounded-2xl p-5 border border-slate-200 dark:border-white/10 mt-6 min-h-[140px] flex flex-col">
@@ -432,7 +459,7 @@ function DriverSelect({ drivers, selected, onChange }: { drivers: DriverType[], 
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.15 }}
-                        className="absolute left-0 right-0 mt-2 bg-[#18181b] border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden shadow-2xl shadow-black/80 z-[99999]"
+                        className="absolute left-0 right-0 mt-2 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden shadow-2xl shadow-black/80 z-[99999]"
                     >
                         <div className="max-h-[250px] overflow-y-auto custom-scrollbar">
                             {drivers.map(d => (
@@ -476,7 +503,7 @@ function WarehouseSelect({ warehouses, selected, onChange }: { warehouses: Wareh
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.15 }}
-                        className="absolute left-0 right-0 mt-2 bg-[#18181b] border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden shadow-2xl shadow-black/80 z-[99999]"
+                        className="absolute left-0 right-0 mt-2 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden shadow-2xl shadow-black/80 z-[99999]"
                     >
                         <div className="max-h-[250px] overflow-y-auto custom-scrollbar">
                             <button

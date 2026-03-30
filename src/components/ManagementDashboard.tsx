@@ -433,14 +433,14 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                         <div className="flex justify-between items-center mb-6">
                             <div>
                                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">Machine Locations</h2>
-                                <p className="text-sm text-slate-600 dark:text-slate-400">Manage your active vending points and terminal IDs.</p>
+                                <p className="text-sm text-slate-600 dark:text-slate-400">Manage your active vending points and machine codes.</p>
                             </div>
                             <div className="flex items-center gap-3">
                                 <ExportExcelButton
                                     data={filteredMachines.map(m => ({
                                         "Location": m.location_name,
                                         "District": m.district,
-                                        "Terminal ID": m.terminalId || "N/A",
+                                        "Machine Code": m.id,
                                         "Address": m.address || "N/A",
                                         "Operating Cost": formatCurrency(m.operating_cost || 0),
                                         "Rental Cost": formatCurrency(m.rental_cost || 0),
@@ -469,9 +469,9 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">District</label>
                                         <input type="text" value={machineForm.district} onChange={e => setMachineForm({ ...machineForm, district: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Downtown / East Side" />
                                     </div>
-                                    <div>
-                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Terminal ID (Nayax/Local)</label>
-                                        <input type="text" value={machineForm.terminalId} onChange={e => setMachineForm({ ...machineForm, terminalId: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="ID-12345" />
+                                    <div className="hidden">
+                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Machine Code (Auto)</label>
+                                        <input type="text" disabled value="Auto-generated" className="w-full bg-slate-100 dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-400 cursor-not-allowed focus:outline-none" />
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Driver Notes</label>
@@ -518,16 +518,16 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Location Name</label><input type="text" value={machineForm.location_name} onChange={e => setMachineForm({ ...machineForm, location_name: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Name" /></div>
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">District</label><input type="text" value={machineForm.district} onChange={e => setMachineForm({ ...machineForm, district: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="District" /></div>
-                                                    <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Terminal ID</label><input type="text" value={machineForm.terminalId} onChange={e => setMachineForm({ ...machineForm, terminalId: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Terminal ID" /></div>
+                                                    <div className="hidden"><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Terminal ID</label><input type="text" value={machineForm.terminalId} onChange={e => setMachineForm({ ...machineForm, terminalId: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Terminal ID" /></div>
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Notes</label><input type="text" value={machineForm.notes} onChange={e => setMachineForm({ ...machineForm, notes: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Notes" /></div>
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Op Cost (/mo)</label><input type="number" step="0.01" value={machineForm.operating_cost} onChange={e => setMachineForm({ ...machineForm, operating_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Operating Cost" /></div>
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Rental Cost (/mo)</label><input type="number" step="0.01" value={machineForm.rental_cost} onChange={e => setMachineForm({ ...machineForm, rental_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Rental Cost" /></div>
                                                     <div>
                                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Tier</label>
                                                         <select value={machineForm.tier} onChange={e => setMachineForm({ ...machineForm, tier: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none">
-                                                            <option value="STANDARD">Standard</option>
-                                                            <option value="HOSPITAL">Hospital</option>
-                                                            <option value="HOTEL">Hotel</option>
+                                                            <option value="STANDARD" className="text-slate-900 dark:text-white bg-white dark:bg-slate-900">Standard</option>
+                                                            <option value="HOSPITAL" className="text-slate-900 dark:text-white bg-white dark:bg-slate-900">Hospital</option>
+                                                            <option value="HOTEL" className="text-slate-900 dark:text-white bg-white dark:bg-slate-900">Hotel</option>
                                                         </select>
                                                     </div>
                                                 </div>
@@ -558,8 +558,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
 
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                                                     <div className="p-3 bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-2xl">
-                                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block mb-1">Terminal ID</span>
-                                                        <span className="text-xs font-mono text-brand-400 font-bold break-all">{machine.terminalId || "UNASSIGNED"}</span>
+                                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block mb-1">Machine Code</span>
+                                                        <span className="text-xs font-mono text-brand-400 font-bold break-all">{machine.id}</span>
                                                     </div>
                                                     <div className="p-3 bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-2xl">
                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block mb-1">Operating Cost</span>
