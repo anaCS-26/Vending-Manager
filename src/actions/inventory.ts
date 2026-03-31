@@ -9,6 +9,7 @@ import { writeFile, mkdir } from "fs/promises"
 import fs from "fs"
 import { put } from '@vercel/blob';
 import bcrypt from "bcryptjs";
+import { requireAdmin, requireSuperAdmin } from "@/lib/auth-utils";
 
 export async function getVersion(): Promise<number> {
     return getDataVersion();
@@ -163,6 +164,7 @@ export async function dispatchToDriver(
     warehouseId: number,
     items: { itemId: number, quantity: number }[]
 ): Promise<ActionResult> {
+    await requireAdmin();
     try {
         await prisma.$transaction(async (tx) => {
             if (!items.length) {
@@ -257,7 +259,7 @@ export async function dispatchToDriver(
 // ==========================================
 export async function getMachines() {
     return await prisma.machine.findMany({
-        orderBy: { location_name: 'asc' }
+        orderBy: { id: 'asc' }
     })
 }
 
@@ -1016,6 +1018,7 @@ export async function deleteItem(id: number): Promise<ActionResult> {
 // PROTOTYPE ACTIONS
 // ==========================================
 export async function resetDatabase(): Promise<ActionResult> {
+    await requireSuperAdmin();
     try {
         await prisma.$transaction(async (tx) => {
             // 1. Delete all records in correct order
@@ -1074,5 +1077,27 @@ export async function uploadItemImage(itemId: number, formData: FormData): Promi
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to upload image";
         return { success: false, error: message };
+    }
+}
+export async function getRecentDispatchForDriver(driverId: number): Promise<ActionResult<any>> {
+    await requireAdmin();
+    try {
+        const latestDispatch = await prisma.dispatch.findFirst({
+            where: { driverId },
+            orderBy: { dispatch_date: 'desc' },
+            include: {
+                DispatchItems: {
+                    include: { item: true }
+                }
+            }
+        });
+
+        if (!latestDispatch) {
+            return { success: false, error: "No previous dispatches found for this driver." };
+        }
+
+        return { success: true, data: latestDispatch };
+    } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Failed to fetch latest dispatch" };
     }
 }

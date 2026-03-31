@@ -78,13 +78,24 @@ export default async function AdminDashboard() {
     const todayVolume = todaysLogs.reduce((acc, log) => acc + log.quantity_refilled, 0);
     const activeDispatchCount = dispatches.length;
 
-    const criticalAnomalies = predictions.filter(p => p.predictedHoursUntilEmpty !== null && p.predictedHoursUntilEmpty <= 24);
-    const warningAnomalies = predictions.filter(p => p.predictedHoursUntilEmpty !== null && p.predictedHoursUntilEmpty > 24 && p.predictedHoursUntilEmpty <= 72);
+    const nowAudit = new Date();
+    const totalFleetCount = machines.length || 1;
+    
+    // Logic: Critical if not visited in 5 days, Warning if 2-5 days
+    const criticalStock = machines.filter(m => {
+        const lastRefill = m.RefillLogs[0]?.refilled_at;
+        if (!lastRefill) return true;
+        return (nowAudit.getTime() - lastRefill.getTime()) / (1000 * 60 * 60 * 24) > 5;
+    }).length;
 
-    const totalInventoryKinds = machines.length || 1;
-    const criticalStock = criticalAnomalies.length;
-    const warningStock = warningAnomalies.length;
-    const healthyStock = Math.max(0, totalInventoryKinds - criticalStock - warningStock);
+    const warningStock = machines.filter(m => {
+        const lastRefill = m.RefillLogs[0]?.refilled_at;
+        if (!lastRefill) return false;
+        const daysSince = (nowAudit.getTime() - lastRefill.getTime()) / (1000 * 60 * 60 * 24);
+        return daysSince > 2 && daysSince <= 5;
+    }).length;
+
+    const healthyStock = Math.max(0, totalFleetCount - criticalStock - warningStock);
 
     const itemSales: Record<number, { name: string, quantity: number, category: string, price: number }> = {};
     recentLogsForSales.forEach(log => {
@@ -137,10 +148,10 @@ export default async function AdminDashboard() {
                     glowClass="hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] border-transparent hover:border-accent-blue/30"
                 />
                 <GlassMetric
-                    title="CRITICAL SHORTAGES"
+                    title="OVERDUE VISITS"
                     value={criticalStock.toString()}
                     icon={<AlertCircle className="w-7 h-7 text-accent-pink" />}
-                    trend="Depletion Risk"
+                    trend="Audit Urgency"
                     alert={criticalStock > 0}
                     color="text-accent-pink"
                     glowClass="hover:shadow-[0_0_30px_rgba(236,72,153,0.3)] border-transparent hover:border-accent-pink/30"
@@ -247,38 +258,38 @@ export default async function AdminDashboard() {
                         <div className="space-y-5">
                             <div>
                                 <div className="flex justify-between text-xs font-bold mb-2 text-slate-600 dark:text-slate-400">
-                                    <span className="text-emerald-400 uppercase tracking-tighter">Fully Stocked</span>
-                                    <span className="text-slate-900 dark:text-white font-mono">{Math.round((healthyStock / totalInventoryKinds) * 100)}%</span>
+                                    <span className="text-emerald-400 uppercase tracking-tighter">Recently Audited</span>
+                                    <span className="text-slate-900 dark:text-white font-mono">{Math.round((healthyStock / totalFleetCount) * 100)}%</span>
                                 </div>
                                 <div className="w-full bg-slate-100 dark:bg-white/5 h-2 rounded-full overflow-hidden">
-                                    <div className="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(52,211,153,0.3)]" style={{ width: `${(healthyStock / totalInventoryKinds) * 100}%` }}></div>
+                                    <div className="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(52,211,153,0.3)]" style={{ width: `${(healthyStock / totalFleetCount) * 100}%` }}></div>
                                 </div>
                             </div>
 
                             <div>
                                 <div className="flex justify-between text-xs font-bold mb-2 text-slate-600 dark:text-slate-400">
-                                    <span className="text-orange-400 uppercase tracking-tighter">Needs Attention</span>
-                                    <span className="text-slate-900 dark:text-white font-mono">{Math.round((warningStock / totalInventoryKinds) * 100)}%</span>
+                                    <span className="text-orange-400 uppercase tracking-tighter">Due for Visit</span>
+                                    <span className="text-slate-900 dark:text-white font-mono">{Math.round((warningStock / totalFleetCount) * 100)}%</span>
                                 </div>
                                 <div className="w-full bg-slate-100 dark:bg-white/5 h-2 rounded-full overflow-hidden">
-                                    <div className="bg-gradient-to-r from-orange-600 to-orange-400 h-full rounded-full transition-all duration-1000" style={{ width: `${(warningStock / totalInventoryKinds) * 100}%` }}></div>
+                                    <div className="bg-gradient-to-r from-orange-600 to-orange-400 h-full rounded-full transition-all duration-1000" style={{ width: `${(warningStock / totalFleetCount) * 100}%` }}></div>
                                 </div>
                             </div>
 
                             <div>
                                 <div className="flex justify-between text-xs font-bold mb-2 text-slate-600 dark:text-slate-400">
-                                    <span className="text-accent-pink uppercase tracking-tighter">Critically Low</span>
-                                    <span className="text-slate-900 dark:text-white font-mono">{Math.round((criticalStock / totalInventoryKinds) * 100)}%</span>
+                                    <span className="text-accent-pink uppercase tracking-tighter">Overdue Audit</span>
+                                    <span className="text-slate-900 dark:text-white font-mono">{Math.round((criticalStock / totalFleetCount) * 100)}%</span>
                                 </div>
                                 <div className="w-full bg-slate-100 dark:bg-white/5 h-2 rounded-full overflow-hidden">
-                                    <div className="bg-gradient-to-r from-pink-600 to-accent-pink h-full rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(236,72,153,0.5)]" style={{ width: `${(criticalStock / totalInventoryKinds) * 100}%` }}></div>
+                                    <div className="bg-gradient-to-r from-pink-600 to-accent-pink h-full rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(236,72,153,0.5)]" style={{ width: `${(criticalStock / totalFleetCount) * 100}%` }}></div>
                                 </div>
                             </div>
                         </div>
 
                         <div className="mt-8 pt-6 border-t border-slate-200 dark:border-white/5 flex items-center justify-between">
                             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Nodes Tracked</span>
-                            <span className="text-lg font-black text-slate-900 dark:text-white font-mono">{totalInventoryKinds}</span>
+                            <span className="text-lg font-black text-slate-900 dark:text-white font-mono">{totalFleetCount}</span>
                         </div>
                     </div>
 

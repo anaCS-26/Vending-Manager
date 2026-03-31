@@ -105,6 +105,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
     const [machineForm, setMachineForm] = useState({ location_name: "", district: "", address: "", notes: "", terminalId: "", latitude: undefined as number | undefined, longitude: undefined as number | undefined, operating_cost: 0, rental_cost: 0, tier: "STANDARD" });
     const [itemForm, setItemForm] = useState({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", warehouseId: undefined as number | undefined, initialStock: 0 });
     const [warehouseForm, setWarehouseForm] = useState({ name: "", location: "", address: "", latitude: undefined as number | undefined, longitude: undefined as number | undefined, operating_cost: 0, rental_cost: 0 });
+    const [bulkQty, setBulkQty] = useState<string>("");
 
     // Reset forms when switching tabs or canceling
     const resetForms = () => {
@@ -119,6 +120,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
     const handleTabChange = (tab: "drivers" | "machines" | "items" | "warehouses") => {
         resetForms();
         setSearchQuery("");
+        setBulkQty("");
         setCurrentPage(1);
         setActiveTab(tab);
     }

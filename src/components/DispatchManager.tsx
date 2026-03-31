@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
-import { Truck, PackageOpen, Check, AlertTriangle, Crosshair, Navigation, ChevronDown, Loader2 } from "lucide-react";
-import { dispatchToDriver, returnDispatch } from "@/actions/inventory";
+import { Truck, PackageOpen, Check, AlertTriangle, Crosshair, Navigation, ChevronDown, Loader2, History, ChevronRight, Trash2 } from "lucide-react";
+import { dispatchToDriver, returnDispatch, getRecentDispatchForDriver } from "@/actions/inventory";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh";
@@ -21,6 +21,8 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
     const [selectedItems, setSelectedItems] = useState<{ itemId: number, quantity: number }[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [isPending, startTransition] = useTransition();
+    const [isCopying, setIsCopying] = useState(false);
+    const [bulkQty, setBulkQty] = useState<string>("");
 
     // SSE-based real-time refresh (replaces 5s polling)
     useRealtimeRefresh();
@@ -35,12 +37,60 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
                 });
                 setSelectedDriver("");
                 setSelectedItems([]);
+                setBulkQty("");
             } else {
                 toast.error("Dispatch failed", {
                     description: result.error,
                 });
             }
         });
+    };
+
+    const handleCopyRecent = async () => {
+        if (!selectedDriver) {
+            toast.error("Please select a driver first");
+            return;
+        }
+        
+        setIsCopying(true);
+        try {
+            const result = await getRecentDispatchForDriver(parseInt(selectedDriver));
+            if (result.success && result.data) {
+                const latestItems = result.data.DispatchItems.map((di: any) => ({
+                    itemId: di.itemId,
+                    quantity: di.quantity_given
+                }));
+                
+                // If a warehouse is selected, filter items strictly by what's available there
+                if (selectedWarehouseId) {
+                    const warehouseItems = inventory.filter(inv => inv.warehouseId === selectedWarehouseId);
+                    const validItems = latestItems.filter((li: any) => 
+                        warehouseItems.some(wi => wi.itemId === li.itemId && wi.quantity_on_hand > 0)
+                    );
+                    
+                    if (validItems.length < latestItems.length) {
+                        toast.warning(`${latestItems.length - validItems.length} items from the previous dispatch were skipped because they are out of stock in this warehouse.`);
+                    }
+                    
+                    if (validItems.length === 0) {
+                        toast.error("None of the items from the previous dispatch are available in the current warehouse.");
+                    } else {
+                        setSelectedItems(validItems);
+                        toast.success("Manifest copied from history");
+                    }
+                } else {
+                    // If no warehouse selected, just set them all (validation will happen when warehouse is selected)
+                    setSelectedItems(latestItems);
+                    toast.success("Manifest items loaded from history");
+                }
+            } else {
+                toast.error(result.success === false ? result.error : "No recent dispatches found for this driver");
+            }
+        } catch (err) {
+            toast.error("Failed to load history");
+        } finally {
+            setIsCopying(false);
+        }
     };
 
     const addItemToDispatch = (itemId: number) => {
@@ -85,6 +135,18 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
                             />
                         </div>
                     </div>
+
+                    {selectedDriver && (
+                        <button
+                            type="button"
+                            onClick={handleCopyRecent}
+                            disabled={isCopying}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-accent-blue hover:border-accent-blue/50 transition-all w-fit"
+                        >
+                            {isCopying ? <Loader2 className="w-3 h-3 animate-spin" /> : <History className="w-3 h-3" />}
+                            Copy Latest Route Items
+                        </button>
+                    )}
 
                     {/* Show what the driver is currently carrying via their DriverStock */}
                     {selectedDriver && (drivers.find(d => d.id.toString() === selectedDriver)?.DriverStock?.length ?? 0) > 0 && (
@@ -170,11 +232,41 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
 
                     <div className="bg-slate-100 dark:bg-white/5 rounded-2xl p-5 border border-slate-200 dark:border-white/10 mt-6 min-h-[140px] flex flex-col">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300">Dispatch Manifest</h3>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-accent-blue bg-accent-blue/10 px-2 py-0.5 rounded-full border border-accent-blue/20">
-                                {selectedItems.length} Items Selected
-                            </span>
+                            <div className="flex items-center gap-3">
+                                <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300">Dispatch Manifest</h3>
+                                <span className="text-[10px] uppercase font-bold tracking-wider text-accent-blue bg-accent-blue/10 px-2 py-0.5 rounded-full border border-accent-blue/20">
+                                    {selectedItems.length} Items Selected
+                                </span>
+                            </div>
+                            {selectedItems.length > 0 && (
+                                <button 
+                                    onClick={() => setSelectedItems([])}
+                                    className="text-[10px] font-bold text-slate-400 hover:text-accent-pink uppercase tracking-widest flex items-center gap-1.5 transition-colors"
+                                >
+                                    <Trash2 className="w-3 h-3" /> Clear All
+                                </button>
+                            )}
                         </div>
+
+                        {selectedItems.length > 0 && (
+                            <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 mb-4 group/bulk">
+                                <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Bulk Set Qty:</div>
+                                <input
+                                    type="number"
+                                    placeholder="Set all..."
+                                    value={bulkQty}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setBulkQty(val);
+                                        const q = parseInt(val);
+                                        if (q > 0) {
+                                            setSelectedItems(prev => prev.map(i => ({ ...i, quantity: q })));
+                                        }
+                                    }}
+                                    className="flex-1 bg-transparent border-none outline-none text-xs text-accent-blue font-bold placeholder:text-slate-600"
+                                />
+                            </div>
+                        )}
 
                         {selectedItems.length === 0 ? (
                             <div className="flex-1 flex flex-col items-center justify-center text-center p-4 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-white/[0.02]">
@@ -278,6 +370,7 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
 
 function DispatchCard({ dispatch }: { dispatch: DispatchWithRelations }) {
     const [isReturning, setIsReturning] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
     const [isPending, startTransition] = useTransition();
     const [returnQtys, setReturnQtys] = useState<Record<number, number>>({});
 
@@ -327,13 +420,42 @@ function DispatchCard({ dispatch }: { dispatch: DispatchWithRelations }) {
             exit={{ opacity: 0, scale: 0.95 }}
             className="glass-panel border-slate-200 dark:border-white/10 overflow-hidden rounded-2xl transition-all"
         >
-            <div className="p-5 flex items-center justify-between border-slate-200 dark:border-white/5 bg-white/[0.02]">
-                <div>
-                    <h3 className="font-bold text-slate-900 dark:text-white tracking-tight">{dispatch.driver.name}</h3>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Route started: {new Date(dispatch.dispatch_date).toLocaleTimeString()}</p>
+            <div 
+                className="p-5 flex items-center justify-between border-slate-200 dark:border-white/5 bg-white/[0.02] cursor-pointer hover:bg-white/[0.04] transition-colors"
+                onClick={() => !isReturning && setIsExpanded(!isExpanded)}
+            >
+                <div className="flex items-center gap-4">
+                    <motion.div
+                        animate={{ rotate: isExpanded ? 90 : 0 }}
+                        className="text-slate-400"
+                    >
+                        <ChevronRight className="w-5 h-5" />
+                    </motion.div>
+                    <div>
+                        <h3 className="font-bold text-slate-900 dark:text-white tracking-tight">{dispatch.driver.name}</h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Route started: {new Date(dispatch.dispatch_date).toLocaleTimeString()}</p>
+                    </div>
                 </div>
-                <div className={`px-3 py-1 border text-xs font-medium rounded-full ${isComplete ? 'bg-accent-green/10 border-accent-green/20 text-accent-green' : 'bg-accent-blue/10 border-accent-blue/20 text-accent-blue'}`}>
-                    {isComplete ? 'Route Complete' : 'In Transit'}
+                <div className="flex items-center gap-3">
+                    <div className="text-right hidden sm:block mr-2">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Route Progress</p>
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">{Math.round(progressPercent)}%</p>
+                    </div>
+                    <motion.div 
+                        animate={!isComplete ? { 
+                            scale: [1, 1.05, 1],
+                            opacity: [1, 0.8, 1]
+                        } : {}}
+                        transition={{ 
+                            duration: 3, 
+                            repeat: Infinity, 
+                            ease: "easeInOut" 
+                        }}
+                        className={`px-3 py-1 border text-xs font-semibold rounded-full flex items-center gap-1.5 ${isComplete ? 'bg-accent-green/10 border-accent-green/20 text-accent-green' : 'bg-accent-blue/10 border-accent-blue/20 text-accent-blue'}`}
+                    >
+                        {!isComplete && <div className="w-1.5 h-1.5 rounded-full bg-accent-blue animate-pulse" />}
+                        {isComplete ? 'Route Complete' : 'In Transit'}
+                    </motion.div>
                 </div>
             </div>
 
@@ -347,91 +469,103 @@ function DispatchCard({ dispatch }: { dispatch: DispatchWithRelations }) {
                 />
             </div>
 
-            {!isReturning ? (
-                <div className="p-5 relative">
-                    <div className="space-y-4 mb-6 relative z-10">
-                        {dispatch.DispatchItems.map((di: DispatchItemWithItem) => {
-                            const itemRefills = (dispatch.RefillLogs as RefillLogWithMachine[]).filter((r) => r.itemId === di.itemId).reduce((sum: number, log) => sum + log.quantity_refilled, 0);
-                            return (
-                                <div key={di.id} className="flex items-center justify-between text-sm">
-                                    <span className="font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300">{di.item.name}</span>
-                                    <div className="text-right flex items-center gap-3">
-                                        <span className="font-semibold text-slate-900 dark:text-white">{itemRefills} <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">Delivered</span></span>
-                                        <span className="text-slate-900 dark:text-white/20">/</span>
-                                        <span className="text-slate-600 dark:text-slate-400">{di.quantity_given} <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">Total</span></span>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    <button
-                        onClick={handleStartReturn}
-                        className="w-full py-2.5 bg-slate-100 dark:bg-white/5 hover:bg-white/10 border border-slate-200 dark:border-white/10 hover:border-accent-blue text-slate-900 dark:text-white rounded-xl font-medium transition-colors text-sm"
+            <AnimatePresence initial={false}>
+                {(isExpanded || isReturning) && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                        className="overflow-hidden"
                     >
-                        Complete Route & Return Stock
-                    </button>
-                </div>
-            ) : (
-                <div className="p-5 relative border-t-2 border-accent-orange/50 bg-accent-orange/[0.02]">
-                    <h4 className="font-semibold text-accent-orange mb-4 text-sm flex items-center gap-2 tracking-tight">
-                        <AlertTriangle className="w-4 h-4 text-accent-orange" />
-                        Verify End-of-Route Returns
-                    </h4>
-
-                    <div className="space-y-3 mb-6 relative z-10">
-                        {dispatch.DispatchItems.map((di: DispatchItemWithItem) => {
-                            const itemConsumed = (dispatch.RefillLogs as any[]).filter((r: any) => r.itemId === di.itemId).reduce((sum: number, log: any) => sum + log.quantity_refilled + (log.expired_quantity || 0) + (log.damaged_quantity || 0), 0);
-                            const expectedValue = Math.max(0, di.quantity_given - itemConsumed);
-                            const isMismatch = returnQtys[di.id] !== expectedValue;
-
-                            return (
-                                <div key={di.id} className="flex items-center justify-between text-sm p-3 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-white/5">
-                                    <div className="flex flex-col pr-2">
-                                        <span className="font-bold text-slate-900 dark:text-white mb-0.5">{di.item.name}</span>
-                                        <span className="text-xs text-slate-500 dark:text-slate-400">Expected: {expectedValue} Units</span>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex flex-col items-center">
-                                            <span className="text-[10px] uppercase font-bold text-slate-500 mb-1">Returned</span>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                value={returnQtys[di.id]}
-                                                onChange={e => setReturnQtys({ ...returnQtys, [di.id]: parseInt(e.target.value) || 0 })}
-                                                className={`w-16 bg-white dark:bg-black/50 border rounded-lg px-2 py-1.5 text-center font-bold text-sm focus:outline-none transition-colors ${isMismatch ? 'border-accent-orange text-accent-orange' : 'border-slate-200 dark:border-white/10 text-slate-900 dark:text-white hover:border-slate-300 dark:border-white/20 focus:border-accent-blue'}`}
-                                            />
-                                        </div>
-                                    </div>
+                        {!isReturning ? (
+                            <div className="p-5 relative border-t border-slate-200 dark:border-white/5">
+                                <div className="space-y-4 mb-6 relative z-10">
+                                    {dispatch.DispatchItems.map((di: DispatchItemWithItem) => {
+                                        const itemRefills = (dispatch.RefillLogs as RefillLogWithMachine[]).filter((r) => r.itemId === di.itemId).reduce((sum: number, log) => sum + log.quantity_refilled, 0);
+                                        return (
+                                            <div key={di.id} className="flex items-center justify-between text-sm">
+                                                <span className="font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300">{di.item.name}</span>
+                                                <div className="text-right flex items-center gap-3">
+                                                    <span className="font-semibold text-slate-900 dark:text-white">{itemRefills} <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">Delivered</span></span>
+                                                    <span className="text-slate-900 dark:text-white/20">/</span>
+                                                    <span className="text-slate-600 dark:text-slate-400">{di.quantity_given} <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">Total</span></span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            );
-                        })}
-                    </div>
 
-                    <div className="flex gap-3 relative z-10">
-                        <button
-                            onClick={() => setIsReturning(false)}
-                            className="flex-1 py-2.5 bg-slate-100 dark:bg-white/5 hover:bg-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300 border border-slate-200 dark:border-white/10 rounded-xl font-medium text-sm transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleReturn}
-                            disabled={isPending}
-                            className="flex-1 py-2.5 bg-accent-blue hover:bg-accent-blue/90 text-slate-900 dark:text-white rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2"
-                        >
-                            {isPending ? (
-                                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
-                                    <Loader2 className="w-4 h-4" />
-                                </motion.div>
-                            ) : (
-                                <Check className="w-4 h-4" />
-                            )}
-                            {isPending ? "Processing..." : "Confirm Return"}
-                        </button>
-                    </div>
-                </div>
-            )}
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleStartReturn(); }}
+                                    className="w-full py-2.5 bg-slate-100 dark:bg-white/5 hover:bg-white/10 border border-slate-200 dark:border-white/10 hover:border-accent-blue text-slate-900 dark:text-white rounded-xl font-medium transition-colors text-sm"
+                                >
+                                    Complete Route & Return Stock
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="p-5 relative border-t-2 border-accent-orange/50 bg-accent-orange/[0.02]">
+                                <h4 className="font-semibold text-accent-orange mb-4 text-sm flex items-center gap-2 tracking-tight">
+                                    <AlertTriangle className="w-4 h-4 text-accent-orange" />
+                                    Verify End-of-Route Returns
+                                </h4>
+
+                                <div className="space-y-3 mb-6 relative z-10">
+                                    {dispatch.DispatchItems.map((di: DispatchItemWithItem) => {
+                                        const itemConsumed = (dispatch.RefillLogs as any[]).filter((r: any) => r.itemId === di.itemId).reduce((sum: number, log: any) => sum + log.quantity_refilled + (log.expired_quantity || 0) + (log.damaged_quantity || 0), 0);
+                                        const expectedValue = Math.max(0, di.quantity_given - itemConsumed);
+                                        const isMismatch = returnQtys[di.id] !== expectedValue;
+
+                                        return (
+                                            <div key={di.id} className="flex items-center justify-between text-sm p-3 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-white/5">
+                                                <div className="flex flex-col pr-2">
+                                                    <span className="font-bold text-slate-900 dark:text-white mb-0.5">{di.item.name}</span>
+                                                    <span className="text-xs text-slate-500 dark:text-slate-400">Expected: {expectedValue} Units</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="text-[10px] uppercase font-bold text-slate-500 mb-1">Returned</span>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={returnQtys[di.id]}
+                                                            onChange={e => setReturnQtys({ ...returnQtys, [di.id]: parseInt(e.target.value) || 0 })}
+                                                            className={`w-16 bg-white dark:bg-black/50 border rounded-lg px-2 py-1.5 text-center font-bold text-sm focus:outline-none transition-colors ${isMismatch ? 'border-accent-orange text-accent-orange' : 'border-slate-200 dark:border-white/10 text-slate-900 dark:text-white hover:border-slate-300 dark:border-white/20 focus:border-accent-blue'}`}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="flex gap-3 relative z-10">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setIsReturning(false); }}
+                                        className="flex-1 py-2.5 bg-slate-100 dark:bg-white/5 hover:bg-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300 border border-slate-200 dark:border-white/10 rounded-xl font-medium text-sm transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleReturn(); }}
+                                        disabled={isPending}
+                                        className="flex-1 py-2.5 bg-accent-blue hover:bg-accent-blue/90 text-slate-900 dark:text-white rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        {isPending ? (
+                                            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
+                                                <Loader2 className="w-4 h-4" />
+                                            </motion.div>
+                                        ) : (
+                                            <Check className="w-4 h-4" />
+                                        )}
+                                        {isPending ? "Processing..." : "Confirm Return"}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     )
 }

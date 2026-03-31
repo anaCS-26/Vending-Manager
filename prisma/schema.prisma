@@ -53,6 +53,7 @@ model WarehouseStock {
   item             Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   warehouse        Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
+  @@index([itemId])
   @@unique([warehouseId, itemId])
 }
 
@@ -84,6 +85,7 @@ model MachineStock {
   item             Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
   machine          Machine  @relation(fields: [machineId], references: [id], onDelete: Cascade)
 
+  @@index([itemId])
   @@unique([machineId, itemId])
 }
 
@@ -157,6 +159,7 @@ model RefillLog {
   item                         Item     @relation(fields: [itemId], references: [id])
   machine                      Machine  @relation(fields: [machineId], references: [id])
 
+  @@index([itemId])
   @@index([dispatchId])
   @@index([machineId])
   @@index([refilled_at])
@@ -175,6 +178,7 @@ model ReturnVerification {
   dispatch    Dispatch  @relation(fields: [dispatchId], references: [id])
   item        Item      @relation(fields: [itemId], references: [id])
 
+  @@index([itemId])
   @@index([dispatchId])
   @@index([status])
 }

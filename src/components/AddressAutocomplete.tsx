@@ -131,7 +131,7 @@ export default function AddressAutocomplete({ value, onChange, placeholder = "Se
                     onChange={handleInputChange}
                     onFocus={() => { if (query.length >= 3) setIsOpen(true); }}
                     placeholder={placeholder}
-                    className={`w-full bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg pl-9 pr-9 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none ${className}`}
+                    className={`w-full bg-slate-100 dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg pl-9 pr-9 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none ${className}`}
                 />
 
                 {isLoading ? (
@@ -156,10 +156,10 @@ export default function AddressAutocomplete({ value, onChange, placeholder = "Se
                                     <button
                                         type="button"
                                         onClick={() => handleSelect(result)}
-                                        className="w-full text-left px-4 py-2 hover:bg-slate-100 dark:bg-white/5 transition-colors flex items-start gap-3 group"
+                                        className="w-full text-left px-4 py-2 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors flex items-start gap-4 group"
                                     >
-                                        <MapPin className="w-4 h-4 text-slate-600 dark:text-slate-400 mt-0.5 group-hover:text-brand-400 flex-shrink-0" />
-                                        <span className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-300 group-hover:text-slate-900 dark:text-white leading-tight">
+                                        <MapPin className="w-5 h-5 text-slate-400 dark:text-slate-500 mt-0.5 group-hover:text-brand-400 flex-shrink-0" />
+                                        <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white leading-tight">
                                             {result.formatted}
                                         </span>
                                     </button>
@@ -177,7 +177,7 @@ export default function AddressAutocomplete({ value, onChange, placeholder = "Se
                         <button
                             type="button"
                             onClick={openMapModal}
-                            className="w-full flex items-center justify-center gap-2 py-2 bg-brand-500/10 hover:bg-brand-500/30 border border-brand-500/20 text-brand-400 hover:text-slate-900 dark:text-white rounded-lg transition-colors text-sm font-bold"
+                            className="w-full flex items-center justify-center gap-2 py-2.5 bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 dark:text-brand-400 hover:text-slate-900 dark:hover:text-white rounded-lg transition-all text-sm font-bold"
                         >
                             <MapIcon className="w-4 h-4" />
                             Drop Pin on Map Instead
