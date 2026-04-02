@@ -72,3 +72,35 @@ export async function deleteWarehouse(id: number) {
         return { success: false, error: e.message };
     }
 }
+
+export async function resolveDeficit(warehouseId: number, itemId: number, resolvedQuantity: number) {
+    await requireAdmin();
+    try {
+        if (resolvedQuantity <= 0) {
+            throw new Error("Resolved quantity must be greater than zero.");
+        }
+
+        const stock = await prisma.warehouseStock.findUnique({
+            where: {
+                warehouseId_itemId: { warehouseId, itemId }
+            }
+        });
+
+        if (!stock || stock.pending_deficit < resolvedQuantity) {
+            throw new Error("Cannot resolve more deficit than currently pending.");
+        }
+
+        await prisma.warehouseStock.update({
+            where: { id: stock.id },
+            data: {
+                quantity_on_hand: { increment: resolvedQuantity },
+                pending_deficit: { decrement: resolvedQuantity }
+            }
+        });
+
+        revalidatePath('/admin/warehouse');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}

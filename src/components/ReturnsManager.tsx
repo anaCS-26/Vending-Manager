@@ -30,14 +30,21 @@ type ReturnVerificationType = {
 
 export function ReturnsManager({ pending, history }: { pending: ReturnVerificationType[], history: ReturnVerificationType[] }) {
     const [isPending, startTransition] = useTransition();
+    const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
 
     useRealtimeRefresh();
 
     const handleApprove = (id: number) => {
         startTransition(async () => {
-            const res = await approveReturn(id);
+            const res = await approveReturn(id, adminNotes[id]);
             if (res.success) {
                 toast.success("Return Approved", { description: "Item verified and inventory adjusted." });
+                // Clear the note for this ID
+                setAdminNotes(prev => {
+                    const next = { ...prev };
+                    delete next[id];
+                    return next;
+                });
             } else {
                 toast.error("Failed to approve", { description: res.error });
             }
@@ -115,6 +122,16 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                                 <span className="font-mono text-slate-900 dark:text-white">#{ret.dispatchId.toString().padStart(4, '0')}</span>
                                             </div>
                                         </div>
+
+                                        <div className="mb-6 group/note">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2 px-1">Audit Note (Optional)</label>
+                                            <textarea
+                                                placeholder="Why is this being written off?"
+                                                value={adminNotes[ret.id] || ""}
+                                                onChange={(e) => setAdminNotes(prev => ({ ...prev, [ret.id]: e.target.value }))}
+                                                className="w-full bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue/50 transition-all resize-none h-16"
+                                            />
+                                        </div>
                                     </div>
 
                                     <div className="flex gap-3">
@@ -158,6 +175,7 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                         <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Driver</th>
                                         <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Item</th>
                                         <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Qty / Reason</th>
+                                        <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Audit Notes</th>
                                         <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Result</th>
                                     </tr>
                                 </thead>
@@ -179,6 +197,9 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                                 <span className={`ml-2 text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${his.reason === 'DAMAGED' ? 'text-accent-orange bg-accent-orange/10' : his.reason === 'RETURNED' ? 'text-accent-blue bg-accent-blue/10' : 'text-accent-pink bg-accent-pink/10'}`}>
                                                     {his.reason}
                                                 </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400 italic">
+                                                {(his as any).notes || "-"}
                                             </td>
                                             <td className="px-6 py-4">
                                                 {his.status === 'APPROVED' ? (

@@ -79,6 +79,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                 <th className="px-6 py-4 uppercase w-16 text-center">SR #</th>
                                 <th className="px-6 py-4 uppercase">Items Name</th>
                                 <th className="px-6 py-4 uppercase text-right w-28 leading-snug">Store Remain<br />/ Pcs</th>
+                                <th className="px-6 py-4 uppercase text-right w-28 leading-snug">Shortage<br />/ Due</th>
                                 <th className="px-6 py-4 uppercase text-right w-24 leading-snug">COG Price<br />/ Pcs</th>
                                 <th className="px-6 py-4 uppercase text-right w-24 leading-snug">Standard<br />Tier Price</th>
                                 <th className="px-6 py-4 uppercase text-right text-slate-400 w-24 leading-snug">Hospital<br />Tier Price</th>
@@ -122,6 +123,16 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                                 <span className={`text-sm font-bold font-mono ${isZero ? 'text-yellow-500' : 'text-slate-900 dark:text-white'}`}>
                                                     {stock.quantity_on_hand.toLocaleString()}
                                                 </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex flex-col items-end">
+                                                <span className={`text-sm font-bold font-mono ${stock.pending_deficit > 0 ? 'text-accent-orange' : 'text-slate-400 opacity-50'}`}>
+                                                    {stock.pending_deficit > 0 ? `+${stock.pending_deficit.toLocaleString()}` : '0'}
+                                                </span>
+                                                {stock.pending_deficit > 0 && (
+                                                    <span className="text-[9px] font-bold text-accent-orange/70 uppercase tracking-tighter">Owed by Supplier</span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">

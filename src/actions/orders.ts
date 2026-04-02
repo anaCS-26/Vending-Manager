@@ -70,11 +70,25 @@ export async function completePurchaseOrder(
                     data: { quantityReceived: item.quantityReceived },
                 });
 
-                // Calculate the deficit (if they received fewer items than requested)
-                const deficitAmount = Math.max(0, orderItem.quantityRequested - item.quantityReceived);
+                const deficitChange = orderItem.quantityRequested - item.quantityReceived;
+
+                // Calculate Weighted Average Cost (WAC)
+                const wStock = await tx.warehouseStock.aggregate({ where: { itemId: orderItem.itemId }, _sum: { quantity_on_hand: true } });
+                const mStock = await tx.machineStock.aggregate({ where: { itemId: orderItem.itemId }, _sum: { estimated_stock: true } });
+                const dStock = await (tx as any).driverStock.aggregate({ where: { itemId: orderItem.itemId }, _sum: { quantity_on_hand: true } });
+                
+                const totalCurrentQty = (wStock._sum.quantity_on_hand || 0) + (mStock._sum.estimated_stock || 0) + (dStock._sum.quantity_on_hand || 0);
+                const itemData = await tx.item.findUnique({ where: { id: orderItem.itemId }, select: { cost: true } });
+                const currentCost = itemData?.cost || 0;
+                
+                const previousValue = totalCurrentQty * currentCost;
+                const incomingValue = item.quantityReceived * item.costPerUnit;
+                const newTotalQty = totalCurrentQty + item.quantityReceived;
+                
+                const newWeightedCost = newTotalQty > 0 ? (previousValue + incomingValue) / newTotalQty : item.costPerUnit;
 
                 // Upsert to warehouse stock
-                if (item.quantityReceived > 0 || deficitAmount > 0) {
+                if (item.quantityReceived > 0 || deficitChange !== 0) {
                     const existingStock = await tx.warehouseStock.findUnique({
                         where: {
                             warehouseId_itemId: {
@@ -85,11 +99,14 @@ export async function completePurchaseOrder(
                     });
 
                     if (existingStock) {
+                        // Automatically resolve old debt if we received more than requested
+                        const newDeficitTotal = Math.max(0, (existingStock.pending_deficit || 0) + deficitChange);
+
                         await tx.warehouseStock.update({
                             where: { id: existingStock.id },
                             data: {
                                 quantity_on_hand: { increment: item.quantityReceived },
-                                pending_deficit: deficitAmount // Overwrite any old deficit with the latest transaction reality
+                                pending_deficit: newDeficitTotal
                             },
                         });
                     } else {
@@ -98,17 +115,17 @@ export async function completePurchaseOrder(
                                 warehouseId: order.warehouseId,
                                 itemId: orderItem.itemId,
                                 quantity_on_hand: item.quantityReceived,
-                                pending_deficit: deficitAmount
+                                pending_deficit: Math.max(0, deficitChange)
                             },
                         });
                     }
                 }
 
-                // Update Item pricing globally
+                // Update Item pricing globally + WAC
                 await tx.item.update({
                     where: { id: orderItem.itemId },
                     data: {
-                        cost: item.costPerUnit,
+                        cost: newWeightedCost,
                         price_standard: item.price_standard,
                         price_hospital: item.price_hospital,
                         price_hotel: item.price_hotel

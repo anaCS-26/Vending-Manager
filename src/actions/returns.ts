@@ -35,7 +35,7 @@ export async function getProcessedReturns() {
     });
 }
 
-export async function approveReturn(returnId: number): Promise<ActionResult> {
+export async function approveReturn(returnId: number, adminNotes?: string): Promise<ActionResult> {
     await requireAdmin();
     try {
         await prisma.$transaction(async (tx) => {
@@ -48,10 +48,10 @@ export async function approveReturn(returnId: number): Promise<ActionResult> {
                 throw new Error("Return is not pending or not found.");
             }
 
-            // Mark as approved
+            // Mark as approved and optional add notes string
             await tx.returnVerification.update({
                 where: { id: returnId },
-                data: { status: "APPROVED", verified_at: new Date() }
+                data: { status: "APPROVED", verified_at: new Date(), notes: adminNotes || null }
             });
 
             // Create an InventoryAdjustment to formally write off the item cost
@@ -59,7 +59,7 @@ export async function approveReturn(returnId: number): Promise<ActionResult> {
                 data: {
                     itemId: ret.itemId,
                     quantity: -ret.quantity, // Write off, so negative
-                    reason: `Approved Driver Return: ${ret.reason}`,
+                    reason: adminNotes ? `Approved Driver Return: ${ret.reason} - ${adminNotes}` : `Approved Driver Return: ${ret.reason}`,
                     priceAtAdjustment: ret.item.price_standard
                 }
             });
