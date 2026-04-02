@@ -44,12 +44,18 @@ A premium, high-performance Vending Management System (VMS) built with **Next.js
 
 ---
 
-## 🤖 Future Agent Skills & Recommendations
+## 💡 Maintenance & Future Roadmap
 
-### Recommended Skills for Future Tasks
-- **Design System Guard**: A skill to validate that new UI components adhere to the Neo-Design glassmorphism tokens.
-- **Accounting Logic Auditor**: A specialized skill to verify WAC and deficit calculations in `src/actions/orders.ts` and `src/actions/inventory.ts`.
-- **Prisma Schema Synchronizer**: A skill that automatically runs `npx prisma generate` and checks for type-compatibility across the `src/actions` directory.
+### 🔍 Manual Verification Checks (For Agents)
+Until automated skills are created, agents should manually verify these high-risk areas:
+- **WAC Consistency Audit**: Every change to `completePurchaseOrder` must the checked against the WAC formula to protect financial data integrity.
+- **Inventory Adjustment Trail**: Every stock mutation must be accompanied by an `InventoryAdjustment` entry for the audit ledger.
+- **Prisma Client Sync**: If you modify the schema, ensure `npx prisma generate` is run to avoid the "isActive" type errors encountered during early development.
+
+### 🦾 Future Automation Candidates
+Ideas for future skills to further optimize developer productivity:
+- **Neo-Design Validator**: Automatically check if new UI follows the Slate glassmorphism tokens.
+- **WAC Accounting Auditor**: A specialized script to verify the math in `src/actions/orders.ts`.
 
 ### Helpful Context for Agents
 - Whenever modifying `src/actions`, ensure you add/update the **Standardized Documenting Headers** (Professional JSDoc blocks).
