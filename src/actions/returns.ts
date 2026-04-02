@@ -4,8 +4,10 @@ import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { notifyClients } from "@/lib/notify"
 import type { ActionResult } from "@/types"
+import { requireAdmin } from "@/lib/auth-utils"
 
 export async function getPendingReturns() {
+    await requireAdmin();
     return await prisma.returnVerification.findMany({
         where: { status: "PENDING" },
         include: {
@@ -19,6 +21,7 @@ export async function getPendingReturns() {
 }
 
 export async function getProcessedReturns() {
+    await requireAdmin();
     return await prisma.returnVerification.findMany({
         where: { status: { in: ["APPROVED", "REJECTED"] } },
         include: {
@@ -33,6 +36,7 @@ export async function getProcessedReturns() {
 }
 
 export async function approveReturn(returnId: number): Promise<ActionResult> {
+    await requireAdmin();
     try {
         await prisma.$transaction(async (tx) => {
             const ret = await tx.returnVerification.findUnique({
@@ -72,6 +76,7 @@ export async function approveReturn(returnId: number): Promise<ActionResult> {
 }
 
 export async function rejectReturn(returnId: number): Promise<ActionResult> {
+    await requireAdmin();
     try {
         await prisma.returnVerification.update({
             where: { id: returnId },

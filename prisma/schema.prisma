@@ -28,6 +28,7 @@ model Item {
   ReturnVerifications  ReturnVerification[]
   WarehouseStock       WarehouseStock[]
   DriverStock          DriverStock[]
+  isActive             Boolean               @default(true)
 }
 
 model Warehouse {
@@ -42,6 +43,7 @@ model Warehouse {
   Dispatches     Dispatch[]
   PurchaseOrders PurchaseOrder[]
   Stock          WarehouseStock[]
+  isActive       Boolean          @default(true)
 }
 
 model WarehouseStock {
@@ -73,6 +75,7 @@ model Machine {
   tier           String         @default("STANDARD") // STANDARD, HOSPITAL, HOTEL
   Stock          MachineStock[]
   RefillLogs     RefillLog[]
+  isActive       Boolean        @default(true)
 }
 
 model MachineStock {
@@ -97,6 +100,7 @@ model Driver {
   pin         String?
   Dispatches  Dispatch[]
   DriverStock DriverStock[]
+  isActive    Boolean       @default(true)
 }
 
 model DriverStock {
@@ -189,6 +193,7 @@ model Supplier {
   vatNumber        String?
   contactInfo      String?
   PurchaseInvoices PurchaseInvoice[]
+  isActive         Boolean           @default(true)
 }
 
 model PurchaseInvoice {

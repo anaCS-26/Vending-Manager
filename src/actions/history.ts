@@ -4,12 +4,14 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { notifyClients } from "@/lib/notify";
 import type { ActionResult } from "@/types";
+import { requireAdmin } from "@/lib/auth-utils";
 
 export async function updateRefillLog(
     logId: number,
     sold: number,
     refilled: number
 ): Promise<ActionResult> {
+    await requireAdmin();
     try {
         if (sold < 0 || refilled < 0) {
             throw new Error("Quantities cannot be negative");
@@ -49,7 +51,6 @@ export async function updateRefillLog(
                 });
 
                 if (!machineStock) throw new Error("Machine stock record not found for this log");
-                const nextEstimated = Math.max(0, Math.min(machineStock.capacity, machineStock.estimated_stock + deltaRefilled));
 
                 await tx.machineStock.update({
                     where: {
@@ -59,7 +60,7 @@ export async function updateRefillLog(
                         }
                     },
                     data: {
-                        estimated_stock: nextEstimated
+                        estimated_stock: { increment: deltaRefilled }
                     }
                 });
             }

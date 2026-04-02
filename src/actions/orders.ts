@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/auth-utils";
 
 export async function createPurchaseOrder(data: {
     warehouseId: number;
@@ -10,6 +11,7 @@ export async function createPurchaseOrder(data: {
         quantityRequested: number;
     }>;
 }) {
+    await requireAdmin();
     try {
         const itemIds = data.items.map((i) => i.itemId);
         const itemCosts = await prisma.item.findMany({
@@ -44,6 +46,7 @@ export async function completePurchaseOrder(
     orderId: number,
     receivedData: Array<{ purchaseOrderItemId: number; quantityReceived: number; costPerUnit: number; price_standard: number; price_hospital: number; price_hotel: number }>
 ) {
+    await requireAdmin();
     try {
         await prisma.$transaction(async (tx) => {
             // 1. Get the order
@@ -134,6 +137,7 @@ export async function completePurchaseOrder(
 }
 
 export async function cancelPurchaseOrder(orderId: number) {
+    await requireAdmin();
     try {
         await prisma.purchaseOrder.update({
             where: { id: orderId },
@@ -149,6 +153,7 @@ export async function cancelPurchaseOrder(orderId: number) {
 
 // Quick action to create an Item if it doesn't exist
 export async function createQuickItem(data: { name: string; sku: string; category: string; bulk_format?: string }) {
+    await requireAdmin();
     try {
         const item = await prisma.item.create({
             data: {

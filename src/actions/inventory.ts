@@ -9,7 +9,7 @@ import { writeFile, mkdir } from "fs/promises"
 import fs from "fs"
 import { put } from '@vercel/blob';
 import bcrypt from "bcryptjs";
-import { requireAdmin, requireSuperAdmin } from "@/lib/auth-utils";
+import { requireAdmin, requireSuperAdmin, requireDriver, requireAdminOrDriverOwner } from "@/lib/auth-utils";
 
 export async function getVersion(): Promise<number> {
     return getDataVersion();
@@ -19,14 +19,18 @@ export async function getVersion(): Promise<number> {
 // WAREHOUSE ACTIONS
 // ==========================================
 export async function getWarehouseInventory() {
+    await requireAdmin();
     return await prisma.warehouseStock.findMany({
+        where: { warehouse: { isActive: true }, item: { isActive: true } },
         include: { item: true, warehouse: true },
         orderBy: { item: { name: 'asc' } }
     })
 }
 
 export async function getMachineInventory() {
+    await requireAdmin();
     return await prisma.machineStock.findMany({
+        where: { machine: { isActive: true }, item: { isActive: true } },
         include: { item: true, machine: true },
         orderBy: [
             { machine: { location_name: 'asc' } },
@@ -43,7 +47,9 @@ export async function getMachineInventoryDetails(machineId: number) {
 }
 
 export async function getItems() {
+    await requireAdmin();
     return await prisma.item.findMany({
+        where: { isActive: true },
         orderBy: { name: 'asc' }
     })
 }
@@ -62,13 +68,17 @@ function assertWholeNonNegative(value: number, label: string) {
 // DISPATCH ACTIONS (Admin Assigning to Driver)
 // ==========================================
 export async function getDrivers() {
+    await requireAdmin();
     return await prisma.driver.findMany({
+        where: { isActive: true },
+        omit: { pin: true },
         include: { DriverStock: { include: { item: true } } },
         orderBy: { name: 'asc' }
     })
 }
 
 export async function getActiveDispatches() {
+    await requireAdmin();
     return await prisma.dispatch.findMany({
         where: { status: "OPEN" },
         include: {
@@ -80,6 +90,7 @@ export async function getActiveDispatches() {
 }
 
 export async function getClosedDispatches() {
+    await requireAdmin();
     return await prisma.dispatch.findMany({
         where: { status: "CLOSED" },
         orderBy: { dispatch_date: 'desc' },
@@ -97,6 +108,7 @@ export async function getClosedDispatchesPaginated(
     filter?: "ALL" | "ISSUES" | "MATCHES",
     searchQuery?: string
 ): Promise<PaginatedResult<DispatchWithRelations>> {
+    await requireAdmin();
     // 1. Build the database-side where clause
     const where: any = { status: "CLOSED" }
 
@@ -258,7 +270,9 @@ export async function dispatchToDriver(
 // REFILL ACTIONS (Driver refilling Machine)
 // ==========================================
 export async function getMachines() {
+    await requireAdmin();
     return await prisma.machine.findMany({
+        where: { isActive: true },
         orderBy: { id: 'asc' }
     })
 }
@@ -273,6 +287,10 @@ export async function logRefill(
     returned: number = 0
 ): Promise<ActionResult> {
     try {
+        const dispatchAuthCheck = await prisma.dispatch.findUnique({ where: { id: dispatchId }, select: { driverId: true } });
+        if (!dispatchAuthCheck) return { success: false, error: "Dispatch not found" };
+        await requireAdminOrDriverOwner(dispatchAuthCheck.driverId);
+
         await prisma.$transaction(async (tx) => {
             assertWholeNonNegative(quantity_refilled, "Refilled quantity")
             assertWholeNonNegative(returned, "Returned quantity")
@@ -336,13 +354,11 @@ export async function logRefill(
                 where: { machineId_itemId: { machineId, itemId } }
             });
             const cap = currentStock?.capacity || 10;
-            const estimatedBase = currentStock?.estimated_stock ?? 0
-            const estimatedAfter = Math.min(cap, Math.max(0, estimatedBase - returned + quantity_refilled))
 
             await tx.machineStock.upsert({
                 where: { machineId_itemId: { machineId, itemId } },
                 update: {
-                    estimated_stock: estimatedAfter,
+                    estimated_stock: { increment: quantity_refilled - returned },
                     last_refilled_at: new Date()
                 },
                 create: {
@@ -385,6 +401,10 @@ export async function logBatchRefills(
     items: { itemId: number, refilled: number, returned: number, capacity: number }[]
 ): Promise<ActionResult> {
     try {
+        const dispatchAuthCheck = await prisma.dispatch.findUnique({ where: { id: dispatchId }, select: { driverId: true } });
+        if (!dispatchAuthCheck) return { success: false, error: "Dispatch not found" };
+        await requireAdminOrDriverOwner(dispatchAuthCheck.driverId);
+
         await prisma.$transaction(async (tx) => {
             const dispatch = await tx.dispatch.findUnique({
                 where: { id: dispatchId },
@@ -453,14 +473,12 @@ export async function logBatchRefills(
                     where: { machineId_itemId: { machineId, itemId: item.itemId } }
                 })
                 const safeCapacity = Math.max(1, item.capacity)
-                const estimatedBase = currentStock?.estimated_stock ?? 0
-                const estimatedAfter = Math.min(safeCapacity, Math.max(0, estimatedBase - item.returned + item.refilled))
 
                 await tx.machineStock.upsert({
                     where: { machineId_itemId: { machineId, itemId: item.itemId } },
                     update: {
                         capacity: safeCapacity,
-                        estimated_stock: estimatedAfter,
+                        estimated_stock: { increment: item.refilled - item.returned },
                         last_refilled_at: new Date()
                     },
                     create: {
@@ -499,6 +517,10 @@ export async function returnDispatch(
     returns: { dispatchItemId: number, quantity_returned: number, quantity_damaged: number }[]
 ): Promise<ActionResult> {
     try {
+        const dispatchAuthCheck = await prisma.dispatch.findUnique({ where: { id: dispatchId }, select: { driverId: true } });
+        if (!dispatchAuthCheck) return { success: false, error: "Dispatch not found" };
+        await requireAdminOrDriverOwner(dispatchAuthCheck.driverId);
+
         await prisma.$transaction(async (tx) => {
             const dispatch = await tx.dispatch.findUnique({
                 where: { id: dispatchId },
@@ -743,6 +765,7 @@ function normalizePhoneNumber(phone?: string): string | undefined {
 }
 
 export async function createDriver(name: string, phone?: string, email?: string, pin?: string): Promise<ActionResult> {
+    await requireAdmin();
     try {
         let hashedPin = pin;
         if (pin) {
@@ -760,6 +783,7 @@ export async function createDriver(name: string, phone?: string, email?: string,
 }
 
 export async function updateDriver(id: number, name: string, phone?: string, email?: string, pin?: string): Promise<ActionResult> {
+    await requireAdmin();
     try {
         let hashedPin = pin;
         if (pin) {
@@ -777,10 +801,11 @@ export async function updateDriver(id: number, name: string, phone?: string, ema
 }
 
 export async function deleteDriver(id: number): Promise<ActionResult> {
+    await requireAdmin();
     try {
         const activeDispatches = await prisma.dispatch.count({ where: { driverId: id, status: "OPEN" } })
         if (activeDispatches > 0) return { success: false, error: "Cannot delete driver with active dispatches" }
-        await prisma.driver.delete({ where: { id } })
+        await prisma.driver.update({ where: { id }, data: { isActive: false } })
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
@@ -789,6 +814,7 @@ export async function deleteDriver(id: number): Promise<ActionResult> {
 }
 
 export async function createMachine(location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string, operating_cost?: number, rental_cost?: number, tier?: string): Promise<ActionResult> {
+    await requireAdmin();
     try {
         let finalLat = latitude;
         let finalLon = longitude;

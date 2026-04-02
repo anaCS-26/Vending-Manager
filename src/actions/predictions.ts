@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma"
 import type { DepletionPrediction } from "@/types"
+import { requireAdmin } from "@/lib/auth-utils"
 
 /**
  * Predictive Restocking Prototype
@@ -16,6 +17,7 @@ import type { DepletionPrediction } from "@/types"
  * and actual machine slot current quantities.
  */
 export async function getPredictedDepletion(): Promise<DepletionPrediction[]> {
+    await requireAdmin();
     // Get today's date range
     const now = new Date()
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
