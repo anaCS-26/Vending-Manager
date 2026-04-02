@@ -8,17 +8,20 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+/// Represents a product saleable in vending machines.
 model Item {
   id                   Int                   @id @default(autoincrement())
   name                 String
   category             String
   bulk_format          String?
   sku                  String
+// Pricing tiers
   price_standard       Float                 @default(0.0)
   price_hospital       Float                 @default(0.0)
   price_hotel          Float                 @default(0.0)
   cost                 Float                 @default(0.0)
   imageUrl             String?
+// Relations
   DispatchItems        DispatchItem[]
   InventoryAdjustments InventoryAdjustment[]
   MachineStock         MachineStock[]
@@ -31,6 +34,7 @@ model Item {
   isActive             Boolean               @default(true)
 }
 
+/// A storage facility where items are received from suppliers.
 model Warehouse {
   id             Int              @id @default(autoincrement())
   name           String
@@ -46,12 +50,13 @@ model Warehouse {
   isActive       Boolean          @default(true)
 }
 
+/// Tracks stock levels of an Item in a Warehouse.
 model WarehouseStock {
   id               Int       @id @default(autoincrement())
   warehouseId      Int
   itemId           Int
   quantity_on_hand Int       @default(0)
-  pending_deficit  Int       @default(0)
+  pending_deficit  Int       @default(0) // Stock reserved for open POs or dispatches
   item             Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   warehouse        Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
@@ -59,6 +64,7 @@ model WarehouseStock {
   @@unique([warehouseId, itemId])
 }
 
+/// A Physical vending machine at a specific location.
 model Machine {
   id             Int            @id @default(autoincrement())
   location_name  String
@@ -70,14 +76,15 @@ model Machine {
   terminalId     String?        @unique
   serial_number  String?
   manufacturer   String?
-  operating_cost Float          @default(0.0)
-  rental_cost    Float          @default(0.0)
-  tier           String         @default("STANDARD") // STANDARD, HOSPITAL, HOTEL
+  operating_cost Float            @default(0.0)
+  rental_cost    Float            @default(0.0)
+  tier           String         @default("STANDARD") // Pricing tier: STANDARD, HOSPITAL, HOTEL
   Stock          MachineStock[]
   RefillLogs     RefillLog[]
   isActive       Boolean        @default(true)
 }
 
+/// Tracks estimated stock and capacity of an Item in a Machine.
 model MachineStock {
   id               Int      @id @default(autoincrement())
   machineId        Int
@@ -92,17 +99,19 @@ model MachineStock {
   @@unique([machineId, itemId])
 }
 
+/// User who delivers items and refills machines.
 model Driver {
   id          Int           @id @default(autoincrement())
   name        String
   phone       String?       @unique
   email       String?
-  pin         String?
+  pin         String?       // Hashed login PIN
   Dispatches  Dispatch[]
   DriverStock DriverStock[]
   isActive    Boolean       @default(true)
 }
 
+/// Items currently in the driver's possession (e.g., in their vehicle).
 model DriverStock {
   id               Int    @id @default(autoincrement())
   driverId         Int
@@ -114,12 +123,13 @@ model DriverStock {
   @@unique([driverId, itemId])
 }
 
+/// A request to move items from a Warehouse to a Driver.
 model Dispatch {
   id                  Int                  @id @default(autoincrement())
   driverId            Int
   warehouseId         Int?
   dispatch_date       DateTime             @default(now())
-  status              String               @default("OPEN")
+  status              String               @default("OPEN") // OPEN, CLOSED
   driver              Driver               @relation(fields: [driverId], references: [id])
   warehouse           Warehouse?           @relation(fields: [warehouseId], references: [id])
   DispatchItems       DispatchItem[]
@@ -132,6 +142,7 @@ model Dispatch {
   @@index([dispatch_date])
 }
 
+/// Specific item and quantity assigned in a Dispatch.
 model DispatchItem {
   id                Int      @id @default(autoincrement())
   dispatchId        Int
@@ -139,7 +150,7 @@ model DispatchItem {
   quantity_given    Int      @default(0)
   quantity_returned Int      @default(0)
   quantity_damaged  Int      @default(0)
-  price_at_dispatch Float    @default(0.0)
+  price_at_dispatch Float    @default(0.0) // Captured price at time of assignment
   dispatch          Dispatch @relation(fields: [dispatchId], references: [id])
   item              Item     @relation(fields: [itemId], references: [id])
 
@@ -147,6 +158,7 @@ model DispatchItem {
   @@index([itemId])
 }
 
+/// Records a driver refilling an Item into a Machine during a Dispatch.
 model RefillLog {
   id                           Int      @id @default(autoincrement())
   dispatchId                   Int
@@ -169,13 +181,14 @@ model RefillLog {
   @@index([refilled_at])
 }
 
+/// Request for admin to verify items returned by a Driver.
 model ReturnVerification {
   id          Int       @id @default(autoincrement())
   dispatchId  Int
   itemId      Int
   quantity    Int
-  reason      String
-  status      String    @default("PENDING")
+  reason      String    // DAMAGED, EXPIRED, SURPLUS
+  status      String    @default("PENDING") // PENDING, VERIFIED
   reported_at DateTime  @default(now())
   verified_at DateTime?
   notes       String?
@@ -187,6 +200,7 @@ model ReturnVerification {
   @@index([status])
 }
 
+/// Entity providing items for purchase.
 model Supplier {
   id               Int               @id @default(autoincrement())
   name             String
@@ -196,6 +210,7 @@ model Supplier {
   isActive         Boolean           @default(true)
 }
 
+/// Financial document for items bought from a Supplier.
 model PurchaseInvoice {
   id            Int                   @id @default(autoincrement())
   supplierId    Int
@@ -212,6 +227,7 @@ model PurchaseInvoice {
   @@index([date])
 }
 
+/// Line item in a Purchase Invoice.
 model PurchaseInvoiceItem {
   id           Int             @id @default(autoincrement())
   invoiceId    Int
@@ -225,6 +241,7 @@ model PurchaseInvoiceItem {
   @@index([itemId])
 }
 
+/// Records of refunds issued to vending machine customers.
 model CustomerRefund {
   id            Int       @id @default(autoincrement())
   refundNumber  String
@@ -239,6 +256,7 @@ model CustomerRefund {
   @@index([status])
 }
 
+/// External log for any manual stock changes.
 model InventoryAdjustment {
   id                Int      @id @default(autoincrement())
   itemId            Int
@@ -253,10 +271,11 @@ model InventoryAdjustment {
   @@index([reason])
 }
 
+/// Request to buy items from a supplier for a specific Warehouse.
 model PurchaseOrder {
   id          Int                 @id @default(autoincrement())
   warehouseId Int
-  status      String              @default("PENDING")
+  status      String              @default("PENDING") // PENDING, COMPLETED
   createdAt   DateTime            @default(now())
   completedAt DateTime?
   warehouse   Warehouse           @relation(fields: [warehouseId], references: [id])
@@ -266,6 +285,7 @@ model PurchaseOrder {
   @@index([status])
 }
 
+/// Specific item and quantity requested in a Purchase Order.
 model PurchaseOrderItem {
   id                Int           @id @default(autoincrement())
   purchaseOrderId   Int
@@ -280,6 +300,7 @@ model PurchaseOrderItem {
   @@index([itemId])
 }
 
+/// System administrator account.
 model Admin {
   id               Int       @id @default(autoincrement())
   email            String    @unique

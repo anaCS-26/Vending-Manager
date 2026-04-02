@@ -6,6 +6,17 @@ import { notifyClients } from "@/lib/notify"
 import type { ActionResult } from "@/types"
 import { requireAdmin } from "@/lib/auth-utils"
 
+/**
+ * ============================================================================
+ * DRIVER RETURN VERIFICATION
+ * Logic for admins to approve or reject items reported as damaged/returned by drivers.
+ * ============================================================================
+ */
+
+/** 
+ * Retrieves all reported damages and returns awaiting administrative verification. 
+ * Sorted by latest reporting date for prioritized backlog processing. 
+ */
 export async function getPendingReturns() {
     await requireAdmin();
     return await prisma.returnVerification.findMany({
@@ -20,6 +31,7 @@ export async function getPendingReturns() {
     });
 }
 
+/** Retrieves historical records of approved or rejected returns for the audit archive. */
 export async function getProcessedReturns() {
     await requireAdmin();
     return await prisma.returnVerification.findMany({
@@ -35,6 +47,10 @@ export async function getProcessedReturns() {
     });
 }
 
+/**
+ * Formally approves a driver-reported return. 
+ * Creates a linked InventoryAdjustment to write off negative stock and update the financial ledger. 
+ */
 export async function approveReturn(returnId: number, adminNotes?: string): Promise<ActionResult> {
     await requireAdmin();
     try {
@@ -75,6 +91,7 @@ export async function approveReturn(returnId: number, adminNotes?: string): Prom
     }
 }
 
+/** Rejects a return claim, preserving the original stock level as unaccounted for in the audit. */
 export async function rejectReturn(returnId: number): Promise<ActionResult> {
     await requireAdmin();
     try {

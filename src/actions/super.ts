@@ -6,32 +6,43 @@ import type { ActionResult } from "@/types"
 import bcrypt from "bcryptjs"
 import { auth } from "@/auth"
 
-// We must verify the person calling this is a super admin
+/**
+ * ============================================================================
+ * SUPER ADMIN PRIVILEGED ACTIONS
+ * Sensitive system-wide administrative account and platform management.
+ * Access is protected by internal verifySuperAdmin session checks.
+ * ============================================================================
+ */
+
+/** Comprehensive session check to enforce Super Admin role-based access control. */
 async function verifySuperAdmin() {
     const session = await auth();
     // @ts-ignore
     if (session?.user?.role !== 'super_admin') {
-        throw new Error("Unauthorized");
+        throw new Error("UNAUTHORIZED: Super Admin credentials required.");
     }
 }
 
+/** 
+ * Onboards a new platform Administrator. 
+ * Performs encryption on provided credentials to secure system access. 
+ */
 export async function createAdmin(email: string, password?: string, name?: string): Promise<ActionResult> {
     try {
         await verifySuperAdmin();
 
-        let hashedPassword = null;
-        if (password) {
-            hashedPassword = await bcrypt.hash(password, 10);
-        } else {
+        if (!password) {
             return { success: false, error: "Password is required for admins" };
         }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
 
         await prisma.admin.create({
             data: {
                 email,
                 password: hashedPassword,
                 name: name || null,
-                role: "ADMIN" // Ensure they are exactly ADMIN, not super admin
+                role: "ADMIN"
             }
         })
         revalidatePath('/super')
@@ -41,6 +52,7 @@ export async function createAdmin(email: string, password?: string, name?: strin
     }
 }
 
+/** Updates administrative profile metadata or rotates security credentials. */
 export async function updateAdmin(id: number, email: string, password?: string, name?: string): Promise<ActionResult> {
     try {
         await verifySuperAdmin();
@@ -61,6 +73,10 @@ export async function updateAdmin(id: number, email: string, password?: string, 
     }
 }
 
+/** 
+ * Revokes administrative access by permanently deleting an Admin record. 
+ * Use with caution as this action is irreversible. 
+ */
 export async function deleteAdmin(id: number): Promise<ActionResult> {
     try {
         await verifySuperAdmin();
@@ -69,6 +85,6 @@ export async function deleteAdmin(id: number): Promise<ActionResult> {
         revalidatePath('/super')
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: "Cannot delete admin" }
+        return { success: false, error: "Cannot delete admin account" }
     }
 }

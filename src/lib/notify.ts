@@ -1,23 +1,30 @@
-// Smart version-based change detection.
-//
-// Instead of SSE (which is unreliable in Next.js Turbopack dev mode),
-// we use a simple version counter. Server actions increment the counter
-// on mutation. Clients poll /api/version every 3s and only call
-// router.refresh() if the version changed — much more efficient than
-// the original blind 5s router.refresh() polling.
-
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
+
+/**
+ * ============================================================================
+ * LIGHTWEIGHT REAL-TIME REFRESH SYSTEM
+ * Synchronizes client-side UI with server-side mutations using version polling.
+ * Replaces complex SSE logic with efficient version-check polling to trigger 
+ * Next.js router.refresh() only when data integrity has changed.
+ * ============================================================================
+ */
 
 const SIGNAL_DIR = join(process.cwd(), ".sse");
 const VERSION_FILE = join(SIGNAL_DIR, "version");
 
+/** 
+ * Bootstraps the signal directory for version orchestration. 
+ */
 function ensureDir() {
     if (!existsSync(SIGNAL_DIR)) {
         mkdirSync(SIGNAL_DIR, { recursive: true });
     }
 }
 
+/** 
+ * Reads the latest system data version from the filesystem or returns 0 as fallback. 
+ */
 function getVersion(): number {
     try {
         if (existsSync(VERSION_FILE)) {
@@ -27,9 +34,9 @@ function getVersion(): number {
     return 0;
 }
 
-/**
- * Call from server actions after any data mutation.
- * Increments a version counter that clients poll against.
+/** 
+ * Signals a data mutation by incrementing the system version count. 
+ * Clients polling /api/version will detect this change and trigger an UI refresh. 
  */
 export function notifyClients(_eventType: string): void {
     try {
@@ -37,13 +44,11 @@ export function notifyClients(_eventType: string): void {
         const current = getVersion();
         writeFileSync(VERSION_FILE, String(current + 1), "utf-8");
     } catch {
-        // Non-critical — client will still work with next refresh
+        // Soft failure: Clients will miss the atomic trigger but sync on next scheduled poll.
     }
 }
 
-/**
- * Returns the current data version number.
- */
+/** Retrieves the current data version for client-side comparison and polling. */
 export function getDataVersion(): number {
     return getVersion();
 }

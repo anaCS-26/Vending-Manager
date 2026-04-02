@@ -62,6 +62,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
     const [pendingSyncCount, setPendingSyncCount] = useState(0);
 
     const autoSyncQueue = async () => {
+        // Attempts to push offline-saved logs to HQ when connectivity returns
         const queue: any[] = await get('offline_sync_queue') || [];
         if (queue.length === 0) return;
 
@@ -214,6 +215,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
     }
 
     const handleBatchSubmit = async () => {
+        // Submits refill logs. If offline, saves to IndexDB queue via autoSyncQueue.
         if (!selectedMachine) return;
 
         // Find items that were modified (refilled or returned > 0)

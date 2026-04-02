@@ -4,6 +4,17 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth-utils";
 
+/**
+ * ============================================================================
+ * PURCHASE ORDER ACTIONS
+ * Handles procurement flow from suppliers to warehouses.
+ * ============================================================================
+ */
+
+/** 
+ * Initiates a procurement request. 
+ * Creates a PENDING purchase order record with standard costs locked at the time of request. 
+ */
 export async function createPurchaseOrder(data: {
     warehouseId: number;
     items: Array<{
@@ -21,6 +32,7 @@ export async function createPurchaseOrder(data: {
         const costMap = new Map(itemCosts.map(i => [i.id, i.cost]));
 
         const order = await prisma.purchaseOrder.create({
+            // Status: PENDING until items are physically received in warehouse.
             data: {
                 warehouseId: data.warehouseId,
                 status: "PENDING",
@@ -42,6 +54,11 @@ export async function createPurchaseOrder(data: {
     }
 }
 
+/**
+ * Finalizes a purchase order receipt. 
+ * Performs an atomic stock update, calculates new Weighted Average Cost (WAC) for items, 
+ * and automatically reconciles any outstanding supplier deficits (short-shipments).
+ */
 export async function completePurchaseOrder(
     orderId: number,
     receivedData: Array<{ purchaseOrderItemId: number; quantityReceived: number; costPerUnit: number; price_standard: number; price_hospital: number; price_hotel: number }>
@@ -72,7 +89,7 @@ export async function completePurchaseOrder(
 
                 const deficitChange = orderItem.quantityRequested - item.quantityReceived;
 
-                // Calculate Weighted Average Cost (WAC)
+                // Calculate Weighted Average Cost (WAC): (Existing Value + New Value) / Total Qty
                 const wStock = await tx.warehouseStock.aggregate({ where: { itemId: orderItem.itemId }, _sum: { quantity_on_hand: true } });
                 const mStock = await tx.machineStock.aggregate({ where: { itemId: orderItem.itemId }, _sum: { estimated_stock: true } });
                 const dStock = await (tx as any).driverStock.aggregate({ where: { itemId: orderItem.itemId }, _sum: { quantity_on_hand: true } });
@@ -99,7 +116,7 @@ export async function completePurchaseOrder(
                     });
 
                     if (existingStock) {
-                        // Automatically resolve old debt if we received more than requested
+                        // Automatically resolve old debt if we received more than requested (overage)
                         const newDeficitTotal = Math.max(0, (existingStock.pending_deficit || 0) + deficitChange);
 
                         await tx.warehouseStock.update({
@@ -153,6 +170,7 @@ export async function completePurchaseOrder(
     }
 }
 
+/** Marks a pending inventory request as CANCELLED, preventing stock integration. */
 export async function cancelPurchaseOrder(orderId: number) {
     await requireAdmin();
     try {
@@ -168,7 +186,17 @@ export async function cancelPurchaseOrder(orderId: number) {
     }
 }
 
-// Quick action to create an Item if it doesn't exist
+/**
+ * ============================================================================
+ * QUICK PROCUREMENT TOOLS
+ * Helper actions for rapid item initialization during procurement.
+ * ============================================================================
+ */
+
+/** 
+ * Expedited item creation for procurement workflows. 
+ * Allows creating a placeholder item record when not found in the master catalog during PO entry. 
+ */
 export async function createQuickItem(data: { name: string; sku: string; category: string; bulk_format?: string }) {
     await requireAdmin();
     try {

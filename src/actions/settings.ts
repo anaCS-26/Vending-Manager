@@ -6,6 +6,17 @@ import bcrypt from "bcryptjs"
 import { revalidatePath } from "next/cache"
 import type { ActionResult } from "@/types"
 
+/**
+ * ============================================================================
+ * SELF-SERVICE ACCOUNT SETTINGS
+ * Profile and security management for verified administrators.
+ * ============================================================================
+ */
+
+/** 
+ * Self-service profilc update (Name/Password rotation). 
+ * Authenticates via the current session email to enforce atomic ownership. 
+ */
 export async function updateMyProfile(name: string, password?: string): Promise<ActionResult> {
     try {
         const session = await auth();

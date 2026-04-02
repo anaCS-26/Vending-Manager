@@ -134,6 +134,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
     };
 
     const handleCompleteReceipt = (orderId: number) => {
+        // Formats UI state (receivedQtys/Prices) into server payload
         startTransition(async () => {
             const payload = Object.keys(receivedQtys).map(k => ({
                 purchaseOrderItemId: Number(k),
@@ -162,6 +163,12 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
         });
     }
 
+    /** 
+     * Item Priority: 
+     * 1. Deficits (Shorted items)
+     * 2. Low Stock in selected WH
+     * 3. Alphabetical
+     */
     const displayedItems = itemSearchQuery
         ? items.filter(i =>
             i.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||

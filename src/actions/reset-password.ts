@@ -7,16 +7,28 @@ import bcrypt from "bcryptjs"
 
 const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy_key");
 
+/**
+ * ============================================================================
+ * ACCOUNT RECOVERY & SECURITY EMAILS
+ * Handles secure password reset flows and recovery token lifecycle.
+ * ============================================================================
+ */
+
+/** 
+ * Orchestrates a password recovery request. 
+ * Generates a high-entropy, ephemeral reset token and dispatches an email via Resend. 
+ * Dev Mode: If Resend is missing, logs details securely to the console for simulation. 
+ */
 export async function requestPasswordReset(email: string) {
     try {
         const admin = await prisma.admin.findUnique({ where: { email } });
         if (!admin) {
-            // For security, don't reveal if a user exists or not. Just return success.
+            // For security, do not reveal the existence of an account to unauthorized probes.
             return { success: true };
         }
 
         const resetToken = crypto.randomBytes(32).toString('hex');
-        const tokenExpiry = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
+        const tokenExpiry = new Date(Date.now() + 1000 * 60 * 60); // 1-hour availability
 
         await prisma.admin.update({
             where: { id: admin.id },
@@ -42,7 +54,7 @@ export async function requestPasswordReset(email: string) {
             });
         } else {
             console.log("\n==================================");
-            console.log("Mock Email Sent!");
+            console.log("Mock Recovery Email Sent!");
             console.log(`To: ${admin.email}`);
             console.log(`Link: ${resetLink}`);
             console.log("==================================\n");
@@ -50,16 +62,20 @@ export async function requestPasswordReset(email: string) {
 
         return { success: true };
     } catch (e: any) {
-        return { success: false, error: e.message || "Failed to process request" };
+        return { success: false, error: e.message || "Failed to process recovery request" };
     }
 }
 
+/** 
+ * Consumes an ephemeral reset token to establish a new password. 
+ * Invalidates the token and expiry date immediately upon a successful cryptographic hash update. 
+ */
 export async function resetPassword(token: string, newPassword: string) {
     try {
         const admin = await prisma.admin.findFirst({
             where: {
                 resetToken: token,
-                resetTokenExpiry: { gte: new Date() } // Must be greater than current time
+                resetTokenExpiry: { gte: new Date() } // Must be chronologically valid
             }
         });
 
@@ -80,6 +96,6 @@ export async function resetPassword(token: string, newPassword: string) {
 
         return { success: true };
     } catch (e: any) {
-        return { success: false, error: e.message || "Failed to reset password" };
+        return { success: false, error: e.message || "Failed to finalize password reset" };
     }
 }

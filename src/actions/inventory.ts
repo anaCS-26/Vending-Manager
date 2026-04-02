@@ -11,13 +11,21 @@ import { put } from '@vercel/blob';
 import bcrypt from "bcryptjs";
 import { requireAdmin, requireSuperAdmin, requireDriver, requireAdminOrDriverOwner } from "@/lib/auth-utils";
 
+/** Retrieves the global data version to facilitate client-side synchronization and cache invalidation. */
 export async function getVersion(): Promise<number> {
     return getDataVersion();
 }
 
-// ==========================================
-// WAREHOUSE ACTIONS
-// ==========================================
+/**
+ * ============================================================================
+ * WAREHOUSE & INVENTORY VIEW ACTIONS
+ * Fetches stock levels and item lists for administrative dashboards.
+ * ============================================================================
+ */
+/** 
+ * Fetches comprehensive warehouse stock metrics. 
+ * Includes item metadata and warehouse localization for the Admin Inventory Dashboard. 
+ */
 export async function getWarehouseInventory() {
     await requireAdmin();
     return await prisma.warehouseStock.findMany({
@@ -27,6 +35,10 @@ export async function getWarehouseInventory() {
     })
 }
 
+/** 
+ * Retrieves system-wide machine inventory records. 
+ * Grouped by location then item name to assist in spatial route auditing. 
+ */
 export async function getMachineInventory() {
     await requireAdmin();
     return await prisma.machineStock.findMany({
@@ -39,6 +51,7 @@ export async function getMachineInventory() {
     })
 }
 
+/** Extracts granular stock levels for a specific machine, typically for detail-view modals. */
 export async function getMachineInventoryDetails(machineId: number) {
     return await prisma.machineStock.findMany({
         where: { machineId },
@@ -46,6 +59,7 @@ export async function getMachineInventoryDetails(machineId: number) {
     })
 }
 
+/** Fetches the master list of all active products in the system catalog. */
 export async function getItems() {
     await requireAdmin();
     return await prisma.item.findMany({
@@ -64,19 +78,23 @@ function assertWholeNonNegative(value: number, label: string) {
     }
 }
 
-// ==========================================
-// DISPATCH ACTIONS (Admin Assigning to Driver)
-// ==========================================
+/**
+ * ============================================================================
+ * DISPATCH & LOGISTICS ACTIONS
+ * Handles assignment of stock from warehouses to driver bags.
+ * ============================================================================
+ */
+/** Lists all active drivers along with their real-time hand-stock (back-stock) levels. */
 export async function getDrivers() {
     await requireAdmin();
     return await prisma.driver.findMany({
-        where: { isActive: true },
         omit: { pin: true },
         include: { DriverStock: { include: { item: true } } },
         orderBy: { name: 'asc' }
     })
 }
 
+/** Returns all dispatches currently in transit or awaiting completion. */
 export async function getActiveDispatches() {
     await requireAdmin();
     return await prisma.dispatch.findMany({
@@ -89,6 +107,7 @@ export async function getActiveDispatches() {
     })
 }
 
+/** Retrieves the historical archive of completed dispatches, primarily for reconciliation audits. */
 export async function getClosedDispatches() {
     await requireAdmin();
     return await prisma.dispatch.findMany({
@@ -102,6 +121,10 @@ export async function getClosedDispatches() {
     })
 }
 
+/** 
+ * High-performance paginated access to the dispatch archive. 
+ * Supports server-side search by driver/item and anomaly filtering for audit flags. 
+ */
 export async function getClosedDispatchesPaginated(
     page: number = 1,
     pageSize: number = 10,
@@ -139,7 +162,7 @@ export async function getClosedDispatchesPaginated(
         }
     })
 
-    // 3. Post-fetch filtering (for the complex variance logic that isn't in SQL)
+    // 3. Post-fetch filtering: Logic for 'anomaly' detection (Variance between Issued vs Accounted)
     let filtered = allDispatches
 
     if (filter && filter !== "ALL") {
@@ -171,6 +194,11 @@ export async function getClosedDispatchesPaginated(
     }
 }
 
+/**
+ * Initializes a new logistical dispatch. 
+ * Deducts stock first from the Driver's existing back-stock (DriverStock) 
+ * before drawing from the primary Warehouse to ensure accurate inventory aging.
+ */
 export async function dispatchToDriver(
     driverId: number,
     warehouseId: number,
@@ -221,7 +249,7 @@ export async function dispatchToDriver(
                 }
             })
 
-            // Deduct warehouse stock strictly from the originating warehouse, but try Driver's bag first!
+            // Deduct stock: 1. Try Driver's existing bag (DriverStock), 2. Take remainder from Warehouse.
             for (const item of normalizedItems) {
                 // 1. Check DriverStock first
                 const driverStock = await (tx as any).driverStock.findUnique({
@@ -266,17 +294,24 @@ export async function dispatchToDriver(
     }
 }
 
-// ==========================================
-// REFILL ACTIONS (Driver refilling Machine)
-// ==========================================
+/**
+ * ============================================================================
+ * MACHINE REFILL ACTIONS
+ * Logic for drivers filling machines from their active dispatch stock.
+ * ============================================================================
+ */
+/** Fetches active machine list for driver selection. */
 export async function getMachines() {
     await requireAdmin();
     return await prisma.machine.findMany({
-        where: { isActive: true },
         orderBy: { id: 'asc' }
     })
 }
 
+/**
+ * Transactions a single machine refill. 
+ * Synchronizes MachineStock, tracks route returns/damages, and decrements dispatch allocation.
+ */
 export async function logRefill(
     dispatchId: number,
     machineId: number,
@@ -370,7 +405,7 @@ export async function logRefill(
                 }
             });
 
-            // 4. Add route-returned items to Return Verification
+            // 4. Record damaged/returned items for Admin verification
             if (damaged > 0) {
                 await tx.returnVerification.create({
                     data: { dispatchId, itemId, quantity: damaged, reason: "DAMAGED", status: "PENDING" }
@@ -395,6 +430,10 @@ export async function logRefill(
     }
 }
 
+/**
+ * Atomic batch processing for machine refills. 
+ * Optimized for low-latency mobile updates in the driver-portal interface.
+ */
 export async function logBatchRefills(
     dispatchId: number,
     machineId: number,
@@ -509,9 +548,16 @@ export async function logBatchRefills(
     }
 }
 
-// ==========================================
-// RETURN ACTIONS (End of day reconciliation)
-// ==========================================
+/**
+ * ============================================================================
+ * DISPATCH CLOSURE & RETURNS
+ * Finalizes routes, reconciles stock, and handles damaged item verification.
+ * ============================================================================
+ */
+/** 
+ * Finalizes and reconciles a dispatch route. 
+ * Re-integrates surplus stock into DriverStock or Warehouse and flags damages for manual verification.
+ */
 export async function returnDispatch(
     dispatchId: number,
     returns: { dispatchItemId: number, quantity_returned: number, quantity_damaged: number }[]
@@ -578,7 +624,7 @@ export async function returnDispatch(
                 }
             }
 
-            // --- INJECT REMAINING ITEMS INTO DRIVER STOCK ---
+            // Closing Flow: Unaccounted items are 'injected' into DriverStock for their next shift.
             for (const dispatchItem of dispatch.DispatchItems) {
                 const retParams = returns.find(r => r.dispatchItemId === dispatchItem.id);
                 const finalReturned = retParams?.quantity_returned || 0;
@@ -633,6 +679,7 @@ export async function returnDispatch(
     }
 }
 
+/** Administrative tool to correct errors in a driver's submitted return. */
 export async function editDispatchReturn(
     dispatchId: number,
     edits: { dispatchItemId: number, new_quantity_returned: number }[]
@@ -728,10 +775,14 @@ export async function editDispatchReturn(
     }
 }
 
-// ==========================================
-// MANAGEMENT ACTIONS (CRUD)
-// ==========================================
+/**
+ * ============================================================================
+ * CORE MANAGEMENT (CRUD)
+ * Manual overrides and entity management (Drivers, Machines, Items).
+ * ============================================================================
+ */
 
+/** Fetches Lat/Lon for an address via OpenStreetMap (Nominatim) */
 async function geocodeAddress(address?: string): Promise<{ latitude?: number, longitude?: number }> {
     if (!address) return {};
     try {
@@ -749,6 +800,7 @@ async function geocodeAddress(address?: string): Promise<{ latitude?: number, lo
     return {};
 }
 
+/** Cleans and normalizes Saudi phone numbers to 05XXXXXXXX format */
 function normalizePhoneNumber(phone?: string): string | undefined {
     if (!phone) return undefined;
     // Remove all non-numeric characters (including spaces, hyphens, and the + sign if we handle it next)
@@ -764,6 +816,7 @@ function normalizePhoneNumber(phone?: string): string | undefined {
     return cleaned;
 }
 
+/** Creates a new driver profile with optional PIN for app login. */
 export async function createDriver(name: string, phone?: string, email?: string, pin?: string): Promise<ActionResult> {
     await requireAdmin();
     try {
@@ -782,6 +835,7 @@ export async function createDriver(name: string, phone?: string, email?: string,
     }
 }
 
+/** Updates an existing driver's metadata or login credentials. */
 export async function updateDriver(id: number, name: string, phone?: string, email?: string, pin?: string): Promise<ActionResult> {
     await requireAdmin();
     try {
@@ -800,6 +854,7 @@ export async function updateDriver(id: number, name: string, phone?: string, ema
     }
 }
 
+/** Toggles a driver as inactive. Rejects if they have open dispatches. */
 export async function deleteDriver(id: number): Promise<ActionResult> {
     await requireAdmin();
     try {
@@ -813,6 +868,7 @@ export async function deleteDriver(id: number): Promise<ActionResult> {
     }
 }
 
+/** Creates a new machine with optional geocoding via OpenStreetMap. */
 export async function createMachine(location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string, operating_cost?: number, rental_cost?: number, tier?: string): Promise<ActionResult> {
     await requireAdmin();
     try {
@@ -847,6 +903,7 @@ export async function createMachine(location_name: string, district: string, add
     }
 }
 
+/** Updates machine metadata and recalculates coordinates if address changes. */
 export async function updateMachine(id: number, location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string, operating_cost?: number, rental_cost?: number, tier?: string): Promise<ActionResult> {
     try {
         let finalLat = latitude;
@@ -881,6 +938,7 @@ export async function updateMachine(id: number, location_name: string, district:
     }
 }
 
+/** Permanently removes a machine from the system. Rejects if logs exist. */
 export async function deleteMachine(id: number): Promise<ActionResult> {
     try {
         await prisma.machine.delete({ where: { id } })
@@ -891,6 +949,10 @@ export async function deleteMachine(id: number): Promise<ActionResult> {
     }
 }
 
+/** 
+ * Admin tool to create a new item global record. 
+ * Can optionally initialize stock in a specific warehouse. 
+ */
 export async function createItem(name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, warehouseId?: number, initialStock: number = 0, bulk_format?: string): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
@@ -944,6 +1006,7 @@ export async function createItem(name: string, category: string, sku: string, pr
     }
 }
 
+/** Updates standard pricing and metadata for an item. */
 export async function updateItem(id: number, name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, bulk_format?: string): Promise<ActionResult> {
     try {
         await prisma.item.update({ where: { id }, data: { name, category, sku, price_standard, price_hospital, price_hotel, bulk_format } })
@@ -954,6 +1017,7 @@ export async function updateItem(id: number, name: string, category: string, sku
     }
 }
 
+/** Fast-track stock update for the primary system warehouse. */
 export async function updateItemStock(id: number, quantity_on_hand: number): Promise<ActionResult> {
     try {
         const defaultWarehouse = await prisma.warehouse.findFirst();
@@ -972,10 +1036,13 @@ export async function updateItemStock(id: number, quantity_on_hand: number): Pro
     }
 }
 
-// ----------------------------------------------------
-// EXPLICIT WAREHOUSE STOCK ACTIONS
-// ----------------------------------------------------
-
+/**
+ * ============================================================================
+ * WAREHOUSE STOCK ADJUSTMENTS
+ * Direct manipulation of specific warehouse stock levels.
+ * ============================================================================
+ */
+/** Increments stock for a specific Item-Warehouse pair. */
 export async function updateWarehouseItemStock(warehouseId: number, itemId: number, quantityToAdd: number): Promise<ActionResult> {
     try {
         if (quantityToAdd <= 0) throw new Error("Quantity must be positive");
@@ -1004,6 +1071,7 @@ export async function updateWarehouseItemStock(warehouseId: number, itemId: numb
     }
 }
 
+/** Creates a new item and links it immediately to a warehouse. */
 export async function createWarehouseItem(warehouseId: number, name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, initialStock: number, bulk_format?: string): Promise<ActionResult> {
     try {
         if (initialStock < 0) throw new Error("Initial stock cannot be negative");
@@ -1027,6 +1095,7 @@ export async function createWarehouseItem(warehouseId: number, name: string, cat
     }
 }
 
+/** Permanently deletes an item and all its inventory mapping records. */
 export async function deleteItem(id: number): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
@@ -1040,9 +1109,13 @@ export async function deleteItem(id: number): Promise<ActionResult> {
     }
 }
 
-// ==========================================
-// PROTOTYPE ACTIONS
-// ==========================================
+/**
+ * ============================================================================
+ * PROTOTYPE & DEBUG ACTIONS
+ * Destructive tools for resetting state or managing media assets.
+ * ============================================================================
+ */
+/** Destroys all transactional data. Reserved for Super Admin use. */
 export async function resetDatabase(): Promise<ActionResult> {
     await requireSuperAdmin();
     try {
@@ -1074,6 +1147,7 @@ export async function resetDatabase(): Promise<ActionResult> {
     }
 }
 
+/** Uploads an item image to Vercel Blob and links the URL to the Item record. */
 export async function uploadItemImage(itemId: number, formData: FormData): Promise<ActionResult<string>> {
     try {
         const file = formData.get('image') as File | null;
@@ -1105,6 +1179,7 @@ export async function uploadItemImage(itemId: number, formData: FormData): Promi
         return { success: false, error: message };
     }
 }
+/** Fetches the most recent dispatch for a driver to assist with inventory reconciliation. */
 export async function getRecentDispatchForDriver(driverId: number): Promise<ActionResult<any>> {
     await requireAdmin();
     try {

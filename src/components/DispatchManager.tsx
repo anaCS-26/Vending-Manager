@@ -28,6 +28,7 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
     useRealtimeRefresh();
 
     const handleDispatch = async () => {
+        // Dispatches inventory from Warehouse -> Driver bag.
         if (!selectedDriver || !selectedWarehouseId || selectedItems.length === 0) return;
         startTransition(async () => {
             const result = await dispatchToDriver(parseInt(selectedDriver), selectedWarehouseId, selectedItems);
@@ -47,6 +48,7 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
     };
 
     const handleCopyRecent = async () => {
+        // Fetches previous manifest and validates against current WH stock
         if (!selectedDriver) {
             toast.error("Please select a driver first");
             return;
@@ -392,6 +394,7 @@ function DispatchCard({ dispatch }: { dispatch: DispatchWithRelations }) {
     };
 
     const handleReturn = async () => {
+        // Reconciliation: Compares Expected vs Actual returns. Returns items to DriverStock.
         startTransition(async () => {
             const returns = Object.keys(returnQtys).map(id => ({
                 dispatchItemId: parseInt(id),

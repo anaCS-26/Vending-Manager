@@ -6,6 +6,18 @@ import { notifyClients } from "@/lib/notify";
 import type { ActionResult } from "@/types";
 import { requireAdmin } from "@/lib/auth-utils";
 
+/**
+ * ============================================================================
+ * OPERATIONAL HISTORY ACTIONS
+ * Tools for auditing and correcting historical refill and sales data.
+ * ============================================================================
+ */
+
+/** 
+ * Corrects historical refill or sales data. 
+ * Atomic synchronization: Adjusts MachineStock based on the delta between 
+ * the original and updated quantities to maintain inventory integrity.
+ */
 export async function updateRefillLog(
     logId: number,
     sold: number,
@@ -37,9 +49,6 @@ export async function updateRefillLog(
             });
 
             // 3. Update MachineStock estimated_stock based on refill delta
-            // Note: We don't adjust for 'sold' delta here because MachineStock.estimated_stock is updated 
-            // at the TIME of refill based on what the driver found. 
-            // However, a change in 'refilled' amount directly changes the final stock.
             if (deltaRefilled !== 0) {
                 const machineStock = await tx.machineStock.findUnique({
                     where: {

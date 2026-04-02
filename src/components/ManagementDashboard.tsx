@@ -51,13 +51,14 @@ type Props = {
 };
 
 export default function ManagementDashboard({ drivers, machines, warehouses, items }: Props) {
+    // --- UI & NAVIGATION STATE ---
     const [activeTab, setActiveTab] = useState<"drivers" | "machines" | "items" | "warehouses">("warehouses");
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 12;
 
     const [isPending, startTransition] = useTransition();
 
-    // Generic state for "adding new" modes
+    // CRUD & Selection States
     const [isAdding, setIsAdding] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
 
@@ -125,7 +126,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
         setActiveTab(tab);
     }
 
-    // --- DRIVER HANDLERS ---
+    // --- ACTION HANDLERS: DRIVERS ---
     const handleSaveDriver = (id?: number) => {
         startTransition(async () => {
             let res;
@@ -150,7 +151,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
         triggerDelete(id, 'driver');
     };
 
-    // --- MACHINE HANDLERS ---
+    // --- ACTION HANDLERS: MACHINES ---
     const handleSaveMachine = (id?: number) => {
         startTransition(async () => {
             let res;

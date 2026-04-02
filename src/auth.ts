@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 import prisma from "@/lib/prisma"
 import { authConfig } from "./auth.config"
 
+/** NextAuth Configuration: Handles Admin (Email/Pass) and Driver (Phone/PIN) login */
 export const { handlers, auth, signIn, signOut } = NextAuth({
     ...authConfig,
     providers: [
@@ -21,6 +22,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                 const { type } = credentials;
 
+                // --- ADMIN AUTHENTICATION ---
                 if (type === 'admin') {
                     const email = credentials.email as string;
                     const password = credentials.password as string;
@@ -36,6 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     const userRole = admin.role === 'SUPER_ADMIN' ? 'super_admin' : 'admin';
                     return { id: admin.id.toString(), email: admin.email, name: admin.name || "Admin", role: userRole };
                 }
+                // --- DRIVER AUTHENTICATION ---
                 else if (type === 'driver') {
                     const phone = credentials.phone as string;
                     const pin = credentials.pin as string;
@@ -45,7 +48,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     const driver = await prisma.driver.findUnique({ where: { phone } });
                     if (!driver || !driver.pin) return null;
 
-                    // PIN validation
                     const isValid = await bcrypt.compare(pin, driver.pin);
                     if (!isValid) return null;
 

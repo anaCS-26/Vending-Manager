@@ -1,14 +1,22 @@
 import { auth } from "@/proxy";
 
 /**
- * Server-side guard to ensure only administrators or super admins can execute an action.
- * Throws an error if the session is invalid or the role is insufficient.
+ * ============================================================================
+ * ACCOUNT AUTHENTICATION & ROLE GUARDS
+ * Enforces Role-Based Access Control (RBAC) across the action layer.
+ * Throws explicit authorization errors to terminate unauthorized sessions.
+ * ============================================================================
+ */
+
+/** 
+ * Enforces Administrator or Super Admin status. 
+ * Essential for any destructive or high-impact state change. 
  */
 export async function requireAdmin() {
     const session = await auth();
     
     if (!session || !session.user) {
-        throw new Error("UNAUTHORIZED: No active session found.");
+        throw new Error("UNAUTHORIZED: Active session required.");
     }
 
     const userRole = (session.user as any).role;
@@ -20,33 +28,35 @@ export async function requireAdmin() {
     return session;
 }
 
-/**
- * Server-side guard specifically for Super Admin actions (like database resetting).
+/** 
+ * Restricts access to Super Admin accounts only. 
+ * Used for platform-level management and broad data resets. 
  */
 export async function requireSuperAdmin() {
     const session = await auth();
     
     if (!session || !session.user) {
-        throw new Error("UNAUTHORIZED: No active session found.");
+        throw new Error("UNAUTHORIZED: Active Super Admin session required.");
     }
 
     const userRole = (session.user as any).role;
     
     if (userRole !== "super_admin") {
-        throw new Error("FORBIDDEN: Super Administrative privileges required.");
+        throw new Error("FORBIDDEN: Super Admin privileges required.");
     }
 
     return session;
 }
 
-/**
- * Server-side guard to ensure only drivers can execute an action.
+/** 
+ * Broad guard for driver-portal and dispatch-management actions. 
+ * Allows standard Admins and Super Admins for operational oversight. 
  */
 export async function requireDriver() {
     const session = await auth();
     
     if (!session || !session.user) {
-        throw new Error("UNAUTHORIZED: No active session found.");
+        throw new Error("UNAUTHORIZED: Active session required.");
     }
 
     const userRole = (session.user as any).role;
@@ -58,28 +68,29 @@ export async function requireDriver() {
     return session;
 }
 
-/**
- * Server-side guard to prevent drivers from acting on behalf of other drivers.
- * Admins bypass this.
+/** 
+ * Enforces dispatch ownership for drivers to prevent unauthorized data spoofing. 
+ * Bypasses ownership check for Admin sessions to support supervisory editing. 
  */
 export async function requireAdminOrDriverOwner(driverId: number) {
     const session = await auth();
     
     if (!session || !session.user) {
-        throw new Error("UNAUTHORIZED: No active session found.");
+        throw new Error("UNAUTHORIZED: Active session required.");
     }
 
     const userRole = (session.user as any).role;
     
+    // Administrative oversight bypass
     if (userRole === "admin" || userRole === "super_admin") {
         return session;
     }
 
+    // Driver-specific ownership check
     if (userRole === "driver") {
-        // If they are a driver, they MUST own the dispatch/action. session.user.id is a string.
         const sessionUserId = parseInt((session.user as any).id, 10);
         if (sessionUserId !== driverId) {
-            throw new Error("FORBIDDEN: You do not have permission to act on this resource.");
+            throw new Error("FORBIDDEN: Action restricted to the record owner.");
         }
         return session;
     }
