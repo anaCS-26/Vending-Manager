@@ -1,45 +1,51 @@
 ---
 name: vms-neo-design
-description: Enforces the Neo-Glassmorphism aesthetic and Slate-based color palette for the vending manager UI.
+description: Use whenever creating or modifying React components, layouts, or visual elements to enforce the Neo-Glassmorphism aesthetic standard.
 ---
 
-# VMS Design System: Neo-Glassmorphism
+# Skill: VMS Neo-Glassmorphism Design Standard
 
-NexGen Vending uses a custom "Neo" aesthetic characterized by glassmorphism, vibrant professional accents, and high-contrast accessibility.
+## 🎯 Objective
+Maintain a premium, high-contrast, professional "Neo-Glassmorphism" aesthetic across the entire application interface, tailored for the Next.js/Tailwind stack.
 
-## 🎨 Design Tokens (from globals.css)
+## 🚨 Strict Constraints
+- **Never** use generic Tailwind colors like `bg-red-500` or `text-blue-600`.
+- **Always** leverage predefined semantic accent tokens (`accent-blue`, `accent-purple`, `neo-bg`).
+- **Ensure Consistency:** Reuse existing standard interaction paradigms (dropdowns, data-tables, inputs).
+- **Responsive:** Ensure layouts function on mobile (relevant for Driver flows) and desktop (Admin flows).
 
-### Core Utilities:
-- **`.glass-panel`**: The standard container for all cards and sections. Provides backdrop-blur and borders.
-- **`.glass-panel-hover`**: Adds transition effects and subtle border changes on hover.
+## 🎨 Theme Tokens (`globals.css`)
+- **Containers:** Use `.glass-panel` for cards/modules, and `.glass-panel-hover` for interactive zones.
+- **Backgrounds:** `neo-bg` (main app layer), `neo-surface` (semi-transparent card layers).
+- **Accents:** 
+  - `text-accent-blue` (Primary actions/Buttons)
+  - `text-accent-purple` (Analytics)
+  - `bg-accent-pink/10 text-accent-pink` (Warnings/Errors/Badges)
+  - `text-accent-green` (High capacity/Success)
+  - `text-accent-orange` (Urgency/Low Stock)
 
-### Color Tokens:
-- **`neo-bg`**: The primary application background.
-- **`neo-surface`**: The semi-transparent card background.
-- **`neo-border`**: The standard subtle border for glass panels.
+## ⚙️ Execution Steps
+1. Identify the purpose of the UI component.
+2. Select the correct semantic token wrapper (e.g., warning alert -> use `accent-pink` utility classes).
+3. Apply standard weights (`font-medium` for titles, `text-sm` for subtitles).
+4. Utilize Lucide React icons with consistent stroke widths.
+5. Review both dark and light mode variable compatibility (handled intrinsically if you use the semantic classes).
 
-### Accent Accents:
-- **`accent-blue`** (#3b82f6) - Primary actions.
-- **`accent-purple`** (#6366f1) - Analytics / Secondary.
-- **`accent-pink`** (#f43f5e) - Alerts / Warnings.
-- **`accent-green`** (#10b981) - Success / High Stock.
-- **`accent-orange`** (#f97316) - Low Stock / Urgency.
-
-## 📐 Implementation Checklist
-1.  [ ] **Use Semantic Classes**: Prefer `.glass-panel` over manual `bg-zinc-900/50 backdrop-blur`.
-2.  [ ] **Dark/Light Support**: Always test components in both modes. Utilities are pre-configured in `globals.css`.
-3.  [ ] **Typography**: Use standard weights (`font-medium` for headers, `text-sm` for secondary metadata).
-4.  [ ] **Iconography**: Use consistent stroke widths when using icons (e.g., Lucide React).
-
-## ✅ Correct Card Example:
+## 📝 Example Output
+### ✅ Correct Markup
 ```tsx
-<div className="glass-panel glass-panel-hover p-4 rounded-xl">
-    <h3 className="text-lg font-semibold text-accent-blue">Active Stock</h3>
-    <p className="text-sm text-foreground/70">Metrics for terminal 4A</p>
+<div className="glass-panel glass-panel-hover p-4 rounded-xl flex items-center justify-between">
+    <div>
+        <h3 className="text-lg font-semibold text-accent-blue">Active Locations</h3>
+        <p className="text-sm text-foreground/70">Terminal list for Dhahran</p>
+    </div>
+    <span className="bg-accent-green/10 text-accent-green px-2 py-1 rounded text-xs font-medium">Synced</span>
 </div>
 ```
-
-## ❌ Avoid:
-- Plain `bg-white` or `bg-slate-900`.
-- Heavy shadows (`shadow-2xl` manually instead of using utility).
-- Generic Tailwind reds/blues (use `accent-pink` or `accent-blue`).
+### ❌ Invalid Pattern
+```tsx
+{/* NEVER use direct raw tailwind colors that break the slate mode */}
+<div className="bg-zinc-800 shadow-2xl p-4">
+    <h3 className="text-blue-500">Active Locations</h3>
+</div>
+```

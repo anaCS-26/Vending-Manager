@@ -1,38 +1,54 @@
 ---
 name: vms-security-rbac
-description: Mandates Role-Based Access Control (RBAC) guards for all server actions in the vending manager.
+description: Use when creating or modifying Server Actions to verify authentication and enforce strict Role-Based Access Control (RBAC). 
 ---
 
-# VMS Security & RBAC Guards
+# Skill: VMS RBAC Security Gates
 
-Security in NexGen Vending is enforced at the Server Action level. **Never assume a user has the correct permissions.**
+## 🎯 Objective
+Prevent unauthorized access and privilege escalation within the VMS backend actions. The system contains sensitive financial data and hardware logistics that must be deeply gated.
 
-## 🛡️ Available Guards (from `@/lib/auth-utils`)
+## 🚨 Strict Constraints
+- **Never** query the database or execute business logic before obtaining session verification.
+- **Always** place the role-based auth guard as the absolute first line inside the `async function`.
+- **Throw Early:** Let the underlying guard throw exceptions for 'Forbidden' access to bubble up consistently; do not suppress them with internal try-catch blocks unless returning strict formatted application errors.
 
-- `requireAdmin()`: Broad admin access. Used for inventory oversight, procurement, and management.
-- `requireSuperAdmin()`: Restricted for account creation or system-wide data resets.
-- `requireDriver()`: Access for daily logistics, refills, and dispatch closure.
-- `requireAdminOrDriverOwner(driverId)`: Ensures a driver can only modify their own dispatches. Admins bypass this.
+## 🛡️ Validation Guards (`@/lib/auth-utils`)
+Select the most restrictive necessary guard:
+- `requireAdmin()`: Warehouse intake, financial overviews, system settings.
+- `requireDriver()`: App logistics, terminal refills, dispatch actions.
+- `requireAdminOrDriverOwner(driverId)`: Strict boundary so drivers can only mutate their *own* dispatches and returns.
+- `requireSuperAdmin()`: Dangerous system operations (DB wipes, account provisioning).
 
-## 📐 Implementation Checklist
-1.  [ ] **Atomic Placement**: The guard MUST be the first call in the server action.
-2.  [ ] **Specific guards**: Prefer `requireDriver` or `requireAdminOrDriverOwner` over a generic login check.
-3.  [ ] **Error Handling**: Allow the guard's error to bubble up; do not wrap it in a try-catch that silences "FORBIDDEN" warnings.
+## ⚙️ Execution Steps
+1. Determine the exact permission scope of the new action.
+2. Import the correct guard from `@/lib/auth-utils`.
+3. Await the guard at line 1 of the action body.
+4. Use the extracted session or user ID from the guard to ensure queries belong to the validated tenant if applicable.
 
-## ✅ Correct Action Example:
+## 📝 Example Output
+### ✅ Valid Server Action Structure
 ```typescript
-export async function createDispatch(data: object) {
-    const session = await requireAdmin(); // AUTH MUST BE FIRST
+"use server";
+import { requireAdmin } from "@/lib/auth-utils";
+
+export async function submitPurchaseOrder(data: OrderPayload) {
+    const session = await requireAdmin(); // LINE 1 GUARANTEED
+
     try {
-        await prisma.dispatch.create({ ... });
+        await prisma.purchaseOrder.create({ ... });
         return { success: true };
-    } catch (e) {
-        return { success: false, error: "Failed" };
+    } catch(err) {
+        return { success: false, error: err.message };
     }
 }
 ```
-
-## ❌ Avoid:
-- Running `prisma` logic before calling a protection guard.
-- Mixing roles within a single action without using the correct "Or" guard.
-- Manual session checks (standardize on `require*` guards).
+### ❌ Invalid Pattern
+```typescript
+export async function getStock() {
+    // FAIL: Processing data before ensuring auth check 
+    const stock = await prisma.warehouseStock.findMany(); 
+    const session = await requireAdmin(); 
+    return stock;
+}
+```

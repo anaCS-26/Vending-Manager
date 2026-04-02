@@ -1,44 +1,48 @@
 ---
 name: vms-audit-trail
-description: Ensures every stock mutation has a corresponding record in the audit trail (RefillLog or InventoryAdjustment). 
+description: Use when adding, deleting, or transferring stock between layers (Warehouse, Machine, Driver) to ensure proper logging entries exist.
 ---
 
-# VMS Audit Trail: Stock Mutation Integrity
+# Skill: VMS Audit Trail Integrity
 
-In NexGen Vending, **inventory must never change silently.** Every increment or decrement in any stock layer must be linked to a transactional record for financial and logistical accountability.
+## 🎯 Objective
+Ensure that **no inventory changes invisibly**. Every single stock increment, decrement, or transfer must be linked 1:1 with an audit-compliant transaction log to maintain financial traceability.
 
-## 📋 Audit Models (from schema.prisma)
+## 🚨 Strict Constraints
+- **Never** execute an isolated `stock.update({ quantity: amount })` without creating an associated `InventoryAdjustment` or `RefillLog`.
+- **Always** capture the item's historical cost (`priceAtAdjustment`) exactly when the record is created. Prices drift; audits must lock the temporal price.
+- **Always** explicitly provide an actionable, human-readable reason for manual changes.
 
-- **`RefillLog`**: Records stock moving from a Driver into a Vending Machine. Tracks items sold, damaged, and price/cost snapshots.
-- **`InventoryAdjustment`**: Records manual corrections to stock (e.g., admin fixing a data error). Must include a `reason` and the `priceAtAdjustment`.
-- **`PurchaseOrderItem`**: Captures received quantities and costs from suppliers.
-- **`ReturnVerification`**: Pre-audit state for items returned in transit. Once approved, converts to an `InventoryAdjustment`.
+## 📋 Audit Models Reference
+- `RefillLog`: Driver -> Machine stock flows. Records items solt/damaged with a price snapshot.
+- `InventoryAdjustment`: Manual corrections, administrative resets, approved damage claims.
+- `PurchaseOrderItem`: Supplier -> Warehouse intake logs.
+- `ReturnVerification`: Pre-audit transit returns.
 
-## 📐 Implementation Checklist
-1.  [ ] **No Naked Updates**: Never use `prisma.warehouseStock.update` without a corresponding `InventoryAdjustment` or `PurchaseOrder` transaction.
-2.  [ ] **Reasoning**: Every `InventoryAdjustment` must have a descriptive `reason` (e.g., "Monthly Audit Cleanup," "Approved Driver Damage").
-3.  [ ] **Snapshotting**: Capture the current `Item.cost` or `price_standard` AT THE TIME OF ADJUSTMENT to maintain historical financial accuracy.
-4.  [ ] **Transactionality**: All stock changes and their audit records MUST be wrapped in a single `prisma.$transaction`.
+## ⚙️ Execution Steps for Adjustments
+1. Wrap the entire operation in `prisma.$transaction`.
+2. Execute the primary stock mutation (`increment` or `decrement` on the target stock model).
+3. Immediately invoke `.create()` on the relevant audit table (e.g., `InventoryAdjustment`).
+4. Ensure the `quantity` of the adjustment mirrors the exact state change (e.g., `-5` if losing stock). 
 
-## ✅ Correct Adjustment Example:
+## 📝 Example Output
+### ✅ Valid Audit Linking
 ```typescript
 await tx.$transaction(async (tx) => {
-    // 1. Update the stock
+    // 1. Stock Mutated
     await tx.warehouseStock.update({ ... });
 
-    // 2. CREATE THE AUDIT RECORD
+    // 2. Audit Trail Created
     await tx.inventoryAdjustment.create({
         data: {
             itemId,
-            quantity: -5, // Negative for write-off
-            reason: "Damaged in warehouse",
-            priceAtAdjustment: item.price_standard
+            quantity: -5,
+            reason: "Admin write-off for damage",
+            priceAtAdjustment: currentItem.cost // Snapshot vital for accounting 
         }
     });
 });
 ```
-
-## ❌ Avoid:
-- Running `increment` or `decrement` on stock without a linked log model.
-- Generic reasons like "update" or "fix" in the adjustment log.
-- Forgetting to capture the item's price at the time of the record creation.
+### ❌ Invalid Pattern
+- Using "Update" or "Fix" as an adjustment reason. 
+- Forgetting `priceAtAdjustment`. 

@@ -1,48 +1,34 @@
 ---
 name: vms-accounting-wac
-description: Mathematical rules for Weighted Average Cost (WAC) and Supplier Deficit resolution in the vending system. Use when modifying procurement or stock integration logic.
+description: Use when modifying procurement, ordering, or warehouse intake logic to establish proper Weighted Average Cost (WAC) and Supplier Deficits.
 ---
 
-# VMS Accounting: WAC & Deficit Logic
+# Skill: VMS Accounting (WAC & Deficit)
 
-This skill ensures financial and inventory integrity during the procurement lifecycle.
+## 🎯 Objective
+Maintain absolute financial integrity and precise valuation tracking during the procurement lifecycle inside the Vending Management System.
 
-## 🧠 Core Formula: Weighted Average Cost (WAC)
+## 🚨 Strict Constraints
+- **Never** perform a simple hard-override of `cost` on a global Item record.
+- **Always** calculate the exact Weighted Average Cost (WAC) factoring in all 3 inventory dimensions (Warehouse + Machine + Driver).
+- **Always** use a Prisma `$transaction` for cost updates.
 
-When new stock is received in a Purchase Order, the item's cost must be updated globally using the Weighted Average Cost formula to maintain accurate financial ledgers.
+## ⚙️ WAC Calculation Steps
+1. **Fetch Total Existing Stock:** Sum global quantity across `WarehouseStock`, `MachineStock`, and `DriverStock`.
+2. **Determine Previous Value:** `(Current Total Stock) * (Current Item Cost)`
+3. **Determine Incoming Value:** `(Incoming Qty) * (Incoming Price from PO)`
+4. **Calculate New Cost:** `WAC = (Previous Value + Incoming Value) / (Current Total Stock + Incoming Qty)`
+5. **Update Item:** Apply new WAC to `Item.cost`. Watch out for divide-by-zero!
 
-**Formula**:
-`New WAC = ((Current Total Qty * Current WAC) + (Incoming Qty * Incoming Price)) / (Current Total Qty + Incoming Qty)`
+## 📦 Supplier Deficit Resolution
+When POs are short-shipped, track financial gaps:
+1. `DeficitChange = Requested - Received`
+2. Add `DeficitChange` to `WarehouseStock.pending_deficit` for exact auditing.
+3. If `Received > Requested`, naturally deduct overage from `pending_deficit`.
 
-### Mandatory Checklist for Procurement:
-1.  [ ] **Global Stock Retrieval**: Aggregate current quantity from ALL three inventory layers:
-    - `WarehouseStock`
-    - `MachineStock`
-    - `DriverStock`
-2.  [ ] **Price Locking**: Fetch the current cost and incoming cost via Prisma transaction.
-3.  [ ] **Divide-by-Zero Guard**: Ensure total quantity > 0 before division.
-4.  [ ] **Global Update**: Apply the new WAC to the `Item` record globally.
-
-## 🚛 Supplier Deficit Stacking
-
-If a Purchase Order arrives with quantities lower than requested, the difference must be tracked as a "Deficit."
-
-1.  [ ] **Calculate Shortage**: `DeficitChange = Requested - Received`.
-2.  [ ] **Stacking logic**: Add `DeficitChange` to the warehouse's `pending_deficit` for that item.
-3.  [ ] **Auto-Resolution**: If Received > Requested (overage), deduct the overage from the existing `pending_deficit`.
-
-## ❌ Incorrect Example:
+## 📝 Example Output
+### ✅ Valid Update Pattern
 ```typescript
-// WRONG: Just overwriting cost
-await tx.item.update({
-    where: { id: itemId },
-    data: { cost: newCost }
-});
-```
-
-## ✅ Correct Example:
-```typescript
-// fetch total current stock
 const totalStock = await fetchAggregatedStock(tx, itemId);
 const previousValue = totalStock * currentCost;
 const incomingValue = receivedQty * receivedCost;
@@ -52,4 +38,9 @@ await tx.item.update({
     where: { id: itemId },
     data: { cost: newWAC }
 });
+```
+### ❌ Invalid Pattern
+```typescript
+// NEVER overwrite cost linearly
+await tx.item.update({ where: { id: itemId }, data: { cost: receivedCost }});
 ```
