@@ -125,7 +125,7 @@ export default async function AnalyticsPage() {
                                 <div className="flex items-center gap-2 text-accent-orange font-bold text-sm">
                                     <AlertTriangle className="w-4 h-4" /> Priority Refill Warning
                                 </div>
-                                <span className="text-[10px] font-mono text-slate-900 dark:text-white/50 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-md">ID: {alert.terminalId || alert.id}</span>
+                                <span className="text-[10px] font-mono text-slate-900 dark:text-white/50 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-md">Code: M-{alert.id.toString().padStart(4, '0')}</span>
                             </div>
                             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1">{alert.location_name}</h3>
                             <p className="text-slate-600 dark:text-slate-400 text-sm mb-4">{alert.district}</p>

@@ -249,7 +249,7 @@ export default function MapVisual({ machines, predictions = [], warehouses = [] 
                                             {machine.location_name}
                                         </h4>
                                         <p className="text-xs text-slate-500 dark:text-slate-400 font-mono border-b border-slate-200 dark:border-white/5 pb-2 mb-2">
-                                            ID: {machine.terminalId || `M-${machine.id.toString().padStart(4, '0')}`}
+                                            Code: M-{machine.id.toString().padStart(4, '0')}
                                         </p>
 
                                         <div className="space-y-2 mt-3">

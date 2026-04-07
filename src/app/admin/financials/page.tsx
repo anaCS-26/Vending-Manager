@@ -56,7 +56,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
             return {
                 id: m.id,
                 label: m.location_name,
-                subLabel: m.terminalId,
+                subLabel: `M-${m.id.toString().padStart(4, '0')}`,
                 revenue,
                 cogs,
                 expenses,
