@@ -453,7 +453,7 @@ function EventRow({ log }: { log: any }) {
                 <div className="flex flex-col">
                     <span className="text-sm font-bold text-slate-900 dark:text-white">{log.machine.location_name}</span>
                     <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-slate-400" /> #{log.machine.id}
+                        <MapPin className="w-3 h-3 text-slate-400" /> M-{log.machine.id.toString().padStart(4, '0')}
                     </span>
                 </div>
             </td>

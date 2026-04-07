@@ -362,11 +362,16 @@ export default function HistoryList({ dispatches, hideHeader }: HistoryListProps
                                             <MapPin className="w-4 h-4 text-slate-500 dark:text-slate-400" /> Route Stops
                                         </h4>
                                         <div className="flex flex-wrap gap-2">
-                                            {Array.from(new Set((dispatch.RefillLogs as RefillLogWithMachine[]).map((rl) => rl.machine.location_name))).map((loc: string, i) => (
-                                                <div key={i} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-[#18181b] border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300 shadow-sm dark:shadow-lg dark:shadow-black/50">
-                                                    {loc}
-                                                </div>
-                                            ))}
+                                            {Array.from(new Set((dispatch.RefillLogs as RefillLogWithMachine[]).map((rl) => `${rl.machine.id}|${rl.machine.location_name}`))).map((m: string, i) => {
+                                                const [id, loc] = m.split('|');
+                                                const mCode = `M-${id.padStart(4, '0')}`;
+                                                return (
+                                                    <div key={i} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-[#18181b] border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300 shadow-sm dark:shadow-lg dark:shadow-black/50">
+                                                        <span className="text-brand-500 font-mono font-bold mr-1.5">{mCode}</span>
+                                                        {loc}
+                                                    </div>
+                                                );
+                                            })}
                                             {dispatch.RefillLogs.length === 0 && (
                                                 <div className="text-sm text-slate-500 dark:text-slate-400 italic">No machines visited on this route.</div>
                                             )}

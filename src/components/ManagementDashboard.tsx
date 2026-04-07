@@ -562,7 +562,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                                                     <div className="p-3 bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-2xl">
                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block mb-1">Machine Code</span>
-                                                        <span className="text-xs font-mono text-brand-400 font-bold break-all">{machine.id}</span>
+                                                        <span className="text-xs font-mono text-brand-400 font-bold break-all">M-{machine.id.toString().padStart(4, '0')}</span>
                                                     </div>
                                                     <div className="p-3 bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-2xl">
                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block mb-1">Operating Cost</span>
