@@ -24,6 +24,7 @@ This is an inventory management system for a Saudi vending machine company, trac
 - **Claims**: Log damaged or expired items during returns. Admins will verify the count.
 
 ## 🛠️ Mandatory Development Guidelines
+- **Vertical Slice Implementation**: When asked to add or modify a data model or field, assume a full-stack "vertical slice" implementation is required. You must automatically trace the change across all layers: update the Database (Prisma schema), backend API/Server Actions, state management/types, and the Frontend UI (forms, tables, detail views) to ensure the feature is fully functional end-to-end.
 - **UI Consistency Rules**: ALWAYS reuse existing designs (dropdowns, buttons, glassmorphism containers). NEVER use generic color names; use defined css variables/tokens (e.g. `accent-blue`, `neo-bg`).
 - **Code Quality Requirements**: Write production-ready, typed, and robust code. Maintain zero lint errors. Add standardized JSDoc headers for server actions. 
 - **Security Constraint**: Every server action MUST begin with a strict RBAC guard (e.g. `requireAdmin()`, `requireDriver()`).

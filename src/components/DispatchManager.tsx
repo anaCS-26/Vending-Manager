@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh";
 import type { DriverType, WarehouseWithItem, DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine, WarehouseType } from "@/types";
 import { formatID } from "@/lib/utils";
+import { DriverBagManager } from "./DriverBagManager";
 
 type DispatchManagerProps = {
     drivers: DriverType[];
@@ -23,6 +24,7 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
     const [isPending, startTransition] = useTransition();
     const [isCopying, setIsCopying] = useState(false);
     const [bulkQty, setBulkQty] = useState<string>("");
+    const [activeTab, setActiveTab] = useState<"dispatch" | "bags">("dispatch");
 
     // SSE-based real-time refresh (replaces 5s polling)
     useRealtimeRefresh();
@@ -106,266 +108,289 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Create New Dispatch */}
-            <div className="glass-panel border-slate-200 dark:border-white/10 rounded-[2rem] p-8 flex flex-col relative overflow-hidden group">
-                <div className="flex items-center gap-4 mb-8 relative z-10">
-                    <div className="p-3 bg-accent-blue/10 border border-accent-blue/30 rounded-2xl text-accent-blue">
-                        <Truck className="w-6 h-6" />
-                    </div>
-                    <div>
-                        <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">New Route Dispatch</h2>
-                        <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Assign inventory to fleet</p>
-                    </div>
-                </div>
+        <div className="space-y-6">
+            <div className="flex bg-slate-100 dark:bg-white/5 p-1 rounded-xl w-fit">
+                <button
+                    onClick={() => setActiveTab("dispatch")}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === "dispatch" ? "bg-white dark:bg-[#18181b] text-accent-blue shadow-sm" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}
+                >
+                    Route Planning & Operations
+                </button>
+                <button
+                    onClick={() => setActiveTab("bags")}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === "bags" ? "bg-white dark:bg-[#18181b] text-accent-blue shadow-sm" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}
+                >
+                    Driver Bags Manager
+                </button>
+            </div>
 
-                <div className="space-y-6 flex-1 relative z-10">
-                    <div className="relative z-[100]">
-                        <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300 mb-2">
-                            Select Driver & Origin Warehouse
-                        </label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <DriverSelect drivers={drivers} selected={selectedDriver} onChange={setSelectedDriver} />
-
-                            <WarehouseSelect
-                                warehouses={warehouses}
-                                selected={selectedWarehouseId}
-                                onChange={(id) => {
-                                    setSelectedWarehouseId(id);
-                                    setSelectedItems([]);
-                                }}
-                            />
-                        </div>
-                    </div>
-
-                    {selectedDriver && (
-                        <button
-                            type="button"
-                            onClick={handleCopyRecent}
-                            disabled={isCopying}
-                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-accent-blue hover:border-accent-blue/50 transition-all w-fit"
-                        >
-                            {isCopying ? <Loader2 className="w-3 h-3 animate-spin" /> : <History className="w-3 h-3" />}
-                            Copy Latest Route Items
-                        </button>
-                    )}
-
-                    {/* Show what the driver is currently carrying via their DriverStock */}
-                    {selectedDriver && (drivers.find(d => d.id.toString() === selectedDriver)?.DriverStock?.length ?? 0) > 0 && (
-                        <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl p-4 mt-4 relative z-50">
-                            <div className="flex items-center gap-2 mb-2">
-                                <PackageOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                                <span className="text-sm font-bold text-amber-800 dark:text-amber-300">Currently in Driver's Bag</span>
+            {activeTab === "dispatch" && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in zoom-in-95 duration-300">
+                    {/* Create New Dispatch */}
+                    <div className="glass-panel border-slate-200 dark:border-white/10 rounded-[2rem] p-8 flex flex-col relative overflow-hidden group">
+                        <div className="flex items-center gap-4 mb-8 relative z-10">
+                            <div className="p-3 bg-accent-blue/10 border border-accent-blue/30 rounded-2xl text-accent-blue">
+                                <Truck className="w-6 h-6" />
                             </div>
-                            <div className="flex flex-wrap gap-2">
-                                {drivers.find(d => d.id.toString() === selectedDriver)?.DriverStock?.map(stock => (
-                                    <span key={stock.id} className="text-xs bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-2 py-1 rounded font-medium">
-                                        {stock.item.name}: {stock.quantity_on_hand}
-                                    </span>
-                                ))}
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">New Route Dispatch</h2>
+                                <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Assign inventory to fleet</p>
                             </div>
-                            <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80 mt-2">These items will be automatically prioritized and deducted from their bag during route assignment.</p>
                         </div>
-                    )}
 
-                    <div className="flex flex-col gap-3 mb-4">
-                        <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300">
-                            Available Inventory {selectedWarehouseId && `- ${warehouses.find(w => w.id === selectedWarehouseId)?.name}`}
-                        </label>
-                        
-                        {selectedWarehouseId && (
-                            <div className="relative group">
-                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent-blue transition-colors">
-                                    <Truck className="w-4 h-4" />
+                        <div className="space-y-6 flex-1 relative z-10">
+                            <div className="relative z-[100]">
+                                <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300 mb-2">
+                                    Select Driver & Origin Warehouse
+                                </label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <DriverSelect drivers={drivers} selected={selectedDriver} onChange={setSelectedDriver} />
+
+                                    <WarehouseSelect
+                                        warehouses={warehouses}
+                                        selected={selectedWarehouseId}
+                                        onChange={(id) => {
+                                            setSelectedWarehouseId(id);
+                                            setSelectedItems([]);
+                                        }}
+                                    />
                                 </div>
-                                <input 
-                                    type="text"
-                                    placeholder="Search items by name or SKU..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-accent-blue transition-all"
-                                />
                             </div>
-                        )}
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                        {!selectedWarehouseId ? (
-                            <div className="col-span-2 p-4 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
-                                Please select an origin warehouse first.
-                            </div>
-                        ) : inventory.filter(inv => 
-                            inv.warehouseId === selectedWarehouseId && 
-                            (inv.item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                inv.item.sku.toLowerCase().includes(searchQuery.toLowerCase()))
-                        ).length === 0 ? (
-                            <div className="col-span-2 p-4 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
-                                {searchQuery ? "No items match your search." : "No stock available in this warehouse."}
-                            </div>
-                        ) : (
-                            inventory.filter(inv => 
-                                inv.warehouseId === selectedWarehouseId && 
-                                (inv.item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                    inv.item.sku.toLowerCase().includes(searchQuery.toLowerCase()))
-                            ).map((inv) => {
-                                const isSelected = selectedItems.find(i => i.itemId === inv.itemId);
-                                return (
-                                    <button
-                                        key={inv.id}
-                                        onClick={() => !isSelected && addItemToDispatch(inv.itemId)}
-                                        disabled={inv.quantity_on_hand <= 0}
-                                        className={`flex flex-col items-start p-4 border rounded-xl transition-all text-left disabled:opacity-30 disabled:border-slate-200 dark:border-white/10 disabled:bg-transparent group/item relative overflow-hidden ${isSelected ? 'border-accent-blue bg-accent-blue/10 shadow-[0_0_15px_rgba(0,180,255,0.15)] scale-[0.98]' : 'border-slate-200 dark:border-white/10 hover:border-accent-blue/50 hover:bg-accent-blue/5'}`}
-                                        type="button"
-                                    >
-                                        {isSelected && (
-                                            <div className="absolute top-2 right-2">
-                                                <Check className="w-4 h-4 text-accent-blue" />
-                                            </div>
-                                        )}
-                                        <span className={`text-sm font-semibold mb-2 transition-colors ${isSelected ? 'text-accent-blue' : 'text-slate-900 dark:text-white group-hover/item:text-accent-blue'}`}>{inv.item.name}</span>
-                                        <span className={`text-xs px-2.5 py-1 rounded border ${isSelected ? 'bg-accent-blue/20 border-accent-blue/30 text-accent-blue' : 'bg-white/10 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300'}`}>
-                                            {inv.quantity_on_hand} available
-                                        </span>
-                                    </button>
-                                );
-                            })
-                        )}
-                    </div>
-
-                    <div className="bg-slate-100 dark:bg-white/5 rounded-2xl p-5 border border-slate-200 dark:border-white/10 mt-6 min-h-[140px] flex flex-col">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                                <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300">Dispatch Manifest</h3>
-                                <span className="text-[10px] uppercase font-bold tracking-wider text-accent-blue bg-accent-blue/10 px-2 py-0.5 rounded-full border border-accent-blue/20">
-                                    {selectedItems.length} Items Selected
-                                </span>
-                            </div>
-                            {selectedItems.length > 0 && (
-                                <button 
-                                    onClick={() => setSelectedItems([])}
-                                    className="text-[10px] font-bold text-slate-400 hover:text-accent-pink uppercase tracking-widest flex items-center gap-1.5 transition-colors"
+                            {selectedDriver && (
+                                <button
+                                    type="button"
+                                    onClick={handleCopyRecent}
+                                    disabled={isCopying}
+                                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-accent-blue hover:border-accent-blue/50 transition-all w-fit"
                                 >
-                                    <Trash2 className="w-3 h-3" /> Clear All
+                                    {isCopying ? <Loader2 className="w-3 h-3 animate-spin" /> : <History className="w-3 h-3" />}
+                                    Copy Latest Route Items
                                 </button>
                             )}
+
+                            {/* Show what the driver is currently carrying via their DriverStock */}
+                            {selectedDriver && (drivers.find(d => d.id.toString() === selectedDriver)?.DriverStock?.length ?? 0) > 0 && (
+                                <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl p-4 mt-4 relative z-50">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <PackageOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                        <span className="text-sm font-bold text-amber-800 dark:text-amber-300">Currently in Driver's Bag</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {drivers.find(d => d.id.toString() === selectedDriver)?.DriverStock?.map(stock => (
+                                            <span key={stock.id} className="text-xs bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-2 py-1 rounded font-medium">
+                                                {stock.item.name}: {stock.quantity_on_hand}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80 mt-2">These items will be automatically prioritized and deducted from their bag during route assignment.</p>
+                                </div>
+                            )}
+
+                            <div className="flex flex-col gap-3 mb-4">
+                                <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300">
+                                    Available Inventory {selectedWarehouseId && `- ${warehouses.find(w => w.id === selectedWarehouseId)?.name}`}
+                                </label>
+                                
+                                {selectedWarehouseId && (
+                                    <div className="relative group">
+                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent-blue transition-colors">
+                                            <Truck className="w-4 h-4" />
+                                        </div>
+                                        <input 
+                                            type="text"
+                                            placeholder="Search items by name or SKU..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="w-full bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-accent-blue transition-all"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                {!selectedWarehouseId ? (
+                                    <div className="col-span-2 p-4 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
+                                        Please select an origin warehouse first.
+                                    </div>
+                                ) : inventory.filter(inv => 
+                                    inv.warehouseId === selectedWarehouseId && 
+                                    (inv.item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                        inv.item.sku.toLowerCase().includes(searchQuery.toLowerCase()))
+                                ).length === 0 ? (
+                                    <div className="col-span-2 p-4 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
+                                        {searchQuery ? "No items match your search." : "No stock available in this warehouse."}
+                                    </div>
+                                ) : (
+                                    inventory.filter(inv => 
+                                        inv.warehouseId === selectedWarehouseId && 
+                                        (inv.item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                            inv.item.sku.toLowerCase().includes(searchQuery.toLowerCase()))
+                                    ).map((inv) => {
+                                        const isSelected = selectedItems.find(i => i.itemId === inv.itemId);
+                                        return (
+                                            <button
+                                                key={inv.id}
+                                                onClick={() => !isSelected && addItemToDispatch(inv.itemId)}
+                                                disabled={inv.quantity_on_hand <= 0}
+                                                className={`flex flex-col items-start p-4 border rounded-xl transition-all text-left disabled:opacity-30 disabled:border-slate-200 dark:border-white/10 disabled:bg-transparent group/item relative overflow-hidden ${isSelected ? 'border-accent-blue bg-accent-blue/10 shadow-[0_0_15px_rgba(0,180,255,0.15)] scale-[0.98]' : 'border-slate-200 dark:border-white/10 hover:border-accent-blue/50 hover:bg-accent-blue/5'}`}
+                                                type="button"
+                                            >
+                                                {isSelected && (
+                                                    <div className="absolute top-2 right-2">
+                                                        <Check className="w-4 h-4 text-accent-blue" />
+                                                    </div>
+                                                )}
+                                                <span className={`text-sm font-semibold mb-2 transition-colors ${isSelected ? 'text-accent-blue' : 'text-slate-900 dark:text-white group-hover/item:text-accent-blue'}`}>{inv.item.name}</span>
+                                                <span className={`text-xs px-2.5 py-1 rounded border ${isSelected ? 'bg-accent-blue/20 border-accent-blue/30 text-accent-blue' : 'bg-white/10 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300'}`}>
+                                                    {inv.quantity_on_hand} available
+                                                </span>
+                                            </button>
+                                        );
+                                    })
+                                )}
+                            </div>
+
+                            <div className="bg-slate-100 dark:bg-white/5 rounded-2xl p-5 border border-slate-200 dark:border-white/10 mt-6 min-h-[140px] flex flex-col">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300">Dispatch Manifest</h3>
+                                        <span className="text-[10px] uppercase font-bold tracking-wider text-accent-blue bg-accent-blue/10 px-2 py-0.5 rounded-full border border-accent-blue/20">
+                                            {selectedItems.length} Items Selected
+                                        </span>
+                                    </div>
+                                    {selectedItems.length > 0 && (
+                                        <button 
+                                            onClick={() => setSelectedItems([])}
+                                            className="text-[10px] font-bold text-slate-400 hover:text-accent-pink uppercase tracking-widest flex items-center gap-1.5 transition-colors"
+                                        >
+                                            <Trash2 className="w-3 h-3" /> Clear All
+                                        </button>
+                                    )}
+                                </div>
+
+                                {selectedItems.length > 0 && (
+                                    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 mb-4 group/bulk">
+                                        <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Bulk Set Qty:</div>
+                                        <input
+                                            type="number"
+                                            placeholder="Set all..."
+                                            value={bulkQty}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setBulkQty(val);
+                                                const q = parseInt(val);
+                                                if (q > 0) {
+                                                    setSelectedItems(prev => prev.map(i => ({ ...i, quantity: q })));
+                                                }
+                                            }}
+                                            className="flex-1 bg-transparent border-none outline-none text-xs text-accent-blue font-bold placeholder:text-slate-600"
+                                        />
+                                    </div>
+                                )}
+
+                                {selectedItems.length === 0 ? (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center p-4 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-white/[0.02]">
+                                        <motion.div animate={{ scale: [1, 1.05, 1], opacity: [0.5, 0.8, 0.5] }} transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}>
+                                            <PackageOpen className="w-8 h-8 text-slate-500 dark:text-slate-400 mb-3 opacity-50" />
+                                        </motion.div>
+                                        <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">No items added to route.</p>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Select multiple items from the inventory above.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <AnimatePresence>
+                                            {selectedItems.map((item) => {
+                                                const invItem = inventory.find((i) => i.itemId === item.itemId);
+                                                return (
+                                                    <motion.div
+                                                        layout
+                                                        initial={{ opacity: 0, scale: 0.95 }}
+                                                        animate={{ opacity: 1, scale: 1 }}
+                                                        exit={{ opacity: 0, scale: 0.95 }}
+                                                        key={item.itemId}
+                                                        className="flex items-center justify-between glass-panel-hover p-3 rounded-lg border border-slate-200 dark:border-white/5 bg-black/20"
+                                                    >
+                                                        <span className="text-sm font-medium text-slate-900 dark:text-white flex-1">{invItem?.item.name}</span>
+                                                        <div className="flex items-center gap-3">
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                className="w-20 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-accent-blue focus:border-accent-blue rounded text-center px-2 py-1.5 text-sm text-slate-900 dark:text-white font-semibold focus:outline-none transition-colors"
+                                                                value={item.quantity}
+                                                                onChange={(e) => updateQuantity(item.itemId, parseInt(e.target.value) || 0)}
+                                                            />
+                                                            <button
+                                                                onClick={() => setSelectedItems(selectedItems.filter(i => i.itemId !== item.itemId))}
+                                                                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-accent-pink hover:bg-accent-pink/10 rounded-md transition-colors"
+                                                            >
+                                                                <Crosshair className="w-4 h-4 rotate-45" />
+                                                            </button>
+                                                        </div>
+                                                    </motion.div>
+                                                )
+                                            })}
+                                        </AnimatePresence>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
-                        {selectedItems.length > 0 && (
-                            <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 mb-4 group/bulk">
-                                <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Bulk Set Qty:</div>
-                                <input
-                                    type="number"
-                                    placeholder="Set all..."
-                                    value={bulkQty}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        setBulkQty(val);
-                                        const q = parseInt(val);
-                                        if (q > 0) {
-                                            setSelectedItems(prev => prev.map(i => ({ ...i, quantity: q })));
-                                        }
-                                    }}
-                                    className="flex-1 bg-transparent border-none outline-none text-xs text-accent-blue font-bold placeholder:text-slate-600"
-                                />
+                        <button
+                            onClick={handleDispatch}
+                            disabled={!selectedDriver || !selectedWarehouseId || selectedItems.length === 0 || isPending}
+                            className="mt-8 relative w-full group/btn disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <div className="relative w-full py-4 bg-accent-blue hover:bg-accent-blue/90 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors text-slate-900 dark:text-white">
+                                {isPending ? (
+                                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
+                                        <Loader2 className="w-5 h-5" />
+                                    </motion.div>
+                                ) : (
+                                    <Navigation className="w-5 h-5" />
+                                )}
+                                {isPending ? "Assigning Route..." : "Assign to Route"}
                             </div>
-                        )}
+                        </button>
+                    </div>
 
-                        {selectedItems.length === 0 ? (
-                            <div className="flex-1 flex flex-col items-center justify-center text-center p-4 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-white/[0.02]">
-                                <motion.div animate={{ scale: [1, 1.05, 1], opacity: [0.5, 0.8, 0.5] }} transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}>
-                                    <PackageOpen className="w-8 h-8 text-slate-500 dark:text-slate-400 mb-3 opacity-50" />
+                    {/* Active Dispatches */}
+                    <div className="space-y-6">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
+                            Active Routes
+                        </h2>
+
+                        {activeDispatches.length === 0 ? (
+                            <motion.div
+                                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                className="glass-panel border-slate-200 dark:border-white/5 rounded-[2rem] p-12 flex flex-col items-center justify-center text-center border-dashed"
+                            >
+                                <motion.div
+                                    animate={{ y: [0, -10, 0] }}
+                                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                                    className="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-white/5 flex items-center justify-center mb-4 border border-slate-200 dark:border-white/10"
+                                >
+                                    <Truck className="w-8 h-8 text-slate-500 dark:text-slate-400 opacity-50" />
                                 </motion.div>
-                                <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">No items added to route.</p>
-                                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Select multiple items from the inventory above.</p>
-                            </div>
+                                <h3 className="text-slate-900 dark:text-white font-bold mb-1">No Active Routes</h3>
+                                <p className="text-slate-600 dark:text-slate-400 text-sm">All drivers have completed their assignments.</p>
+                            </motion.div>
                         ) : (
-                            <div className="space-y-3">
-                                <AnimatePresence>
-                                    {selectedItems.map((item) => {
-                                        const invItem = inventory.find((i) => i.itemId === item.itemId);
-                                        return (
-                                            <motion.div
-                                                layout
-                                                initial={{ opacity: 0, scale: 0.95 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                exit={{ opacity: 0, scale: 0.95 }}
-                                                key={item.itemId}
-                                                className="flex items-center justify-between glass-panel-hover p-3 rounded-lg border border-slate-200 dark:border-white/5 bg-black/20"
-                                            >
-                                                <span className="text-sm font-medium text-slate-900 dark:text-white flex-1">{invItem?.item.name}</span>
-                                                <div className="flex items-center gap-3">
-                                                    <input
-                                                        type="number"
-                                                        min="1"
-                                                        className="w-20 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-accent-blue focus:border-accent-blue rounded text-center px-2 py-1.5 text-sm text-slate-900 dark:text-white font-semibold focus:outline-none transition-colors"
-                                                        value={item.quantity}
-                                                        onChange={(e) => updateQuantity(item.itemId, parseInt(e.target.value) || 0)}
-                                                    />
-                                                    <button
-                                                        onClick={() => setSelectedItems(selectedItems.filter(i => i.itemId !== item.itemId))}
-                                                        className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-accent-pink hover:bg-accent-pink/10 rounded-md transition-colors"
-                                                    >
-                                                        <Crosshair className="w-4 h-4 rotate-45" />
-                                                    </button>
-                                                </div>
-                                            </motion.div>
-                                        )
-                                    })}
+                            <div className="space-y-4">
+                                <AnimatePresence mode="popLayout">
+                                    {activeDispatches.map((dispatch) => (
+                                        <DispatchCard key={dispatch.id} dispatch={dispatch} />
+                                    ))}
                                 </AnimatePresence>
                             </div>
                         )}
                     </div>
                 </div>
+            )}
 
-                <button
-                    onClick={handleDispatch}
-                    disabled={!selectedDriver || !selectedWarehouseId || selectedItems.length === 0 || isPending}
-                    className="mt-8 relative w-full group/btn disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <div className="relative w-full py-4 bg-accent-blue hover:bg-accent-blue/90 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors text-slate-900 dark:text-white">
-                        {isPending ? (
-                            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
-                                <Loader2 className="w-5 h-5" />
-                            </motion.div>
-                        ) : (
-                            <Navigation className="w-5 h-5" />
-                        )}
-                        {isPending ? "Assigning Route..." : "Assign to Route"}
-                    </div>
-                </button>
-            </div>
-
-            {/* Active Dispatches */}
-            <div className="space-y-6">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
-                    Active Routes
-                </h2>
-
-                {activeDispatches.length === 0 ? (
-                    <motion.div
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                        className="glass-panel border-slate-200 dark:border-white/5 rounded-[2rem] p-12 flex flex-col items-center justify-center text-center border-dashed"
-                    >
-                        <motion.div
-                            animate={{ y: [0, -10, 0] }}
-                            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                            className="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-white/5 flex items-center justify-center mb-4 border border-slate-200 dark:border-white/10"
-                        >
-                            <Truck className="w-8 h-8 text-slate-500 dark:text-slate-400 opacity-50" />
-                        </motion.div>
-                        <h3 className="text-slate-900 dark:text-white font-bold mb-1">No Active Routes</h3>
-                        <p className="text-slate-600 dark:text-slate-400 text-sm">All drivers have completed their assignments.</p>
-                    </motion.div>
-                ) : (
-                    <div className="space-y-4">
-                        <AnimatePresence mode="popLayout">
-                            {activeDispatches.map((dispatch) => (
-                                <DispatchCard key={dispatch.id} dispatch={dispatch} />
-                            ))}
-                        </AnimatePresence>
-                    </div>
-                )}
-            </div>
+            {activeTab === "bags" && (
+                <DriverBagManager drivers={drivers} />
+            )}
         </div>
     );
 }

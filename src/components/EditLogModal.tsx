@@ -14,18 +14,17 @@ export function EditLogModal({ log }: EditLogProps) {
     const [isSaving, setIsSaving] = useState(false);
 
     // Initializing with existing values
-    const [sold, setSold] = useState(log.items_sold_since_last_refill || 0);
     const [refilled, setRefilled] = useState(log.quantity_refilled || 0);
 
     async function handleSave() {
-        if (sold < 0 || refilled < 0) {
+        if (refilled < 0) {
             toast.error("Quantities cannot be negative");
             return;
         }
 
         setIsSaving(true);
         try {
-            const result = await updateRefillLog(log.id, sold, refilled);
+            const result = await updateRefillLog(log.id, refilled, refilled);
             if (result.success) {
                 toast.success("Log updated successfully");
                 setIsOpen(false);
@@ -49,15 +48,7 @@ export function EditLogModal({ log }: EditLogProps) {
                 }}
             >
                 <div className="flex items-center gap-4 bg-white/[0.03] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/5 hover:border-slate-200 dark:border-white/10 transition-all duration-200">
-                    {/* Sold Metric */}
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">Sold</span>
-                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 font-mono tracking-tight">
-                            {log.items_sold_since_last_refill || 0}
-                        </span>
-                    </div>
 
-                    <div className="w-[1px] h-3 bg-white/10" />
 
                     {/* Refill Metric */}
                     <div className="flex items-center gap-2">
@@ -81,16 +72,7 @@ export function EditLogModal({ log }: EditLogProps) {
 
     return (
         <div className="flex items-center gap-2 bg-slate-200 dark:bg-slate-900 pr-1 pl-3 py-1 rounded-lg border border-accent-blue/50 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase">Sold</span>
-                <input
-                    type="number"
-                    value={sold}
-                    onChange={(e) => setSold(parseInt(e.target.value) || 0)}
-                    className="w-10 bg-black/50 border border-slate-200 dark:border-white/10 rounded text-[11px] font-bold text-center text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue font-mono py-0.5"
-                    autoFocus
-                />
-            </div>
+
 
             <div className="flex items-center gap-1.5">
                 <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase">Refill</span>
@@ -99,6 +81,7 @@ export function EditLogModal({ log }: EditLogProps) {
                     value={refilled}
                     onChange={(e) => setRefilled(parseInt(e.target.value) || 0)}
                     className="w-10 bg-black/50 border border-slate-200 dark:border-white/10 rounded text-[11px] font-bold text-center text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue font-mono py-0.5"
+                    autoFocus
                 />
             </div>
 

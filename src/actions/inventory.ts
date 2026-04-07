@@ -1202,3 +1202,62 @@ export async function getRecentDispatchForDriver(driverId: number): Promise<Acti
         return { success: false, error: error instanceof Error ? error.message : "Failed to fetch latest dispatch" };
     }
 }
+
+/** 
+ * Admin utility to manually adjust driver stock to fix "ghost inventory".
+ * Creates InventoryAdjustments for any positive or negative deltas.
+ */
+export async function editDriverBagStock(
+    driverId: number,
+    edits: { itemId: number, new_quantity: number }[]
+): Promise<ActionResult> {
+    await requireAdmin();
+    try {
+        await prisma.$transaction(async (tx) => {
+            for (const edit of edits) {
+                if (edit.new_quantity < 0) {
+                    throw new Error("Quantity cannot be negative");
+                }
+
+                const driverStock = await (tx as any).driverStock.findUnique({
+                    where: { driverId_itemId: { driverId, itemId: edit.itemId } }
+                });
+
+                if (!driverStock) {
+                    if (edit.new_quantity > 0) {
+                         throw new Error(`Cannot add to nonexistent driver stock for item ${edit.itemId}`);
+                    }
+                    continue; // Nothing to change
+                }
+
+                const delta = edit.new_quantity - driverStock.quantity_on_hand;
+                if (delta === 0) continue;
+
+                await (tx as any).driverStock.update({
+                    where: { id: driverStock.id },
+                    data: { quantity_on_hand: edit.new_quantity }
+                });
+
+                const itemData = await tx.item.findUnique({ where: { id: edit.itemId } });
+                const priceAtAdjustment = itemData?.price_standard || 0;
+                const driverData = await tx.driver.findUnique({ where: { id: driverId } });
+
+                await tx.inventoryAdjustment.create({
+                    data: {
+                        itemId: edit.itemId,
+                        quantity: delta,
+                        reason: `Driver Bag Correction (${delta > 0 ? '+' : ''}${delta})`,
+                        locationName: `Driver: ${driverData?.name || driverId}`,
+                        priceAtAdjustment
+                    }
+                });
+            }
+        });
+        
+        revalidatePath('/admin');
+        notifyClients('driverStock');
+        return { success: true, data: undefined };
+    } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Failed to edit driver bag stock" };
+    }
+}

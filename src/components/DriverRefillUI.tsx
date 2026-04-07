@@ -469,9 +469,27 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                             </button>
                         </div>
 
+                        {/* Search Bar (Offline Capable) */}
+                        <div className="relative mb-4">
+                            <input
+                                type="text"
+                                placeholder="Search by SKU or Item Name..."
+                                value={itemSearch}
+                                onChange={(e) => setItemSearch(e.target.value)}
+                                className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl py-3 pl-11 pr-4 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue transition-colors shadow-sm"
+                            />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        </div>
+
                         <div className="space-y-3">
                             {Object.values(machineItems)
                                 .filter(row => {
+                                    if (itemSearch) {
+                                        const query = itemSearch.toLowerCase();
+                                        const matchesName = row.item.name?.toLowerCase().includes(query);
+                                        const matchesSku = row.item.sku?.toLowerCase().includes(query);
+                                        if (!matchesName && !matchesSku) return false;
+                                    }
                                     if (viewMode === "BAG") {
                                         return row.bagQuantity > 0 || row.refilled > 0;
                                     } else {
@@ -551,7 +569,9 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                                         )}
                                                     </div>
                                                     <div className="flex-1">
-                                                        <h3 className="font-bold text-slate-900 dark:text-white text-base leading-tight mb-1">{row.item.name}</h3>
+                                                        <h3 className="font-bold text-slate-900 dark:text-white text-base leading-tight mb-1">
+                                                            <span className="font-mono text-slate-500 dark:text-slate-400 font-medium">[{row.item.sku || '0000'}]</span> {row.item.name}
+                                                        </h3>
                                                         <div className="flex items-center gap-2">
                                                             <span className={`text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${row.inBag && row.bagQuantity > 0 ? 'bg-accent-blue/20 text-accent-blue' : row.inBag && row.bagQuantity === 0 ? 'bg-accent-pink/20 text-accent-pink' : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400'}`}>
                                                                 Bag: {row.bagQuantity}

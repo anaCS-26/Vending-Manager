@@ -227,7 +227,6 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
                                             <th className="py-4 px-6 text-left">Machine Location</th>
                                             <th className="py-4 px-6 text-left">Product Asset</th>
                                             <th className="py-4 px-6 text-center">Telemetry Adjust</th>
-                                            <th className="py-4 px-6 text-right">Verification</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200 dark:divide-white/[0.03]">
@@ -381,15 +380,15 @@ function RouteCard({ dispatch, isEditing, onEdit, onSave, onCancel, editQtys, se
                                     <div>
                                         <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight mb-1.5">{di.item.name}</p>
                                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/5 px-2 py-1 rounded-lg w-fit bg-slate-50 dark:bg-white/[0.02]">
-                                            <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">OUT:</span> {di.quantity_given}</span>
+                                            <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">GIVEN:</span> {di.quantity_given}</span>
                                             <span className="text-slate-300 dark:text-slate-600">|</span>
-                                            <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">RL:</span> <span className="text-brand-500 font-bold">{refillQty}</span></span>
+                                            <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">REFILL:</span> <span className="text-brand-500 font-bold">{refillQty}</span></span>
                                             <span className="text-slate-300 dark:text-slate-600">|</span>
-                                            <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">RR:</span> <span className="text-accent-orange font-bold">{routeReturnedQty}</span></span>
+                                            <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">RTN(R):</span> <span className="text-accent-orange font-bold">{routeReturnedQty}</span></span>
                                             <span className="text-slate-300 dark:text-slate-600">|</span>
                                             {isEditing ? (
                                                 <div className="flex gap-1 items-center">
-                                                    <span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">RTN:</span>
+                                                    <span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">RTN(HQ):</span>
                                                     <input
                                                         type="number"
                                                         value={editQtys[di.id] ?? di.quantity_returned}
@@ -398,7 +397,7 @@ function RouteCard({ dispatch, isEditing, onEdit, onSave, onCancel, editQtys, se
                                                     />
                                                 </div>
                                             ) : (
-                                                <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">RTN:</span> <span className="text-emerald-500 font-bold">{di.quantity_returned}</span></span>
+                                                <span className="flex gap-1 items-center"><span className="text-slate-400 dark:text-slate-500 tracking-tighter uppercase">RTN(HQ):</span> <span className="text-emerald-500 font-bold">{di.quantity_returned}</span></span>
                                             )}
                                         </div>
                                     </div>
@@ -454,7 +453,7 @@ function EventRow({ log }: { log: any }) {
                 <div className="flex flex-col">
                     <span className="text-sm font-bold text-slate-900 dark:text-white">{log.machine.location_name}</span>
                     <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-slate-400" /> {log.machine.terminalId}
+                        <MapPin className="w-3 h-3 text-slate-400" /> #{log.machine.id}
                     </span>
                 </div>
             </td>
@@ -467,25 +466,6 @@ function EventRow({ log }: { log: any }) {
             <td className="py-5 px-6">
                 <div className="flex justify-center opacity-80 group-hover:opacity-100 transition-opacity">
                     <EditLogModal log={log} />
-                </div>
-            </td>
-            <td className="py-5 px-6 text-right">
-                <div className="flex flex-col items-end gap-1.5">
-                    {verifiedLoss > 0 ? (
-                        <div className="flex flex-col items-end">
-                            <span className="text-[9px] font-bold uppercase px-2 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-full flex items-center gap-1">
-                                <ShieldCheck className="w-3 h-3" /> Verified {verifiedLoss}
-                            </span>
-                        </div>
-                    ) : pendingCount > 0 ? (
-                        <span className="text-[9px] font-bold uppercase px-2 py-1 bg-accent-orange/10 text-accent-orange border border-accent-orange/20 rounded-full flex items-center gap-1 animate-pulse">
-                            <AlertTriangle className="w-3 h-3" /> {pendingCount} Pending
-                        </span>
-                    ) : (
-                        <span className="text-[9px] font-bold uppercase px-2 py-1 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10 rounded-full opacity-60">
-                            Pristine
-                        </span>
-                    )}
                 </div>
             </td>
         </tr>

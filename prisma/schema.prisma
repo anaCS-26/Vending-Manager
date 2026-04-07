@@ -116,9 +116,10 @@ model DriverStock {
   id               Int    @id @default(autoincrement())
   driverId         Int
   itemId           Int
-  quantity_on_hand Int    @default(0)
-  driver           Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  item             Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  quantity_on_hand Int      @default(0)
+  updatedAt        DateTime @updatedAt @default(now())
+  driver           Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  item             Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@unique([driverId, itemId])
 }
