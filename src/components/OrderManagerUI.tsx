@@ -284,7 +284,18 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                 className="w-full pl-11 pr-4 py-3 bg-slate-100 dark:bg-black/40 border border-slate-300 dark:border-white/10 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple/50 transition-all"
                                             />
                                         </div>
-                                        <button onClick={() => setIsCreatingItem(true)} className="px-4 py-3 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all whitespace-nowrap border border-slate-300 dark:border-white/10 flex items-center gap-2">
+                                        <button onClick={() => {
+                                            let maxNumericSku = 0;
+                                            for (const item of items) {
+                                                if (/^\d+$/.test(item.sku)) {
+                                                    const skuNum = parseInt(item.sku, 10);
+                                                    if (skuNum > maxNumericSku) maxNumericSku = skuNum;
+                                                }
+                                            }
+                                            const nextSku = String(maxNumericSku + 1).padStart(4, '0');
+                                            setNewItemForm({ name: "", sku: nextSku, category: "", bulk_format: "" });
+                                            setIsCreatingItem(true);
+                                        }} className="px-4 py-3 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all whitespace-nowrap border border-slate-300 dark:border-white/10 flex items-center gap-2">
                                             <Plus className="w-4 h-4" /> New Item
                                         </button>
                                     </div>
@@ -452,7 +463,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                             </div>
                                             <div>
                                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">SKU <span className="text-accent-pink">*</span></label>
-                                                <input type="text" value={newItemForm.sku} onChange={e => setNewItemForm({ ...newItemForm, sku: e.target.value })} className="w-full px-4 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple uppercase" placeholder="LAY-CLS-01" />
+                                                <input type="text" value={newItemForm.sku} onChange={e => setNewItemForm({ ...newItemForm, sku: e.target.value })} className="w-full px-4 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple uppercase" placeholder="0001" />
                                             </div>
                                             <div className="col-span-2">
                                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Category (e.g., Snacks)</label>
