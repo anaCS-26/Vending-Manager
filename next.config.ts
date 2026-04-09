@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 // @ts-expect-error - next-pwa does not possess types
 import withPWAInit from "next-pwa";
 
+// @ts-expect-error - next-pwa does not possess types for its cache module
 import defaultCache from "next-pwa/cache";
 
 const withPWA = withPWAInit({
