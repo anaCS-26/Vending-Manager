@@ -3,16 +3,15 @@ import { useState, useTransition, useEffect } from "react"
 import { CheckCircle2, ChevronDown, Package, Plus, MapPin, Zap, Search, Loader2, Save, Camera, Navigation, FileText, WifiOff, Wifi } from "lucide-react"
 import { logBatchRefills, getMachineInventoryDetails, getItems, uploadItemImage } from "@/actions/inventory"
 import imageCompression from 'browser-image-compression';
-import { get, set } from 'idb-keyval';
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
-import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import { ShieldCheck, LogOut } from "lucide-react"
 import type { MachineType, DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine } from "@/types"
 
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useDriverStore, OfflineLog } from "@/stores/useDriverStore";
 
 type DriverRefillUIProps = {
     machines: MachineType[];
@@ -31,7 +30,30 @@ type ItemFormState = {
     estimated_stock: number;
 };
 
-export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver' }: DriverRefillUIProps) {
+export function DriverRefillUI({ machines: serverMachines, activeDispatches: serverDispatches, userRole = 'driver' }: DriverRefillUIProps) {
+    // Zustand Store
+    const { 
+        activeDispatches: storeDispatches, 
+        machines: storeMachines, 
+        setServerData, 
+        offlineLogs, 
+        addOfflineLog, 
+        removeOfflineLogs 
+    } = useDriverStore();
+
+    const [hydrated, setHydrated] = useState(false);
+    useEffect(() => {
+        setHydrated(true);
+        // Only update base source of truth from server if we are online.
+        if (navigator.onLine) {
+            setServerData(serverDispatches, serverMachines);
+        }
+    }, [serverDispatches, serverMachines]);
+
+    // Use store data if offline, otherwise default to server to avoid hydration mismatch briefly
+    const activeDispatches = navigator.onLine ? serverDispatches : (storeDispatches.length > 0 ? storeDispatches : serverDispatches);
+    const machines = navigator.onLine ? serverMachines : (storeMachines.length > 0 ? storeMachines : serverMachines);
+
     const [selectedDispatchIndex, setSelectedDispatchIndex] = useState(0)
     const currentDispatch = activeDispatches[selectedDispatchIndex]
 
@@ -50,27 +72,25 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
     // View mode toggle
     const [viewMode, setViewMode] = useState<"BAG" | "MACHINE">("BAG");
 
-    // SSE-based real-time refresh
-    useRealtimeRefresh();
-
-    // Fetch Global Catalog once
+    // Fetch Global Catalog once (if online)
     useEffect(() => {
-        getItems().then(setAllCatalogItems).catch(console.error)
+        if (navigator.onLine) {
+            getItems().then(setAllCatalogItems).catch(console.error)
+        }
     }, [])
 
     const [isOffline, setIsOffline] = useState(false);
-    const [pendingSyncCount, setPendingSyncCount] = useState(0);
+    const pendingSyncCount = offlineLogs.length;
 
     const autoSyncQueue = async () => {
-        // Attempts to push offline-saved logs to HQ when connectivity returns
-        const queue: any[] = await get('offline_sync_queue') || [];
-        if (queue.length === 0) return;
+        if (offlineLogs.length === 0) return;
 
-        toast.info(`Syncing ${queue.length} offline records...`);
+        toast.info(`Syncing ${offlineLogs.length} offline records...`);
         let successCount = 0;
-        const failedQueue = [];
+        const failedTimestamps: string[] = [];
+        const successTimestamps: string[] = [];
 
-        for (const log of queue) {
+        for (const log of offlineLogs) {
             try {
                 const normalizedPayload = (log.payload || []).map((p: any) => ({
                     itemId: p.itemId,
@@ -81,22 +101,23 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                 const result = await logBatchRefills(log.dispatchId, log.machineId, normalizedPayload);
                 if (result.success) {
                     successCount++;
+                    successTimestamps.push(log.timestamp);
                 } else {
-                    failedQueue.push(log);
+                    failedTimestamps.push(log.timestamp);
                 }
             } catch (e) {
-                failedQueue.push(log);
+                failedTimestamps.push(log.timestamp);
             }
         }
 
-        await set('offline_sync_queue', failedQueue);
-        setPendingSyncCount(failedQueue.length);
-
-        if (successCount > 0) {
+        if (successTimestamps.length > 0) {
+            removeOfflineLogs(successTimestamps);
             toast.success(`Successfully synced ${successCount} offline logs.`);
+            // Force a hard refresh of the page to pull down the newly synced server state seamlessly
+            window.location.reload(); 
         }
-        if (failedQueue.length > 0) {
-            toast.error(`Failed to sync ${failedQueue.length} logs. Still in offline queue.`);
+        if (failedTimestamps.length > 0) {
+            toast.error(`Failed to sync ${failedTimestamps.length} logs. Still in offline queue.`);
         }
     };
 
@@ -105,7 +126,8 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
 
         const handleOnline = () => {
             setIsOffline(false);
-            autoSyncQueue();
+            // Give Next a moment to breathe before syncing
+            setTimeout(() => autoSyncQueue(), 1500);
         };
         const handleOffline = () => setIsOffline(true);
 
@@ -113,82 +135,118 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
         window.addEventListener('offline', handleOffline);
 
         // Check pending on boot
-        get('offline_sync_queue').then((queue: any[]) => {
-            if (queue && queue.length > 0) {
-                setPendingSyncCount(queue.length);
-                if (navigator.onLine) {
-                    autoSyncQueue();
-                }
-            }
-        });
+        if (navigator.onLine && offlineLogs.length > 0 && hydrated) {
+            autoSyncQueue();
+        }
 
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
-    }, []);
+    }, [offlineLogs, hydrated]);
 
-    const getRemainingStock = (itemId: number, given: number) => {
+    const getInitialBagQuantity = (itemId: number) => {
         if (!currentDispatch) return 0;
-        const consumed = (currentDispatch.RefillLogs as RefillLogWithMachine[])
+        const assigned = currentDispatch.DispatchItems.find(di => di.itemId === itemId)?.quantity_given || 0;
+        const kept = ((currentDispatch.driver as any)?.DriverStock || []).find((ds: any) => ds.itemId === itemId)?.quantity_on_hand || 0;
+        return assigned + kept;
+    }
+
+    const getRemainingStock = (itemId: number) => {
+        if (!currentDispatch) return 0;
+        
+        const given = getInitialBagQuantity(itemId);
+
+        // 1. Calculate consumed from SERVER database. (Only items put INTO the machine consume given stock)
+        const serverConsumed = (currentDispatch.RefillLogs as RefillLogWithMachine[])
             .filter((r) => r.itemId === itemId)
-            .reduce((sum: number, log: any) => sum + log.quantity_refilled + (log.expired_quantity || 0) + (log.damaged_quantity || 0), 0);
-        return Math.max(0, given - consumed);
+            .reduce((sum: number, log: any) => sum + log.quantity_refilled, 0);
+            
+        // 2. Calculate consumed from pending OFFLINE logs.
+        const offlineConsumed = offlineLogs
+            .filter(log => log.dispatchId === currentDispatch.id)
+            .flatMap(log => log.payload)
+            .filter(payload => payload.itemId === itemId)
+            .reduce((sum, payload) => sum + payload.refilled, 0);
+
+        return Math.max(0, given - serverConsumed - offlineConsumed);
+    }
+
+    const getOfflineSysDelta = (itemId: number) => {
+        if (!currentDispatch || !selectedMachine) return 0;
+        return offlineLogs
+            .filter(log => log.dispatchId === currentDispatch.id && log.machineId === parseInt(selectedMachine))
+            .flatMap(log => log.payload)
+            .filter(payload => payload.itemId === itemId)
+            .reduce((sum, payload) => sum + payload.refilled - payload.returned, 0);
     }
 
     // Initialize list when machine changes
     useEffect(() => {
         if (selectedMachine && currentDispatch) {
             setIsLoadingMachineStock(true)
-            getMachineInventoryDetails(parseInt(selectedMachine))
-                .then(stocks => {
-                    const newState: Record<number, ItemFormState> = {};
 
-                    // Add items already mapped to this machine
-                    stocks.forEach(ms => {
-                        const bagMatched = currentDispatch.DispatchItems.find(di => di.itemId === ms.itemId);
-                        const bagRemaining = bagMatched ? getRemainingStock(bagMatched.itemId, bagMatched.quantity_given) : 0;
+            const targetMachineId = parseInt(selectedMachine);
+            const targetMachine = machines.find(m => m.id === targetMachineId);
+            const machineStocks = (targetMachine as any)?.Stock || [];
 
-                        newState[ms.itemId] = {
-                            itemId: ms.itemId,
-                            item: ms.item,
-                            refilled: 0,
-                            returned: 0,
-                            capacity: (ms as any).capacity || 10, // Defaults to schema capacity
-                            bagQuantity: bagRemaining,
-                            inBag: !!bagMatched,
-                            estimated_stock: ms.estimated_stock
-                        };
-                    });
+            const newState: Record<number, ItemFormState> = {};
 
-                    // Add items that are in the bag but not structurally present in the machine
-                    currentDispatch.DispatchItems.forEach(di => {
-                        if (!newState[di.itemId]) {
-                            newState[di.itemId] = {
-                                itemId: di.itemId,
-                                item: di.item,
-                                refilled: 0,
-                                returned: 0,
-                                capacity: 10,
-                                bagQuantity: getRemainingStock(di.itemId, di.quantity_given),
-                                inBag: true,
-                                estimated_stock: 0
-                            };
-                        }
-                    });
+            // Helper to compile ALL available items for the driver (both newly assigned and kept from yesterday)
+            const driverItemIds = new Set<number>();
+            currentDispatch.DispatchItems.forEach(di => driverItemIds.add(di.itemId));
+            ((currentDispatch.driver as any)?.DriverStock || []).forEach((ds: any) => driverItemIds.add(ds.itemId));
 
-                    setMachineItems(newState);
-                    setIsLoadingMachineStock(false);
-                })
-                .catch(err => {
-                    console.error("Failed to fetch machine stock", err);
-                    setIsLoadingMachineStock(false);
-                })
+            // Helper to extract raw item meta dynamically
+            const getItemMeta = (itemId: number) => {
+                return currentDispatch.DispatchItems.find(di => di.itemId === itemId)?.item || 
+                       ((currentDispatch.driver as any)?.DriverStock || []).find((ds: any) => ds.itemId === itemId)?.item;
+            }
+
+            // 1. Pre-fill any items the machine explicitly holds (so driver sees SYS and capacity)
+            machineStocks.forEach((ms: any) => {
+                const isAvailableToDriver = driverItemIds.has(ms.itemId);
+                const bagRemaining = isAvailableToDriver ? getRemainingStock(ms.itemId) : 0;
+                const sysDelta = getOfflineSysDelta(ms.itemId);
+
+                newState[ms.itemId] = {
+                    itemId: ms.itemId,
+                    item: ms.item,
+                    refilled: 0,
+                    returned: 0,
+                    capacity: ms.capacity || 10,
+                    bagQuantity: bagRemaining,
+                    inBag: isAvailableToDriver,
+                    estimated_stock: Math.max(0, ms.estimated_stock + sysDelta)
+                };
+            });
+
+            // 2. Add anything else in the driver's bag that the machine doesn't structurally own yet
+            driverItemIds.forEach(itemId => {
+                if (!newState[itemId]) {
+                    newState[itemId] = {
+                        itemId: itemId,
+                        item: getItemMeta(itemId),
+                        refilled: 0,
+                        returned: 0,
+                        capacity: 10,
+                        bagQuantity: getRemainingStock(itemId),
+                        inBag: true,
+                        estimated_stock: Math.max(0, getOfflineSysDelta(itemId))
+                    };
+                }
+            });
+
+            setMachineItems(newState);
+            setIsLoadingMachineStock(false);
         } else {
             setMachineItems({});
         }
-    }, [selectedMachine, currentDispatch])
+    }, [selectedMachine, currentDispatch, offlineLogs, machines])
 
+
+    // Avoid rendering mismatch
+    if (!hydrated) return null;
 
     if (!currentDispatch) {
         return (
@@ -215,7 +273,6 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
     }
 
     const handleBatchSubmit = async () => {
-        // Submits refill logs. If offline, saves to IndexDB queue via autoSyncQueue.
         if (!selectedMachine) return;
 
         // Find items that were modified (refilled or returned > 0)
@@ -235,15 +292,13 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
             }));
 
             if (isOffline) {
-                const queue: any[] = await get('offline_sync_queue') || [];
-                queue.push({
+                // Instantly log in Zustand store
+                addOfflineLog({
                     dispatchId: currentDispatch.id,
                     machineId: parseInt(selectedMachine),
                     payload,
                     timestamp: new Date().toISOString()
                 });
-                await set('offline_sync_queue', queue);
-                setPendingSyncCount(queue.length);
 
                 setIsSuccess(true)
                 toast.success("Saved Offline", {
@@ -283,37 +338,17 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
     };
 
 
-    // Add external global item to the row list
-    const handleAddGlobalItem = (catalogItem: any) => {
-        if (machineItems[catalogItem.id]) {
-            toast.info("Item already in view");
-            return;
-        }
-
-        const bagMatched = currentDispatch.DispatchItems.find(di => di.itemId === catalogItem.id);
-        const bagRemaining = bagMatched ? getRemainingStock(bagMatched.itemId, bagMatched.quantity_given) : 0;
-
-        setMachineItems(prev => ({
-            ...prev,
-            [catalogItem.id]: {
-                itemId: catalogItem.id,
-                item: catalogItem,
-                refilled: 0,
-                returned: 0,
-                capacity: 10, // Defaults to 10
-                bagQuantity: bagRemaining,
-                inBag: !!bagMatched,
-                estimated_stock: 0
-            }
-        }));
-
-        setItemSearch("");
-    };
-
     const totalGiven = currentDispatch.DispatchItems.reduce((sum: number, item: DispatchItemWithItem) => sum + item.quantity_given, 0);
     const totalConsumed = (currentDispatch.RefillLogs as RefillLogWithMachine[])
         .reduce((sum: number, log: any) => sum + log.quantity_refilled + (log.expired_quantity || 0) + (log.damaged_quantity || 0), 0);
-    const progressPercent = totalGiven > 0 ? Math.min(100, (totalConsumed / totalGiven) * 100) : 0;
+    
+    // Account for offline progress too
+    const pendingConsumed = offlineLogs
+        .filter(log => log.dispatchId === currentDispatch.id)
+        .flatMap(log => log.payload)
+        .reduce((sum, payload) => sum + payload.refilled + payload.returned, 0);
+
+    const progressPercent = totalGiven > 0 ? Math.min(100, ((totalConsumed + pendingConsumed) / totalGiven) * 100) : 0;
     const isComplete = progressPercent === 100;
 
     const activeMachineDetails = machines.find(m => m.id.toString() === selectedMachine);
@@ -431,7 +466,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                             href={`https://www.google.com/maps/dir/?api=1&destination=${activeMachineDetails.latitude},${activeMachineDetails.longitude}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 px-4 py-2.5 rounded-xl font-bold text-sm transition-colors border border-blue-200 dark:border-blue-500/20 whitespace-nowrap"
+                                            className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 px-4 py-2.5 rounded-xl font-bold text-sm transition-colors border border-blue-200 dark:border-blue-500/20 whitespace-nowrap"
                                         >
                                             <Navigation className="w-4 h-4" />
                                             Get Directions
@@ -577,13 +612,11 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                                                 Bag: {row.bagQuantity}
                                                             </span>
                                                             <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
-                                                                SYS: <span className="font-bold">{row.estimated_stock}</span>
+                                                                SYS: <span className="font-bold">{Math.max(0, row.estimated_stock + row.refilled - row.returned)}</span>
                                                             </span>
                                                         </div>
                                                     </div>
                                                 </div>
-
-
                                             </div>
 
                                             <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-white/5 w-full">
@@ -596,7 +629,7 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                                             <button onClick={() => updateItem(row.itemId, 'returned', Math.max(0, row.returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
                                                             <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.returned}</span>
                                                             <button onClick={() => {
-                                                                const newVal = row.returned + 1; // Can return up to whatever they extracted, but conceptually it reduces estimated stock in UI (not enforced tightly here, backend checks it).
+                                                                const newVal = row.returned + 1;
                                                                 updateItem(row.itemId, 'returned', Math.max(0, newVal));
                                                             }} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
                                                         </div>
@@ -636,9 +669,6 @@ export function DriverRefillUI({ machines, activeDispatches, userRole = 'driver'
                                 </div>
                             )}
                         </div>
-
-                        {/* Search to Add New Items feature has been removed as per user request */}
-
                     </div>
                 )}
             </div>

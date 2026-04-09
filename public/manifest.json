@@ -1,17 +1,16 @@
 {
-    "name": "VendingPro",
-    "short_name": "VendingPro",
-    "description": "Professional inventory management system for vending routes.",
-    "start_url": "/",
-    "display": "standalone",
-    "background_color": "#09090b",
-    "theme_color": "#09090b",
-    "orientation": "portrait-primary",
-    "icons": [
-        {
-            "src": "/favicon.ico",
-            "sizes": "64x64",
-            "type": "image/x-icon"
-        }
-    ]
+  "name": "NexGen Vending System",
+  "short_name": "NexGen VMS",
+  "description": "Vending Management System for Route Drivers and Admins",
+  "start_url": "/driver",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
 }

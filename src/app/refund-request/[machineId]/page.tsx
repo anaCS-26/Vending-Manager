@@ -2,9 +2,10 @@ import { MapPin, Phone, MessageSquare, AlertCircle } from "lucide-react";
 import prisma from "@/lib/prisma";
 import Image from "next/image";
 
-export default async function RefundPortal({ params }: { params: { machineId: string } }) {
+export default async function RefundPortal({ params }: { params: Promise<{ machineId: string }> }) {
+    const { machineId } = await params;
     // In a real app we'd fetch the machine by ID/TerminalID
-    // const machine = await prisma.machine.findFirst({ where: { terminalId: params.machineId }});
+    // const machine = await prisma.machine.findFirst({ where: { terminalId: machineId }});
     // For prototype, just use mock data if not found.
 
     return (
@@ -23,7 +24,7 @@ export default async function RefundPortal({ params }: { params: { machineId: st
                 <div className="text-center mb-10">
                     <h1 className="text-3xl font-bold tracking-tight mb-2">Issue with your order?</h1>
                     <p className="text-slate-600 dark:text-slate-400">
-                        We're sorry for the inconvenience. Request a secure digital refund for Machine <strong>#{params.machineId}</strong> instantly.
+                        We're sorry for the inconvenience. Request a secure digital refund for Machine <strong>#{machineId}</strong> instantly.
                     </p>
                 </div>
 

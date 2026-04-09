@@ -4,6 +4,7 @@ export const authConfig = {
     pages: {
         signIn: '/login', // unified login page
     },
+    trustHost: true,
     session: {
         strategy: "jwt",
         maxAge: 30 * 24 * 60 * 60, // 30 days

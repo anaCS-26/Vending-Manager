@@ -61,7 +61,7 @@ export async function getMachineInventoryDetails(machineId: number) {
 
 /** Fetches the master list of all active products in the system catalog. */
 export async function getItems() {
-    await requireAdmin();
+    await requireDriver();
     return await prisma.item.findMany({
         where: { isActive: true },
         orderBy: { name: 'asc' }
@@ -96,11 +96,13 @@ export async function getDrivers() {
 
 /** Returns all dispatches currently in transit or awaiting completion. */
 export async function getActiveDispatches() {
-    await requireAdmin();
+    await requireDriver();
     return await prisma.dispatch.findMany({
         where: { status: "OPEN" },
         include: {
-            driver: true,
+            driver: {
+                include: { DriverStock: { include: { item: true } } }
+            },
             DispatchItems: { include: { item: true } },
             RefillLogs: { include: { machine: true } }
         }
@@ -302,8 +304,9 @@ export async function dispatchToDriver(
  */
 /** Fetches active machine list for driver selection. */
 export async function getMachines() {
-    await requireAdmin();
+    await requireDriver();
     return await prisma.machine.findMany({
+        include: { Stock: { include: { item: true } } },
         orderBy: { id: 'asc' }
     })
 }
@@ -338,7 +341,12 @@ export async function logRefill(
             if (dispatch.status !== "OPEN") throw new Error("Dispatch is already closed")
 
             const dispatchItem = dispatch.DispatchItems.find(di => di.itemId === itemId)
-            if (!dispatchItem) throw new Error("Item is not part of this dispatch")
+            const driverStock = await tx.driverStock.findUnique({
+                where: { driverId_itemId: { driverId: dispatch.driverId, itemId: itemId } }
+            })
+            const totalGiven = (dispatchItem?.quantity_given || 0) + (driverStock?.quantity_on_hand || 0)
+            
+            if (totalGiven === 0) throw new Error("Item is not assigned to this driver")
 
             const refillAgg = await tx.refillLog.aggregate({
                 where: { dispatchId, itemId },
@@ -348,12 +356,9 @@ export async function logRefill(
                     damaged_quantity: true
                 }
             })
-            const alreadyConsumed =
-                (refillAgg._sum.quantity_refilled || 0) +
-                (refillAgg._sum.expired_quantity || 0) +
-                (refillAgg._sum.damaged_quantity || 0)
-            const remaining = Math.max(0, dispatchItem.quantity_given - alreadyConsumed)
-            const currentlyConsuming = quantity_refilled + returned
+            const alreadyConsumed = (refillAgg._sum.quantity_refilled || 0)
+            const remaining = Math.max(0, totalGiven - alreadyConsumed)
+            const currentlyConsuming = quantity_refilled
             if (currentlyConsuming > remaining) {
                 throw new Error(`Not enough remaining dispatch stock for item ${itemId}. Remaining: ${remaining}, attempted: ${currentlyConsuming}`)
             }
@@ -462,8 +467,13 @@ export async function logBatchRefills(
                 if (item.refilled === 0 && item.returned === 0) continue;
 
                 const dispatchItem = dispatch.DispatchItems.find(di => di.itemId === item.itemId)
-                if (!dispatchItem) {
-                    throw new Error(`Item ${item.itemId} is not part of this dispatch`)
+                const driverStock = await tx.driverStock.findUnique({
+                    where: { driverId_itemId: { driverId: dispatch.driverId, itemId: item.itemId } }
+                })
+                const totalGiven = (dispatchItem?.quantity_given || 0) + (driverStock?.quantity_on_hand || 0)
+
+                if (totalGiven === 0) {
+                    throw new Error(`Item ${item.itemId} is not assigned to this driver`)
                 }
 
                 const refillAgg = await tx.refillLog.aggregate({
@@ -474,12 +484,9 @@ export async function logBatchRefills(
                         damaged_quantity: true
                     }
                 })
-                const alreadyConsumed =
-                    (refillAgg._sum.quantity_refilled || 0) +
-                    (refillAgg._sum.expired_quantity || 0) +
-                    (refillAgg._sum.damaged_quantity || 0)
-                const remaining = Math.max(0, dispatchItem.quantity_given - alreadyConsumed)
-                const currentlyConsuming = item.refilled + item.returned
+                const alreadyConsumed = (refillAgg._sum.quantity_refilled || 0)
+                const remaining = Math.max(0, totalGiven - alreadyConsumed)
+                const currentlyConsuming = item.refilled
                 if (currentlyConsuming > remaining) {
                     throw new Error(`Not enough remaining dispatch stock for item ${item.itemId}. Remaining: ${remaining}, attempted: ${currentlyConsuming}`)
                 }
@@ -1149,6 +1156,7 @@ export async function resetDatabase(): Promise<ActionResult> {
 
 /** Uploads an item image to Vercel Blob and links the URL to the Item record. */
 export async function uploadItemImage(itemId: number, formData: FormData): Promise<ActionResult<string>> {
+    await requireDriver();
     try {
         const file = formData.get('image') as File | null;
         if (!file) throw new Error("No image file provided");

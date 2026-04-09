@@ -27,14 +27,16 @@ export function useRealtimeRefresh() {
 
         const poll = async () => {
             while (active) {
-                try {
-                    const v = await getVersion();
-                    if (lastVersionRef.current !== null && v !== lastVersionRef.current) {
-                        router.refresh();
+                if (navigator.onLine) {
+                    try {
+                        const v = await getVersion();
+                        if (lastVersionRef.current !== null && v !== lastVersionRef.current) {
+                            router.refresh();
+                        }
+                        lastVersionRef.current = v;
+                    } catch {
+                        // Network error — skip this cycle
                     }
-                    lastVersionRef.current = v;
-                } catch {
-                    // Network error — skip this cycle
                 }
                 // Wait 3 seconds before next check
                 await new Promise((resolve) => setTimeout(resolve, 3000));
