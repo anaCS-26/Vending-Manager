@@ -291,7 +291,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 capacity: m.capacity
             }));
 
-            if (isOffline) {
+            if (isOffline || !navigator.onLine) {
                 // Instantly log in Zustand store
                 addOfflineLog({
                     dispatchId: currentDispatch.id,
@@ -311,20 +311,44 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 return;
             }
 
-            const result = await logBatchRefills(currentDispatch.id, parseInt(selectedMachine), payload);
-            if (result.success) {
+            try {
+                const result = await logBatchRefills(currentDispatch.id, parseInt(selectedMachine), payload);
+                if (result.success) {
+                    setIsSuccess(true)
+                    toast.success("Inventory Logs Saved", {
+                        description: `${modifiedItems.length} item(s) pushed to HQ.`,
+                    })
+                    setTimeout(() => {
+                        setIsSuccess(false)
+                        setSelectedMachine("")
+                    }, 1500)
+                } else {
+                    toast.error("Sync Failed", {
+                        description: result.error,
+                    })
+                }
+            } catch (error) {
+                console.warn("Network Error during submit, falling back to offline", error);
+                
+                // Force UI into offline mode since we just proved the network is down
+                setIsOffline(true);
+                
+                // Instantly log in Zustand store as fallback
+                addOfflineLog({
+                    dispatchId: currentDispatch.id,
+                    machineId: parseInt(selectedMachine),
+                    payload,
+                    timestamp: new Date().toISOString()
+                });
+
                 setIsSuccess(true)
-                toast.success("Inventory Logs Saved", {
-                    description: `${modifiedItems.length} item(s) pushed to HQ.`,
+                toast.success("Saved Offline", {
+                    description: `Network unreachable. ${modifiedItems.length} item(s) saved to device temporarily.`,
                 })
                 setTimeout(() => {
                     setIsSuccess(false)
                     setSelectedMachine("")
                 }, 1500)
-            } else {
-                toast.error("Sync Failed", {
-                    description: result.error,
-                })
             }
         })
     }
