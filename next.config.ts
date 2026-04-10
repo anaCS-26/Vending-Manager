@@ -1,16 +1,19 @@
 import type { NextConfig } from "next";
-// @ts-expect-error - next-pwa does not possess types
-import withPWAInit from "next-pwa";
-
-// @ts-expect-error - next-pwa does not possess types for its cache module
-import defaultCache from "next-pwa/cache";
+import withPWAInit from "@ducanh2912/next-pwa";
 
 const withPWA = withPWAInit({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
-  register: true,
-  skipWaiting: true,
-  runtimeCaching: [
+  // The 'register' and 'skipWaiting' are enabled by default in @ducanh2912/next-pwa
+  cacheOnFrontEndNav: true,
+  aggressiveFrontEndNavCaching: true,
+  reloadOnOnline: true,
+  fallbacks: {
+    // This tells the PWA wrapper to load our custom offline page when network fails
+    document: "/~offline",
+  },
+  workboxOptions: {
+    runtimeCaching: [
     {
       urlPattern: /^https:\/\/.*\.public\.blob\.vercel-storage\.com\/.*/i,
       handler: 'StaleWhileRevalidate',
@@ -24,9 +27,9 @@ const withPWA = withPWAInit({
           statuses: [0, 200] // 0 is required for opaque cross-origin responses
         }
       }
-    },
-    ...defaultCache as any
+    }
   ]
+  }
 });
 
 const nextConfig: NextConfig = {
