@@ -55,3 +55,10 @@ next-env.d.ts
 
 # OpenNext
 .open-next
+
+# PWA files
+public/sw.js
+public/sw.js.map
+public/swe-worker*.js
+public/workbox-*.js
+public/fallback-*.js
