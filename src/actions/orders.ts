@@ -143,6 +143,7 @@ export async function completePurchaseOrder(
                     where: { id: orderItem.itemId },
                     data: {
                         cost: newWeightedCost,
+                        last_purchase_cost: item.costPerUnit,
                         price_standard: item.price_standard,
                         price_hospital: item.price_hospital,
                         price_hotel: item.price_hotel

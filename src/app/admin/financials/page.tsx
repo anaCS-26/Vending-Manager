@@ -10,7 +10,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
     const currentView = searchParams.view || "machine";
 
     // 1. Fetch Master Data in Parallel
-    const [refillLogsRaw, machinesRaw, itemsRaw, warehousesRaw] = await Promise.all([
+    const [refillLogsRaw, machinesRaw, itemsRaw, warehousesRaw, returnVerificationsRaw, dispatchItemsRaw] = await Promise.all([
         prisma.refillLog.findMany({
             include: {
                 item: true,
@@ -20,24 +20,41 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
         }),
         prisma.machine.findMany(),
         prisma.item.findMany(),
-        prisma.warehouse.findMany()
+        prisma.warehouse.findMany(),
+        prisma.returnVerification.findMany({
+            where: { status: "VERIFIED", reason: { in: ["DAMAGED", "EXPIRED"] } },
+            include: { item: true, dispatch: true }
+        }),
+        prisma.dispatchItem.findMany({
+            where: { quantity_damaged: { gt: 0 } },
+            include: { item: true, dispatch: true }
+        })
     ]);
 
     // 2. Global Totals Calculation
     let totalRevenue = 0;
-    let totalCOGS = 0;
+    let totalSoldCOGS = 0;
     refillLogsRaw.forEach(log => {
         const sold = log.items_sold_since_last_refill || 0;
         const price = (log as any).price_at_refill ?? log.item.price_standard ?? 0;
         const cost = (log as any).cost_at_refill ?? (log.item as any).cost ?? 0;
-        totalRevenue += sold * price;
-        totalCOGS += sold * cost;
+        
+        // Use exact sales revenue if captured offline, otherwise fallback to realtime logic
+        totalRevenue += log.sales_revenue || (sold * price);
+        totalSoldCOGS += sold * cost;
     });
+
+    // Shrinkage calculations (using item's current WAC as standard)
+    const shrinkageFromRoutes = returnVerificationsRaw.reduce((sum, rv) => sum + (rv.quantity * ((rv.item as any).cost || 0)), 0);
+    const shrinkageFromReturns = dispatchItemsRaw.reduce((sum, di) => sum + ((di.quantity_damaged || 0) * ((di.item as any).cost || 0)), 0);
+    const totalShrinkageCOGS = shrinkageFromRoutes + shrinkageFromReturns;
 
     const totalMachineExpenses = machinesRaw.reduce((acc, m) => acc + ((m as any).operating_cost || 0) + ((m as any).rental_cost || 0), 0);
     const totalWarehouseExpenses = warehousesRaw.reduce((acc, w) => acc + ((w as any).operating_cost || 0) + ((w as any).rental_cost || 0), 0);
     const totalExpenses = totalMachineExpenses + totalWarehouseExpenses;
-    const totalNetProfit = totalRevenue - totalCOGS - totalExpenses;
+    
+    // Net Profit = Collected Revenue - Cost of Sold Items - Shrinkage Cost - Fixed Expenses
+    const totalNetProfit = totalRevenue - totalSoldCOGS - totalShrinkageCOGS - totalExpenses;
 
     // 3. Performance Aggregation Logic
     let displayData: any[] = [];
@@ -47,10 +64,14 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
             const mLogs = refillLogsRaw.filter(l => l.machineId === m.id);
             let revenue = 0;
             let cogs = 0;
+            let shrinkage = 0;
             mLogs.forEach(l => {
                 const sold = l.items_sold_since_last_refill || 0;
-                revenue += sold * ((l as any).price_at_refill ?? l.item.price_standard ?? 0);
-                cogs += sold * ((l as any).cost_at_refill ?? (l.item as any).cost ?? 0);
+                const price = (l as any).price_at_refill ?? l.item.price_standard ?? 0;
+                const cost = (l as any).cost_at_refill ?? (l.item as any).cost ?? 0;
+                revenue += l.sales_revenue || (sold * price);
+                cogs += sold * cost;
+                shrinkage += (l.damaged_quantity || 0) * cost;
             });
             const expenses = ((m as any).operating_cost || 0) + ((m as any).rental_cost || 0);
             return {
@@ -59,21 +80,32 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                 subLabel: `M-${m.id.toString().padStart(4, '0')}`,
                 revenue,
                 cogs,
+                shrinkage,
                 expenses,
-                netProfit: revenue - cogs - expenses
+                netProfit: revenue - cogs - shrinkage - expenses
             };
         }).sort((a, b) => b.revenue - a.revenue);
     }
     else if (currentView === "warehouse") {
         displayData = warehousesRaw.map(w => {
             const wLogs = refillLogsRaw.filter(l => l.dispatch?.warehouseId === w.id);
+            const wReturnVerifs = returnVerificationsRaw.filter(rv => rv.dispatch?.warehouseId === w.id);
+            const wDispatchItems = dispatchItemsRaw.filter(di => di.dispatch?.warehouseId === w.id);
+            
             let revenue = 0;
             let cogs = 0;
             wLogs.forEach(l => {
                 const sold = l.items_sold_since_last_refill || 0;
-                revenue += sold * ((l as any).price_at_refill ?? l.item.price_standard ?? 0);
-                cogs += sold * ((l as any).cost_at_refill ?? (l.item as any).cost ?? 0);
+                const price = (l as any).price_at_refill ?? l.item.price_standard ?? 0;
+                const cost = (l as any).cost_at_refill ?? (l.item as any).cost ?? 0;
+                revenue += l.sales_revenue || (sold * price);
+                cogs += sold * cost;
             });
+            
+            let shrinkage = 0;
+            wReturnVerifs.forEach(rv => shrinkage += (rv.quantity * ((rv.item as any).cost || 0)));
+            wDispatchItems.forEach(di => shrinkage += ((di.quantity_damaged || 0) * ((di.item as any).cost || 0)));
+
             const expenses = ((w as any).operating_cost || 0) + ((w as any).rental_cost || 0);
             return {
                 id: w.id,
@@ -81,31 +113,43 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                 subLabel: w.location,
                 revenue,
                 cogs,
+                shrinkage,
                 expenses,
-                netProfit: revenue - cogs - expenses
+                netProfit: revenue - cogs - shrinkage - expenses
             };
         }).sort((a, b) => b.revenue - a.revenue);
     }
     else if (currentView === "item") {
         displayData = itemsRaw.map(i => {
             const iLogs = refillLogsRaw.filter(l => l.itemId === i.id);
+            const iReturnVerifs = returnVerificationsRaw.filter(rv => rv.itemId === i.id);
+            const iDispatchItems = dispatchItemsRaw.filter(di => di.itemId === i.id);
+
             let revenue = 0;
             let cogs = 0;
             let unitsSold = 0;
             iLogs.forEach(l => {
                 const sold = l.items_sold_since_last_refill || 0;
                 unitsSold += sold;
-                revenue += sold * ((l as any).price_at_refill ?? l.item.price_standard ?? 0);
-                cogs += sold * ((l as any).cost_at_refill ?? (l.item as any).cost ?? 0);
+                const price = (l as any).price_at_refill ?? l.item.price_standard ?? 0;
+                const cost = (l as any).cost_at_refill ?? (l.item as any).cost ?? 0;
+                revenue += l.sales_revenue || (sold * price);
+                cogs += sold * cost;
             });
+
+            let shrinkage = 0;
+            iReturnVerifs.forEach(rv => shrinkage += (rv.quantity * ((rv.item as any).cost || 0)));
+            iDispatchItems.forEach(di => shrinkage += ((di.quantity_damaged || 0) * ((di.item as any).cost || 0)));
+
             return {
                 id: i.id,
                 label: i.name,
                 subLabel: `${unitsSold} Units Reported`,
                 revenue,
                 cogs,
+                shrinkage,
                 expenses: 0,
-                netProfit: revenue - cogs
+                netProfit: revenue - cogs - shrinkage
             };
         }).sort((a, b) => b.revenue - a.revenue);
     }
@@ -146,9 +190,10 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
             </div>
 
             {/* Global Financial Metrics Strip */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <MetricCard title="Gross Revenue" value={totalRevenue} color="text-emerald-500" icon={<TrendingUp className="w-4 h-4" />} />
-                <MetricCard title="Est. Product COGS" value={totalCOGS} color="text-slate-900 dark:text-white" icon={<Package className="w-4 h-4" />} />
+                <MetricCard title="Product COGS" value={totalSoldCOGS} color="text-slate-900 dark:text-white" icon={<Package className="w-4 h-4" />} />
+                <MetricCard title="Shrinkage (Loss)" value={totalShrinkageCOGS} color="text-amber-500" icon={<Package className="w-4 h-4" />} />
                 <MetricCard title="Fixed Operating Exp." value={totalExpenses} color="text-accent-pink" icon={<Building2 className="w-4 h-4" />} />
                 <MetricCard title="Global Net Profit" value={totalNetProfit} color="text-brand-500" glow icon={<PieChart className="w-4 h-4" />} />
             </div>
@@ -181,6 +226,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                                 <th className="py-4 pr-6">Segment Information</th>
                                 <th className="py-4 px-6 text-right">Captured Revenue</th>
                                 <th className="py-4 px-6 text-right">Est. COGS</th>
+                                <th className="py-4 px-6 text-right">Shrinkage Loss</th>
                                 <th className="py-4 px-6 text-right">Operating Exp</th>
                                 <th className="py-4 pl-6 text-right">Net Benefit</th>
                             </tr>
@@ -188,7 +234,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                         <tbody className="divide-y divide-slate-200 dark:divide-white/[0.03]">
                             {displayData.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest text-xs">
+                                    <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest text-xs">
                                         No telemetry matches selected segment filters.
                                     </td>
                                 </tr>
@@ -204,6 +250,9 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                                         </td>
                                         <td className="py-5 px-6 text-right">
                                             <span className="text-sm font-medium text-slate-500 dark:text-slate-400 font-mono">{formatCurrency(item.cogs)}</span>
+                                        </td>
+                                        <td className="py-5 px-6 text-right">
+                                            <span className="text-sm font-medium text-amber-500/80 font-mono">-{formatCurrency(item.shrinkage)}</span>
                                         </td>
                                         <td className="py-5 px-6 text-right">
                                             <span className="text-sm font-medium text-slate-500 dark:text-slate-400 font-mono">{formatCurrency(item.expenses)}</span>

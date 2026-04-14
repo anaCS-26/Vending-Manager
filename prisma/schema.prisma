@@ -20,6 +20,7 @@ model Item {
   price_hospital       Float                 @default(0.0)
   price_hotel          Float                 @default(0.0)
   cost                 Float                 @default(0.0)
+  last_purchase_cost   Float                 @default(0.0)
   imageUrl             String?
   // Relations
   DispatchItems        DispatchItem[]
@@ -166,6 +167,7 @@ model RefillLog {
   itemId                       Int
   quantity_refilled            Int
   items_sold_since_last_refill Int?
+  sales_revenue                Float    @default(0.0)
   price_at_refill              Float    @default(0.0)
   cost_at_refill               Float    @default(0.0)
   damaged_quantity             Int      @default(0)

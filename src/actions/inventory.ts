@@ -373,6 +373,15 @@ export async function logRefill(
             // Keep financial continuity: refilled is treated as sold proxy in this prototype.
             const sales = quantity_refilled;
 
+            // PREVIOUS RESTOCK LOCK-IN: Calculate revenue using the price that was set during the LAST restock.
+            const previousLog = await tx.refillLog.findFirst({
+                where: { machineId, itemId },
+                orderBy: { refilled_at: 'desc' },
+                select: { price_at_refill: true }
+            });
+            const historicPrice = previousLog ? previousLog.price_at_refill : priceToUse;
+            const sales_revenue = sales * historicPrice;
+
             // 2. Create the refill log
             await tx.refillLog.create({
                 data: {
@@ -381,6 +390,7 @@ export async function logRefill(
                     itemId,
                     quantity_refilled,
                     items_sold_since_last_refill: sales,
+                    sales_revenue: sales_revenue,
                     price_at_refill: priceToUse,
                     cost_at_refill: (itemData as any)?.cost || 0,
                     damaged_quantity: damaged,
@@ -493,6 +503,15 @@ export async function logBatchRefills(
                 // Keep financial continuity: refilled is treated as sold proxy in this prototype.
                 const sales = item.refilled;
 
+                // PREVIOUS RESTOCK LOCK-IN
+                const previousLog = await tx.refillLog.findFirst({
+                    where: { machineId, itemId: item.itemId },
+                    orderBy: { refilled_at: 'desc' },
+                    select: { price_at_refill: true }
+                });
+                const historicPrice = previousLog ? previousLog.price_at_refill : priceToUse;
+                const sales_revenue = sales * historicPrice;
+
                 await tx.refillLog.create({
                     data: {
                         dispatchId,
@@ -500,6 +519,7 @@ export async function logBatchRefills(
                         itemId: item.itemId,
                         quantity_refilled: item.refilled,
                         items_sold_since_last_refill: sales,
+                        sales_revenue: sales_revenue,
                         price_at_refill: priceToUse,
                         cost_at_refill: (itemData as any)?.cost || 0,
                         damaged_quantity: 0,

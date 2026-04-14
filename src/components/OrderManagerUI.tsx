@@ -124,7 +124,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
         }, {} as Record<number, number>);
 
         const initialPrices = order.Items.reduce((acc: Record<number, { cost: number, price_standard: number, price_hospital: number, price_hotel: number }>, curr: any) => {
-            acc[curr.id] = { cost: (curr.item as any).cost || 0, price_standard: curr.item.price_standard || 0, price_hospital: curr.item.price_hospital || 0, price_hotel: curr.item.price_hotel || 0 };
+            acc[curr.id] = { cost: (curr.item as any).last_purchase_cost || 0, price_standard: curr.item.price_standard || 0, price_hospital: curr.item.price_hospital || 0, price_hotel: curr.item.price_hotel || 0 };
             return acc;
         }, {} as Record<number, { cost: number, price_standard: number, price_hospital: number, price_hotel: number }>);
 
