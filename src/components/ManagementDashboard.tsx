@@ -284,14 +284,17 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                             </div>
                             <ExportExcelButton
                                 data={filteredItems.map(i => ({
-                                    "Name": i.name,
+                                    "Item Code": i.id,
                                     "Category": i.category,
                                     "SKU": i.sku,
+                                    "Name": i.name,
                                     "Bulk Format": i.bulk_format || "N/A",
                                     "Standard Price": formatCurrency(i.price_standard),
                                     "Hospital Price": formatCurrency(i.price_hospital),
                                     "Hotel Price": formatCurrency(i.price_hotel),
                                     "Cost of Goods": formatCurrency(i.cost || 0),
+                                    "Warehouse Stock": (i.WarehouseStock || []).reduce((acc: number, ws: any) => acc + ws.quantity_on_hand, 0),
+                                    "Machine Stock": (i.MachineStock || []).reduce((acc: number, ms: any) => acc + ms.estimated_stock, 0),
                                     "Total System Stock": (i.WarehouseStock || []).reduce((acc: number, ws: any) => acc + ws.quantity_on_hand, 0) + (i.MachineStock || []).reduce((acc: number, ms: any) => acc + ms.estimated_stock, 0)
                                 }))}
                                 filename="Items_Inventory_Export"
@@ -444,6 +447,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                         "Location": m.location_name,
                                         "District": m.district,
                                         "Machine Code": m.id,
+                                        "Terminal ID (TID)": m.terminalId || "N/A",
                                         "Address": m.address || "N/A",
                                         "Operating Cost": formatCurrency(m.operating_cost || 0),
                                         "Rental Cost": formatCurrency(m.rental_cost || 0),
@@ -472,9 +476,9 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">District</label>
                                         <input type="text" value={machineForm.district} onChange={e => setMachineForm({ ...machineForm, district: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Downtown / East Side" />
                                     </div>
-                                    <div className="hidden">
-                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Machine Code (Auto)</label>
-                                        <input type="text" disabled value="Auto-generated" className="w-full bg-slate-100 dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-400 cursor-not-allowed focus:outline-none" />
+                                    <div>
+                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Terminal ID (TID)</label>
+                                        <input type="text" value={machineForm.terminalId} onChange={e => setMachineForm({ ...machineForm, terminalId: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="e.g. 12345678" />
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Driver Notes</label>
@@ -521,6 +525,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Location Name</label><input type="text" value={machineForm.location_name} onChange={e => setMachineForm({ ...machineForm, location_name: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Name" /></div>
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">District</label><input type="text" value={machineForm.district} onChange={e => setMachineForm({ ...machineForm, district: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="District" /></div>
+                                                    <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Terminal ID</label><input type="text" value={machineForm.terminalId} onChange={e => setMachineForm({ ...machineForm, terminalId: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="TID" /></div>
 
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Notes</label><input type="text" value={machineForm.notes} onChange={e => setMachineForm({ ...machineForm, notes: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Notes" /></div>
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Op Cost (/mo)</label><input type="number" step="0.01" value={machineForm.operating_cost} onChange={e => setMachineForm({ ...machineForm, operating_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Operating Cost" /></div>
@@ -559,10 +564,14 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                     </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                                                     <div className="p-3 bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-2xl">
                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block mb-1">Machine Code</span>
                                                         <span className="text-xs font-mono text-brand-400 font-bold break-all">M-{machine.id.toString().padStart(4, '0')}</span>
+                                                    </div>
+                                                    <div className="p-3 bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-2xl">
+                                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block mb-1">Terminal ID</span>
+                                                        <span className="text-xs font-mono font-bold text-slate-500 dark:text-slate-400 break-all">{machine.terminalId || "Not Set"}</span>
                                                     </div>
                                                     <div className="p-3 bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-2xl">
                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block mb-1">Operating Cost</span>
@@ -736,8 +745,9 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                             <div className="flex items-center gap-3">
                                 <ExportExcelButton
                                     data={filteredWarehouses.map(w => ({
+                                        "Warehouse ID": w.id,
                                         "Name": w.name,
-                                        "Region/District": w.location,
+                                        "Region/District": w.location || "N/A",
                                         "Full Address": w.address || "N/A",
                                         "Operating Cost": formatCurrency(w.operating_cost || 0),
                                         "Rental Cost": formatCurrency(w.rental_cost || 0)
