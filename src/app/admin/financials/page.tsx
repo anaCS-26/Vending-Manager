@@ -22,7 +22,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
         prisma.item.findMany(),
         prisma.warehouse.findMany(),
         prisma.returnVerification.findMany({
-            where: { status: "VERIFIED", reason: { in: ["DAMAGED", "EXPIRED"] } },
+            where: { status: "APPROVED", reason: { in: ["DAMAGED", "EXPIRED"] } },
             include: { item: true, dispatch: true }
         }),
         prisma.dispatchItem.findMany({
