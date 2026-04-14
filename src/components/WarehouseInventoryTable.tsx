@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import { Package, MapPin, Search, Plus, AlertCircle } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Package, MapPin, Search, Plus, AlertCircle, ArrowUp, ArrowDown } from "lucide-react";
 import type { WarehouseWithItem, WarehouseType } from "@/types";
 import type { Item } from "@prisma/client";
 import { formatCurrency } from "@/lib/utils";
@@ -11,9 +11,16 @@ type Props = {
     existingItems: Item[];
 };
 
+type SortKey = "name" | "quantity_on_hand" | "pending_deficit" | "cost" | "price_standard" | "price_hospital" | "price_hotel" | "total_amount" | "location";
+
 export default function WarehouseInventoryTable({ inventory, warehouses, existingItems }: Props) {
+    const topScrollRef = useRef<HTMLDivElement>(null);
+    const tableScrollRef = useRef<HTMLDivElement>(null);
+    const [tableWidth, setTableWidth] = useState<number>(900);
+    const [isScrollable, setIsScrollable] = useState(false);
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | "all">("all");
     const [searchQuery, setSearchQuery] = useState("");
+    const [sortConfig, setSortConfig] = useState<{ key: SortKey | null; direction: "asc" | "desc" }>({ key: null, direction: "desc" });
 
     // Filter stock based on selected warehouse
     let filteredInventory = selectedWarehouseId === "all"
@@ -32,6 +39,91 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
             );
         });
     }
+
+    const handleSort = (key: SortKey) => {
+        if (sortConfig.key === key) {
+            setSortConfig({ key, direction: sortConfig.direction === "desc" ? "asc" : "desc" });
+        } else {
+            // Defaulting string columns to asc, numbers to desc
+            const isStringColumn = key === "name" || key === "location";
+            setSortConfig({ key, direction: isStringColumn ? "asc" : "desc" });
+        }
+    };
+
+    const sortedInventory = [...filteredInventory].sort((a, b) => {
+        if (!sortConfig.key) return 0;
+
+        let aVal: any = 0;
+        let bVal: any = 0;
+
+        switch (sortConfig.key) {
+            case "name":
+                aVal = a.item.name;
+                bVal = b.item.name;
+                break;
+            case "quantity_on_hand":
+                aVal = a.quantity_on_hand;
+                bVal = b.quantity_on_hand;
+                break;
+            case "pending_deficit":
+                aVal = a.pending_deficit;
+                bVal = b.pending_deficit;
+                break;
+            case "cost":
+                aVal = (a.item as any).cost || 0;
+                bVal = (b.item as any).cost || 0;
+                break;
+            case "price_standard":
+                aVal = (a.item as any).price_standard || 0;
+                bVal = (b.item as any).price_standard || 0;
+                break;
+            case "price_hospital":
+                aVal = (a.item as any).price_hospital || 0;
+                bVal = (b.item as any).price_hospital || 0;
+                break;
+            case "price_hotel":
+                aVal = (a.item as any).price_hotel || 0;
+                bVal = (b.item as any).price_hotel || 0;
+                break;
+            case "total_amount":
+                aVal = a.quantity_on_hand * ((a.item as any).cost || 0);
+                bVal = b.quantity_on_hand * ((b.item as any).cost || 0);
+                break;
+            case "location":
+                aVal = a.warehouse?.name || "";
+                bVal = b.warehouse?.name || "";
+                break;
+        }
+
+        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+    });
+
+    const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
+        if (sortConfig.key !== columnKey) return <span className="w-4 h-4 inline-block ml-1 opacity-0 group-hover:opacity-30 transition-opacity" />;
+        return sortConfig.direction === "desc" 
+            ? <ArrowDown className="w-4 h-4 ml-1 inline-block text-brand-500" />
+            : <ArrowUp className="w-4 h-4 ml-1 inline-block text-brand-500" />;
+    };
+
+    // Keep the top scrollbar track perfectly synchronized with the true width of the table content
+    useEffect(() => {
+        if (!tableScrollRef.current) return;
+        const observer = new ResizeObserver(() => {
+            if (tableScrollRef.current) {
+                const scrollW = tableScrollRef.current.scrollWidth;
+                const clientW = tableScrollRef.current.clientWidth;
+                setTableWidth(scrollW);
+                setIsScrollable(scrollW > clientW);
+            }
+        });
+        observer.observe(tableScrollRef.current);
+        if (tableScrollRef.current.firstElementChild) {
+            observer.observe(tableScrollRef.current.firstElementChild);
+        }
+        return () => observer.disconnect();
+    }, [filteredInventory]);
 
     return (
         <>
@@ -72,24 +164,67 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                     </div>
                 </div>
 
-                <div className="overflow-x-auto scroll-fade-right custom-scrollbar">
+                {isScrollable && (
+                    <div 
+                        className="overflow-x-auto custom-scrollbar w-full border-b border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]" 
+                        ref={topScrollRef} 
+                        style={{ height: '14px' }}
+                        onScroll={(e) => {
+                            if (tableScrollRef.current && topScrollRef.current) {
+                                tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+                            }
+                        }}
+                    >
+                        <div style={{ width: `${tableWidth}px`, height: '1px' }}></div>
+                    </div>
+                )}
+                
+                <div 
+                    className="overflow-x-auto custom-scrollbar"
+                    ref={tableScrollRef}
+                    onScroll={(e) => {
+                        if (tableScrollRef.current && topScrollRef.current) {
+                            topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+                        }
+                    }}
+                >
                     <table className="w-full text-left border-collapse min-w-[900px]">
                         <thead>
                             <tr className="border-b border-slate-200 dark:border-white/5 text-[11px] text-slate-600 dark:text-slate-400 font-bold bg-slate-50 dark:bg-black/20 tracking-wider">
-                                <th className="px-6 py-4 uppercase w-16 text-center">SR #</th>
-                                <th className="px-6 py-4 uppercase">Items Name</th>
-                                <th className="px-6 py-4 uppercase text-right w-28 leading-snug">Store Remain<br />/ Pcs</th>
-                                <th className="px-6 py-4 uppercase text-right w-28 leading-snug">Shortage<br />/ Due</th>
-                                <th className="px-6 py-4 uppercase text-right w-24 leading-snug">COG Price<br />/ Pcs</th>
-                                <th className="px-6 py-4 uppercase text-right w-24 leading-snug">Standard<br />Tier Price</th>
-                                <th className="px-6 py-4 uppercase text-right text-slate-400 w-24 leading-snug">Hospital<br />Tier Price</th>
-                                <th className="px-6 py-4 uppercase text-right text-slate-400 w-24 leading-snug">Hotel<br />Tier Price</th>
-                                <th className="px-6 py-4 uppercase text-right w-28 leading-snug">Total<br />Amount</th>
-                                {selectedWarehouseId === "all" && <th className="px-6 py-4 uppercase text-center w-32">Location</th>}
+                                <th className="px-6 py-4 uppercase w-16 text-center whitespace-nowrap">SR #</th>
+                                <th className="px-6 py-4 uppercase cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("name")}>
+                                    <div className="flex items-center">Item Name <SortIcon columnKey="name" /></div>
+                                </th>
+                                <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("quantity_on_hand")}>
+                                    <div className="flex items-center justify-end"><SortIcon columnKey="quantity_on_hand" /> Stock Remain</div>
+                                </th>
+                                <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("pending_deficit")}>
+                                    <div className="flex items-center justify-end"><SortIcon columnKey="pending_deficit" /> Due / Owed</div>
+                                </th>
+                                <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("cost")}>
+                                    <div className="flex items-center justify-end"><SortIcon columnKey="cost" /> Unit Cost</div>
+                                </th>
+                                <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_standard")}>
+                                    <div className="flex items-center justify-end"><SortIcon columnKey="price_standard" /> Std Price</div>
+                                </th>
+                                <th className="px-6 py-4 uppercase text-right text-slate-400 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_hospital")}>
+                                    <div className="flex items-center justify-end"><SortIcon columnKey="price_hospital" /> Hosp Price</div>
+                                </th>
+                                <th className="px-6 py-4 uppercase text-right text-slate-400 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_hotel")}>
+                                    <div className="flex items-center justify-end"><SortIcon columnKey="price_hotel" /> Hotel Price</div>
+                                </th>
+                                <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("total_amount")}>
+                                    <div className="flex items-center justify-end"><SortIcon columnKey="total_amount" /> Total Value</div>
+                                </th>
+                                {selectedWarehouseId === "all" && (
+                                    <th className="px-6 py-4 uppercase text-center cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("location")}>
+                                        <div className="flex items-center justify-center">Location <SortIcon columnKey="location" /></div>
+                                    </th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-white/5">
-                            {filteredInventory.map((stock, index) => {
+                            {sortedInventory.map((stock, index) => {
                                 const totalAmount = stock.quantity_on_hand * (stock.item as any).cost;
                                 const bulkFormat = (stock.item as any).bulk_format ? ` (${(stock.item as any).bulk_format}) ` : " ";
                                 const isZero = stock.quantity_on_hand === 0;
@@ -162,7 +297,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                         </td>
                                         {selectedWarehouseId === "all" && (
                                             <td className="px-6 py-4 text-center">
-                                                <span className="inline-flex items-center px-2 py-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300 text-[10px] font-bold uppercase tracking-widest rounded-md truncate max-w-[120px]">
+                                                <span className="block mx-auto px-2 py-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300 text-[10px] font-bold uppercase tracking-widest rounded-md truncate max-w-[150px]">
                                                     {stock.warehouse?.name || 'Unknown'}
                                                 </span>
                                             </td>
@@ -174,7 +309,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                     </table>
                 </div>
 
-                {filteredInventory.length === 0 && (
+                {sortedInventory.length === 0 && (
                     <div className="p-16 text-center flex flex-col items-center justify-center">
                         <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/5 flex items-center justify-center border border-slate-200 dark:border-white/10 mb-4">
                             <Package className="w-8 h-8 text-slate-500 dark:text-slate-400 opacity-50" />

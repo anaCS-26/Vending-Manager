@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import { Package, MapPin, Search, AlertCircle, TrendingDown, Clock } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Package, MapPin, Search, AlertCircle, TrendingDown, Clock, ArrowUp, ArrowDown } from "lucide-react";
 import type { MachineStockWithItem, MachineType } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import MachineAuditModal from "./MachineAuditModal";
@@ -10,9 +10,16 @@ type Props = {
     machines: MachineType[];
 };
 
+type SortKey = "name" | "estimated_stock" | "last_refilled_at" | "location";
+
 export default function MachineInventoryTable({ inventory, machines }: Props) {
+    const topScrollRef = useRef<HTMLDivElement>(null);
+    const tableScrollRef = useRef<HTMLDivElement>(null);
+    const [tableWidth, setTableWidth] = useState<number>(900);
+    const [isScrollable, setIsScrollable] = useState(false);
     const [selectedMachineId, setSelectedMachineId] = useState<number | "all">("all");
     const [searchQuery, setSearchQuery] = useState("");
+    const [sortConfig, setSortConfig] = useState<{ key: SortKey | null; direction: "asc" | "desc" }>({ key: null, direction: "desc" });
     const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
     // Filter stock based on selected machine
@@ -32,6 +39,71 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
             );
         });
     }
+
+    const handleSort = (key: SortKey) => {
+        if (sortConfig.key === key) {
+            setSortConfig({ key, direction: sortConfig.direction === "desc" ? "asc" : "desc" });
+        } else {
+            // Default to desc for numeric/date, asc for text
+            const isStringColumn = key === "name" || key === "location";
+            setSortConfig({ key, direction: isStringColumn ? "asc" : "desc" });
+        }
+    };
+
+    const sortedInventory = [...filteredInventory].sort((a, b) => {
+        if (!sortConfig.key) return 0;
+
+        let aVal: any = 0;
+        let bVal: any = 0;
+
+        switch (sortConfig.key) {
+            case "name":
+                aVal = a.item.name;
+                bVal = b.item.name;
+                break;
+            case "estimated_stock":
+                aVal = a.estimated_stock;
+                bVal = b.estimated_stock;
+                break;
+            case "last_refilled_at":
+                aVal = new Date(a.last_refilled_at).getTime();
+                bVal = new Date(b.last_refilled_at).getTime();
+                break;
+            case "location":
+                aVal = a.machine?.location_name || "";
+                bVal = b.machine?.location_name || "";
+                break;
+        }
+
+        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+    });
+
+    const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
+        if (sortConfig.key !== columnKey) return <span className="w-4 h-4 inline-block ml-1 opacity-0 group-hover:opacity-30 transition-opacity" />;
+        return sortConfig.direction === "desc" 
+            ? <ArrowDown className="w-4 h-4 ml-1 inline-block text-brand-500" />
+            : <ArrowUp className="w-4 h-4 ml-1 inline-block text-brand-500" />;
+    };
+
+    // Keep the top scrollbar track perfectly synchronized with the true width of the table content
+    useEffect(() => {
+        if (!tableScrollRef.current) return;
+        const observer = new ResizeObserver(() => {
+            if (tableScrollRef.current) {
+                const scrollW = tableScrollRef.current.scrollWidth;
+                const clientW = tableScrollRef.current.clientWidth;
+                setTableWidth(scrollW);
+                setIsScrollable(scrollW > clientW);
+            }
+        });
+        observer.observe(tableScrollRef.current);
+        if (tableScrollRef.current.firstElementChild) {
+            observer.observe(tableScrollRef.current.firstElementChild);
+        }
+        return () => observer.disconnect();
+    }, [filteredInventory]);
 
     return (
         <>
@@ -78,19 +150,50 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                 </div>
             </div>
 
-            <div className="overflow-x-auto scroll-fade-right custom-scrollbar">
+            {isScrollable && (
+                <div 
+                    className="overflow-x-auto custom-scrollbar w-full border-b border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]" 
+                    ref={topScrollRef} 
+                    style={{ height: '14px' }}
+                    onScroll={(e) => {
+                        if (tableScrollRef.current && topScrollRef.current) {
+                            tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+                        }
+                    }}
+                >
+                    <div style={{ width: `${tableWidth}px`, height: '1px' }}></div>
+                </div>
+            )}
+            
+            <div 
+                className="overflow-x-auto custom-scrollbar"
+                ref={tableScrollRef}
+                onScroll={(e) => {
+                    if (tableScrollRef.current && topScrollRef.current) {
+                        topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+                    }
+                }}
+            >
                 <table className="w-full text-left border-collapse min-w-[900px]">
                     <thead>
                         <tr className="border-b border-slate-200 dark:border-white/5 text-[11px] text-slate-600 dark:text-slate-400 font-bold bg-slate-50 dark:bg-black/20 tracking-wider">
-                            <th className="px-6 py-4 uppercase w-16 text-center">SR #</th>
-                            <th className="px-6 py-4 uppercase">Items Name</th>
-                            <th className="px-6 py-4 uppercase text-right">Est. Machine Stock</th>
-                            <th className="px-6 py-4 uppercase text-right">Last Refill</th>
-                            <th className="px-6 py-4 uppercase text-center w-48">Location</th>
+                            <th className="px-6 py-4 uppercase w-16 text-center whitespace-nowrap">SR #</th>
+                            <th className="px-6 py-4 uppercase cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("name")}>
+                                <div className="flex items-center">Item Name <SortIcon columnKey="name" /></div>
+                            </th>
+                            <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("estimated_stock")}>
+                                <div className="flex items-center justify-end"><SortIcon columnKey="estimated_stock" /> Est. Machine Stock</div>
+                            </th>
+                            <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("last_refilled_at")}>
+                                <div className="flex items-center justify-end"><SortIcon columnKey="last_refilled_at" /> Last Refill</div>
+                            </th>
+                            <th className="px-6 py-4 uppercase text-center w-48 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("location")}>
+                                <div className="flex items-center justify-center">Location <SortIcon columnKey="location" /></div>
+                            </th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-white/5">
-                        {filteredInventory.map((stock, index) => {
+                        {sortedInventory.map((stock, index) => {
                             const isLow = stock.estimated_stock < 5;
                             const isZero = stock.estimated_stock === 0;
                             const lastRefill = new Date(stock.last_refilled_at).toLocaleDateString() + ' ' + new Date(stock.last_refilled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -130,7 +233,7 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <span className="inline-flex items-center px-2 py-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300 text-[10px] font-bold uppercase tracking-widest rounded-md truncate max-w-[160px]">
+                                        <span className="block mx-auto px-2 py-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300 text-[10px] font-bold uppercase tracking-widest rounded-md truncate max-w-[160px]">
                                             {stock.machine?.location_name || 'Unknown'}
                                         </span>
                                     </td>
@@ -141,7 +244,7 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                 </table>
             </div>
 
-                {filteredInventory.length === 0 && (
+                {sortedInventory.length === 0 && (
                     <div className="p-16 text-center flex flex-col items-center justify-center">
                         <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/5 flex items-center justify-center border border-slate-200 dark:border-white/10 mb-4">
                             <Package className="w-8 h-8 text-slate-500 dark:text-slate-400 opacity-50" />

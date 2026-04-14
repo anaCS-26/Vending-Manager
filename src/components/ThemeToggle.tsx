@@ -17,7 +17,23 @@ export function ThemeToggle() {
 
     return (
         <button
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={() => {
+                const nextTheme = theme === "dark" ? "light" : "dark";
+                if (!document.startViewTransition) {
+                    setTheme(nextTheme);
+                    return;
+                }
+                document.startViewTransition(() => {
+                    // Force the actual CSS DOM change synchronously so the Browser's 
+                    // View Transition API captures the "new" screenshot immediately
+                    document.documentElement.classList.remove(theme === "dark" ? "dark" : "light");
+                    document.documentElement.classList.add(nextTheme);
+                    document.documentElement.style.colorScheme = nextTheme;
+                    
+                    // Sync up the React/Next-Themes state afterward
+                    setTheme(nextTheme);
+                });
+            }}
             className="p-2 rounded-xl border border-border bg-background hover:bg-neo-surface transition-colors flex items-center justify-center relative overflow-hidden group"
             aria-label="Toggle Theme"
         >

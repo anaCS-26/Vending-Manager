@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import ExportExcelButton from "@/components/ExportExcelButton";
+import SortableFinancialTable from "@/components/SortableFinancialTable";
 
 export default async function FinancialsPage(props: { searchParams: Promise<{ view?: string }> }) {
     const searchParams = await props.searchParams;
@@ -219,53 +220,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                     </div>
                 </div>
 
-                <div className="overflow-x-auto scroll-fade-right custom-scrollbar">
-                    <table className="w-full text-left border-collapse min-w-[1000px]">
-                        <thead>
-                            <tr className="border-b border-slate-200 dark:border-white/5 text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                                <th className="py-4 pr-6">Segment Information</th>
-                                <th className="py-4 px-6 text-right">Captured Revenue</th>
-                                <th className="py-4 px-6 text-right">Est. COGS</th>
-                                <th className="py-4 px-6 text-right">Shrinkage Loss</th>
-                                <th className="py-4 px-6 text-right">Operating Exp</th>
-                                <th className="py-4 pl-6 text-right">Net Benefit</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-white/[0.03]">
-                            {displayData.length === 0 ? (
-                                <tr>
-                                    <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest text-xs">
-                                        No telemetry matches selected segment filters.
-                                    </td>
-                                </tr>
-                            ) : (
-                                displayData.map((item) => (
-                                    <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 flex-row">
-                                        <td className="py-5 pr-6">
-                                            <div className="font-bold text-slate-900 dark:text-white text-sm uppercase">{item.label}</div>
-                                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">{item.subLabel}</div>
-                                        </td>
-                                        <td className="py-5 px-6 text-right">
-                                            <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">{formatCurrency(item.revenue)}</span>
-                                        </td>
-                                        <td className="py-5 px-6 text-right">
-                                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 font-mono">{formatCurrency(item.cogs)}</span>
-                                        </td>
-                                        <td className="py-5 px-6 text-right">
-                                            <span className="text-sm font-medium text-amber-500/80 font-mono">-{formatCurrency(item.shrinkage)}</span>
-                                        </td>
-                                        <td className="py-5 px-6 text-right">
-                                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 font-mono">{formatCurrency(item.expenses)}</span>
-                                        </td>
-                                        <td className="py-5 pl-6 text-right">
-                                            <span className="text-base font-black text-brand-500 font-mono">{formatCurrency(item.netProfit)}</span>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                <SortableFinancialTable data={displayData} />
             </div>
         </div>
     );
@@ -273,15 +228,22 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
 
 function MetricCard({ title, value, color, icon, glow = false }: { title: string, value: number, color: string, icon: React.ReactNode, glow?: boolean }) {
     return (
-        <div className={`bg-white dark:bg-black/20 border transition-all rounded-[2rem] p-6 group relative overflow-hidden ${glow ? 'border-brand-500/30 hover:border-brand-500/50 shadow-[0_0_20px_rgba(59,130,246,0.1)]' : 'border-slate-300 dark:border-white/10 hover:border-slate-400 dark:hover:border-white/20'}`}>
+        <div className={`bg-white dark:bg-black/20 border transition-all rounded-[2rem] p-6 group relative overflow-hidden @container ${glow ? 'border-brand-500/30 hover:border-brand-500/50 shadow-[0_0_20px_rgba(59,130,246,0.1)]' : 'border-slate-300 dark:border-white/10 hover:border-slate-400 dark:hover:border-white/20'}`}>
             <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl opacity-20 group-hover:opacity-30 transition-all ${color === 'text-emerald-500' ? 'bg-emerald-500' : color === 'text-brand-500' ? 'bg-brand-500' : color === 'text-accent-pink' ? 'bg-accent-pink' : 'bg-slate-500'}`}></div>
             <div className="flex items-center gap-3 mb-4">
-                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${glow ? 'bg-brand-500/10 text-brand-500 border border-brand-500/20' : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5'}`}>
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center min-w-10 ${glow ? 'bg-brand-500/10 text-brand-500 border border-brand-500/20' : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5'}`}>
                     {icon}
                 </div>
-                <h3 className="font-bold text-slate-600 dark:text-slate-400 text-[10px] uppercase tracking-widest">{title}</h3>
+                <h3 className="font-bold text-slate-600 dark:text-slate-400 text-[10px] uppercase tracking-widest leading-tight">{title}</h3>
             </div>
-            <p className={`text-3xl font-black font-mono tracking-tight ${color}`}>{formatCurrency(value)}</p>
+            <div className="w-full @container">
+                <p 
+                    className={`font-black font-mono tracking-tight ${color} whitespace-nowrap`}
+                    style={{ fontSize: 'clamp(1rem, 16cqw, 1.875rem)' }}
+                >
+                    {formatCurrency(value)}
+                </p>
+            </div>
         </div>
     );
 }
