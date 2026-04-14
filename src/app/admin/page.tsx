@@ -314,14 +314,16 @@ export default async function AdminDashboard() {
                                         </div>
                                         <div className="flex-1 -mt-1">
                                             <div className="flex justify-between items-start mb-1">
-                                                <p className="text-sm font-semibold text-slate-900 dark:text-white group-hover/timeline:text-accent-purple transition-colors">Refill Synchronized</p>
+                                                <p className="text-sm font-semibold text-slate-900 dark:text-white group-hover/timeline:text-accent-purple transition-colors">
+                                                    {log.dispatch ? "Refill Synchronized" : "Audit Reconciled"}
+                                                </p>
                                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                                                     {new Intl.DateTimeFormat('en', { timeStyle: 'short' }).format(new Date(log.refilled_at))}
                                                 </span>
                                             </div>
                                             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                                                <span className="text-accent-blue font-bold">{log.dispatch.driver.name}</span> verified
-                                                <span className="text-slate-900 dark:text-white mx-1 font-mono">{log.quantity_refilled} units</span>
+                                                <span className="text-accent-blue font-bold">{log.dispatch?.driver?.name || "System Auditor"}</span> verified
+                                                <span className="text-slate-900 dark:text-white mx-1 font-mono">{log.quantity_refilled || log.items_sold_since_last_refill} units</span>
                                                 at {log.machine.location_name}.
                                             </p>
                                         </div>

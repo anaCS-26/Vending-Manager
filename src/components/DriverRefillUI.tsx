@@ -24,7 +24,6 @@ type ItemFormState = {
     item: any;
     refilled: number;
     returned: number;
-    capacity: number;
     bagQuantity: number;
     inBag: boolean;
     estimated_stock: number;
@@ -95,8 +94,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 const normalizedPayload = (log.payload || []).map((p: any) => ({
                     itemId: p.itemId,
                     refilled: p.refilled || 0,
-                    returned: p.returned ?? p.expired ?? 0,
-                    capacity: p.capacity || 10
+                    returned: p.returned ?? p.expired ?? 0
                 }));
                 const result = await logBatchRefills(log.dispatchId, log.machineId, normalizedPayload);
                 if (result.success) {
@@ -214,7 +212,6 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                     item: ms.item,
                     refilled: 0,
                     returned: 0,
-                    capacity: ms.capacity || 10,
                     bagQuantity: bagRemaining,
                     inBag: isAvailableToDriver,
                     estimated_stock: Math.max(0, ms.estimated_stock + sysDelta)
@@ -229,7 +226,6 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                         item: getItemMeta(itemId),
                         refilled: 0,
                         returned: 0,
-                        capacity: 10,
                         bagQuantity: getRemainingStock(itemId),
                         inBag: true,
                         estimated_stock: Math.max(0, getOfflineSysDelta(itemId))
@@ -287,8 +283,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
             const payload = modifiedItems.map(m => ({
                 itemId: m.itemId,
                 refilled: m.refilled,
-                returned: m.returned,
-                capacity: m.capacity
+                returned: m.returned
             }));
 
             if (isOffline || !navigator.onLine) {

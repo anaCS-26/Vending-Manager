@@ -390,11 +390,6 @@ export async function logRefill(
             })
 
             // 3. Update or Create MachineStock
-            const currentStock = await tx.machineStock.findUnique({
-                where: { machineId_itemId: { machineId, itemId } }
-            });
-            const cap = currentStock?.capacity || 10;
-
             await tx.machineStock.upsert({
                 where: { machineId_itemId: { machineId, itemId } },
                 update: {
@@ -404,8 +399,7 @@ export async function logRefill(
                 create: {
                     machineId,
                     itemId,
-                    capacity: cap,
-                    estimated_stock: Math.min(cap, Math.max(0, quantity_refilled - returned)),
+                    estimated_stock: Math.max(0, quantity_refilled - returned),
                     last_refilled_at: new Date()
                 }
             });
@@ -442,7 +436,7 @@ export async function logRefill(
 export async function logBatchRefills(
     dispatchId: number,
     machineId: number,
-    items: { itemId: number, refilled: number, returned: number, capacity: number }[]
+    items: { itemId: number, refilled: number, returned: number }[]
 ): Promise<ActionResult> {
     try {
         const dispatchAuthCheck = await prisma.dispatch.findUnique({ where: { id: dispatchId }, select: { driverId: true } });
@@ -462,7 +456,6 @@ export async function logBatchRefills(
             for (const item of items) {
                 assertWholeNonNegative(item.refilled, `Refilled quantity for item ${item.itemId}`)
                 assertWholeNonNegative(item.returned, `Returned quantity for item ${item.itemId}`)
-                assertWholeNonNegative(item.capacity, `Capacity for item ${item.itemId}`)
 
                 if (item.refilled === 0 && item.returned === 0) continue;
 
@@ -515,23 +508,16 @@ export async function logBatchRefills(
                     } as any
                 });
 
-                const currentStock = await tx.machineStock.findUnique({
-                    where: { machineId_itemId: { machineId, itemId: item.itemId } }
-                })
-                const safeCapacity = Math.max(1, item.capacity)
-
                 await tx.machineStock.upsert({
                     where: { machineId_itemId: { machineId, itemId: item.itemId } },
                     update: {
-                        capacity: safeCapacity,
                         estimated_stock: { increment: item.refilled - item.returned },
                         last_refilled_at: new Date()
                     },
                     create: {
                         machineId,
                         itemId: item.itemId,
-                        capacity: safeCapacity,
-                        estimated_stock: Math.min(safeCapacity, Math.max(0, item.refilled - item.returned)),
+                        estimated_stock: Math.max(0, item.refilled - item.returned),
                         last_refilled_at: new Date()
                     }
                 });
@@ -1267,5 +1253,119 @@ export async function editDriverBagStock(
         return { success: true, data: undefined };
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to edit driver bag stock" };
+    }
+}
+
+/**
+ * ============================================================================
+ * AUDIT & RECONCILIATION
+ * Enterprise tools for discrepancy auditing and system ledgers.
+ * ============================================================================
+ */
+
+export async function reconcileMachineAudit(
+    machineId: number,
+    itemAudits: { itemId: number, physicalCount: number }[]
+): Promise<ActionResult> {
+    const session = await requireAdmin();
+    const actorId = session.user ? parseInt((session.user as any).id, 10) : null;
+    const actorRole = session.user ? (session.user as any).role : "SYSTEM";
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            const currentStock = await tx.machineStock.findMany({
+                where: { machineId },
+                include: { item: true }
+            });
+
+            // Map existing stock for fast lookup
+            const stockMap = new Map(currentStock.map(s => [s.itemId, s]));
+            
+            const machineData = await tx.machine.findUnique({ where: { id: machineId }});
+
+            let auditLogChanges: {itemId: number, expected: number, actual: number, sold: number}[] = [];
+
+            for (const audit of itemAudits) {
+                const stock = stockMap.get(audit.itemId);
+                const expected = stock ? stock.estimated_stock : 0;
+                
+                // If there's a discrepancy
+                if (expected !== audit.physicalCount) {
+                    const diff = expected - audit.physicalCount;
+
+                    // If physical is LESS than expected, missing items were SOLD or LOST.
+                    // We log this as sales to maintain financial continuity.
+                    if (diff > 0) {
+                        const itemData = await tx.item.findUnique({ where: { id: audit.itemId } });
+                        let priceToUse = itemData?.price_standard || 0;
+                        if (machineData?.tier === 'HOSPITAL') priceToUse = itemData?.price_hospital || 0;
+                        else if (machineData?.tier === 'HOTEL') priceToUse = itemData?.price_hotel || 0;
+
+                        // Create a Dispatch-less RefillLog to push it to the financials as sales revenue
+                        await tx.refillLog.create({
+                            data: {
+                                dispatchId: null, // Critical: this enables standalone sales logging!
+                                machineId: machineId,
+                                itemId: audit.itemId,
+                                quantity_refilled: 0,
+                                items_sold_since_last_refill: diff,
+                                price_at_refill: priceToUse,
+                                cost_at_refill: (itemData as any)?.cost || 0,
+                                damaged_quantity: 0,
+                                expired_quantity: 0
+                            } as any
+                        });
+                    }
+                    
+                    // Update actual machine stock to the physical count
+                    await tx.machineStock.upsert({
+                        where: { machineId_itemId: { machineId, itemId: audit.itemId } },
+                        update: {
+                            estimated_stock: audit.physicalCount,
+                            last_refilled_at: new Date()
+                        },
+                        create: {
+                            machineId,
+                            itemId: audit.itemId,
+                            estimated_stock: audit.physicalCount,
+                            last_refilled_at: new Date()
+                        }
+                    });
+
+                    auditLogChanges.push({
+                        itemId: audit.itemId,
+                        expected,
+                        actual: audit.physicalCount,
+                        sold: diff > 0 ? diff : 0
+                    });
+                }
+            }
+
+            // Centralized Ledger Record
+            if (auditLogChanges.length > 0) {
+                await tx.systemAuditLog.create({
+                    data: {
+                        actorId,
+                        actorRole,
+                        actionType: "MACHINE_AUDIT",
+                        entityType: "MACHINE_STOCK",
+                        entityId: machineId,
+                        oldState: JSON.parse(JSON.stringify(currentStock.filter(s => auditLogChanges.find(a => a.itemId === s.itemId)))),
+                        newState: JSON.parse(JSON.stringify(auditLogChanges)),
+                        message: `Auditor reconciled ${auditLogChanges.length} items. Total missing/sold: ${auditLogChanges.reduce((acc, curr) => acc + curr.sold, 0)}`
+                    }
+                });
+            }
+        });
+
+        revalidatePath('/admin');
+        revalidatePath('/admin/financials');
+        revalidatePath('/admin/machine-stock');
+        notifyClients('audit');
+        
+        return { success: true, data: undefined };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to reconcile machine";
+        return { success: false, error: message };
     }
 }

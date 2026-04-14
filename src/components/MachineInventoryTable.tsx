@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Package, MapPin, Search, AlertCircle, TrendingDown, Clock } from "lucide-react";
 import type { MachineStockWithItem, MachineType } from "@/types";
 import { formatCurrency } from "@/lib/utils";
+import MachineAuditModal from "./MachineAuditModal";
 
 type Props = {
     inventory: MachineStockWithItem[];
@@ -12,6 +13,7 @@ type Props = {
 export default function MachineInventoryTable({ inventory, machines }: Props) {
     const [selectedMachineId, setSelectedMachineId] = useState<number | "all">("all");
     const [searchQuery, setSearchQuery] = useState("");
+    const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
     // Filter stock based on selected machine
     let filteredInventory = selectedMachineId === "all"
@@ -32,7 +34,8 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
     }
 
     return (
-        <div className="glass-panel border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden relative space-y-4 shadow-xl">
+        <>
+            <div className="glass-panel border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden relative space-y-4 shadow-xl">
             <div className="px-6 py-5 border-b border-slate-200 dark:border-white/5 flex flex-col lg:flex-row items-start lg:items-center justify-between bg-white/[0.02] gap-4">
                 <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2 tracking-tight whitespace-nowrap">
                     <TrendingDown className="w-4 h-4 text-brand-400" />
@@ -40,6 +43,12 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                 </h3>
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                    <button 
+                        onClick={() => setIsAuditModalOpen(true)}
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-accent-blue/10 border border-slate-200 dark:border-accent-blue/20 text-slate-900 dark:text-accent-blue hover:text-white hover:bg-accent-blue dark:hover:bg-accent-blue/20 rounded-xl text-sm font-bold transition-all whitespace-nowrap"
+                    >
+                        Reconcile Audit
+                    </button>
                     <div className="relative flex-1 sm:min-w-[240px]">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 dark:text-slate-400" />
                         <input
@@ -132,15 +141,23 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                 </table>
             </div>
 
-            {filteredInventory.length === 0 && (
-                <div className="p-16 text-center flex flex-col items-center justify-center">
-                    <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/5 flex items-center justify-center border border-slate-200 dark:border-white/10 mb-4">
-                        <Package className="w-8 h-8 text-slate-500 dark:text-slate-400 opacity-50" />
+                {filteredInventory.length === 0 && (
+                    <div className="p-16 text-center flex flex-col items-center justify-center">
+                        <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/5 flex items-center justify-center border border-slate-200 dark:border-white/10 mb-4">
+                            <Package className="w-8 h-8 text-slate-500 dark:text-slate-400 opacity-50" />
+                        </div>
+                        <p className="text-slate-900 dark:text-white font-bold mb-1">No Machine Stock Data</p>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">Restock machines via driver portal to see estimates.</p>
                     </div>
-                    <p className="text-slate-900 dark:text-white font-bold mb-1">No Machine Stock Data</p>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Restock machines via driver portal to see estimates.</p>
-                </div>
-            )}
-        </div>
+                )}
+            </div>
+
+            <MachineAuditModal 
+                isOpen={isAuditModalOpen} 
+                onClose={() => setIsAuditModalOpen(false)} 
+                inventory={inventory} 
+                machines={machines} 
+            />
+        </>
     );
 }

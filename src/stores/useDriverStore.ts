@@ -10,7 +10,6 @@ export interface OfflineLog {
     itemId: number;
     refilled: number;
     returned: number;
-    capacity: number;
   }[];
   timestamp: string;
 }

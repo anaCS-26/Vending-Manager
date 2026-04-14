@@ -10,8 +10,7 @@ import { requireAdmin } from "@/lib/auth-utils"
  * Calculates predicted machine depletion based on today's refill data.
  * Since this is a prototype without a MachineSlot model, we estimate:
  * - consumption_rate = total units refilled today / hours elapsed today
- * - A default machine capacity of 20 units per item slot
- * - predicted_hours_until_empty = capacity / consumption_rate
+ * - predicted_hours_until_empty = current_stock / consumption_rate
  * 
  * For a production system, this would use multi-day rolling averages
  * and actual machine slot current quantities.
@@ -22,9 +21,6 @@ export async function getPredictedDepletion(): Promise<DepletionPrediction[]> {
     const now = new Date()
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const hoursElapsed = Math.max(1, (now.getTime() - todayStart.getTime()) / (1000 * 60 * 60))
-
-    // Default capacity per machine slot (since we don't have MachineSlot model yet)
-    const DEFAULT_SLOT_CAPACITY = 20
 
     // Fetch today's refill logs grouped by machine and item
     const todayRefills = await prisma.refillLog.findMany({
@@ -70,17 +66,28 @@ export async function getPredictedDepletion(): Promise<DepletionPrediction[]> {
         }
     }
 
+    // Fetch current actual stock for all involved items
+    const machineStocks = await prisma.machineStock.findMany({
+        where: {
+            machineId: { in: Array.from(groups.values()).map(g => g.machineId) },
+            itemId: { in: Array.from(groups.values()).map(g => g.itemId) }
+        }
+    })
+
+    const stockMap = new Map()
+    for (const ms of machineStocks) {
+        stockMap.set(groupKey(ms.machineId, ms.itemId), ms.estimated_stock)
+    }
+
     // Calculate predictions
     const predictions: DepletionPrediction[] = []
 
-    for (const group of groups.values()) {
-        // Consumption rate = how fast this machine consumes this item
-        // We infer this from how frequently it needs refilling
+    for (const [key, group] of groups.entries()) {
+        const currentStock = stockMap.get(key) || 0
         const consumptionRate = group.totalRefilled / hoursElapsed
 
-        // Predicted hours until empty from a full slot
         const predictedHoursUntilEmpty = consumptionRate > 0
-            ? DEFAULT_SLOT_CAPACITY / consumptionRate
+            ? currentStock / consumptionRate
             : null
 
         predictions.push({
