@@ -22,7 +22,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
         prisma.item.findMany(),
         prisma.warehouse.findMany(),
         prisma.returnVerification.findMany({
-            where: { status: "APPROVED", reason: { in: ["DAMAGED", "EXPIRED", "RETURNED"] } },
+            where: { status: "APPROVED" },
             include: { item: true, dispatch: true }
         }),
         prisma.dispatchItem.findMany({
@@ -38,7 +38,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
         const sold = log.items_sold_since_last_refill || 0;
         const price = (log as any).price_at_refill ?? log.item.price_standard ?? 0;
         const cost = (log as any).cost_at_refill ?? (log.item as any).cost ?? 0;
-        
+
         // Use exact sales revenue if captured offline, otherwise fallback to realtime logic
         totalRevenue += log.sales_revenue || (sold * price);
         totalSoldCOGS += sold * cost;
@@ -52,7 +52,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
     const totalMachineExpenses = machinesRaw.reduce((acc, m) => acc + ((m as any).operating_cost || 0) + ((m as any).rental_cost || 0), 0);
     const totalWarehouseExpenses = warehousesRaw.reduce((acc, w) => acc + ((w as any).operating_cost || 0) + ((w as any).rental_cost || 0), 0);
     const totalExpenses = totalMachineExpenses + totalWarehouseExpenses;
-    
+
     // Net Profit = Collected Revenue - Cost of Sold Items - Shrinkage Cost - Fixed Expenses
     const totalNetProfit = totalRevenue - totalSoldCOGS - totalShrinkageCOGS - totalExpenses;
 
@@ -91,7 +91,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
             const wLogs = refillLogsRaw.filter(l => l.dispatch?.warehouseId === w.id);
             const wReturnVerifs = returnVerificationsRaw.filter(rv => rv.dispatch?.warehouseId === w.id);
             const wDispatchItems = dispatchItemsRaw.filter(di => di.dispatch?.warehouseId === w.id);
-            
+
             let revenue = 0;
             let cogs = 0;
             wLogs.forEach(l => {
@@ -101,7 +101,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                 revenue += l.sales_revenue || (sold * price);
                 cogs += sold * cost;
             });
-            
+
             let shrinkage = 0;
             wReturnVerifs.forEach(rv => shrinkage += (rv.quantity * ((rv.item as any).cost || 0)));
             wDispatchItems.forEach(di => shrinkage += ((di.quantity_damaged || 0) * ((di.item as any).cost || 0)));
