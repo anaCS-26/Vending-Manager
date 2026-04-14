@@ -125,9 +125,9 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
                             value={selectedMachineId}
                             onChange={(e) => handleMachineChange(e.target.value ? parseInt(e.target.value) : "")}
                         >
-                            <option value="" className="bg-zinc-900 text-zinc-100">-- Select Machine to Audit --</option>
+                            <option value="" className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">-- Select Machine to Audit --</option>
                             {machines.map(m => (
-                                <option key={m.id} value={m.id} className="bg-zinc-900 text-zinc-100">{m.location_name}</option>
+                                <option key={m.id} value={m.id} className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">{m.location_name}</option>
                             ))}
                         </select>
                     </div>

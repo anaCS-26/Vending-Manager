@@ -67,9 +67,9 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                             value={selectedMachineId}
                             onChange={(e) => setSelectedMachineId(e.target.value === "all" ? "all" : parseInt(e.target.value))}
                         >
-                            <option value="all" className="bg-[#18181b]">All Machines</option>
+                            <option value="all" className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">All Machines</option>
                             {machines.map(m => (
-                                <option key={m.id} value={m.id} className="bg-[#18181b]">
+                                <option key={m.id} value={m.id} className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">
                                     {m.location_name}
                                 </option>
                             ))}

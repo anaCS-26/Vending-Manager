@@ -61,9 +61,9 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                 value={selectedWarehouseId}
                                 onChange={(e) => setSelectedWarehouseId(e.target.value === "all" ? "all" : parseInt(e.target.value))}
                             >
-                                <option value="all" className="bg-[#18181b]">All Locations</option>
+                                <option value="all" className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">All Locations</option>
                                 {warehouses.map(w => (
-                                    <option key={w.id} value={w.id} className="bg-[#18181b]">
+                                    <option key={w.id} value={w.id} className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">
                                         {w.name}
                                     </option>
                                 ))}
