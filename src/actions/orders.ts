@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth-utils";
+import { writeAuditLog } from "@/lib/audit-utils";
 
 /**
  * ============================================================================
@@ -22,7 +23,7 @@ export async function createPurchaseOrder(data: {
         quantityRequested: number;
     }>;
 }) {
-    await requireAdmin();
+    const session = await requireAdmin();
     try {
         const itemIds = data.items.map((i) => i.itemId);
         const itemCosts = await prisma.item.findMany({
@@ -47,6 +48,9 @@ export async function createPurchaseOrder(data: {
         });
 
         revalidatePath("/admin/suppliers");
+        
+        await writeAuditLog(session, 'CREATE_PURCHASE_ORDER', 'PurchaseOrder', order.id, null, data);
+
         return { success: true, orderId: order.id };
     } catch (error: any) {
         console.error("Failed to create purchase order:", error);
@@ -63,7 +67,7 @@ export async function completePurchaseOrder(
     orderId: number,
     receivedData: Array<{ purchaseOrderItemId: number; quantityReceived: number; costPerUnit: number; price_standard: number; price_hospital: number; price_hotel: number }>
 ) {
-    await requireAdmin();
+    const session = await requireAdmin();
     try {
         await prisma.$transaction(async (tx) => {
             // 1. Get the order
@@ -164,6 +168,9 @@ export async function completePurchaseOrder(
         revalidatePath("/admin/suppliers");
         revalidatePath("/admin/warehouse");
         revalidatePath("/admin/history");
+        
+        await writeAuditLog(session, 'COMPLETE_PURCHASE_ORDER', 'PurchaseOrder', orderId, null, { receivedData });
+        
         return { success: true };
     } catch (error: any) {
         console.error("Failed to complete purchase order:", error);
@@ -173,13 +180,16 @@ export async function completePurchaseOrder(
 
 /** Marks a pending inventory request as CANCELLED, preventing stock integration. */
 export async function cancelPurchaseOrder(orderId: number) {
-    await requireAdmin();
+    const session = await requireAdmin();
     try {
         await prisma.purchaseOrder.update({
             where: { id: orderId },
             data: { status: "CANCELLED" },
         });
         revalidatePath("/admin/suppliers");
+        
+        await writeAuditLog(session, 'CANCEL_PURCHASE_ORDER', 'PurchaseOrder', orderId, null, null);
+        
         return { success: true };
     } catch (error: any) {
         console.error("Failed to cancel purchase order:", error);
@@ -199,7 +209,7 @@ export async function cancelPurchaseOrder(orderId: number) {
  * Allows creating a placeholder item record when not found in the master catalog during PO entry. 
  */
 export async function createQuickItem(data: { name: string; sku: string; category: string; bulk_format?: string }) {
-    await requireAdmin();
+    const session = await requireAdmin();
     try {
         const item = await prisma.item.create({
             data: {
@@ -209,6 +219,9 @@ export async function createQuickItem(data: { name: string; sku: string; categor
                 bulk_format: data.bulk_format || null
             }
         });
+        
+        await writeAuditLog(session, 'CREATE_QUICK_ITEM', 'Item', item.id, null, data);
+        
         return { success: true, item: { ...item, WarehouseStock: [], _count: { DispatchItems: 0 } } };
     } catch (error: any) {
         return { success: false, error: error.message || "Failed to create new item" };

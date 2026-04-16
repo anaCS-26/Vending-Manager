@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { notifyClients } from "@/lib/notify"
 import type { ActionResult } from "@/types"
 import { requireAdmin } from "@/lib/auth-utils"
+import { writeAuditLog } from "@/lib/audit-utils"
 
 /**
  * ============================================================================
@@ -52,7 +53,7 @@ export async function getProcessedReturns() {
  * Creates a linked InventoryAdjustment to write off negative stock and update the financial ledger. 
  */
 export async function approveReturn(returnId: number, adminNotes?: string): Promise<ActionResult> {
-    await requireAdmin();
+    const session = await requireAdmin();
     try {
         await prisma.$transaction(async (tx) => {
             const ret = await tx.returnVerification.findUnique({
@@ -84,6 +85,9 @@ export async function approveReturn(returnId: number, adminNotes?: string): Prom
         revalidatePath('/admin/returns');
         revalidatePath('/admin/adjustments');
         notifyClients('returns');
+        
+        await writeAuditLog(session, 'APPROVE_RETURN', 'ReturnVerification', returnId, null, { adminNotes });
+        
         return { success: true, data: undefined };
 
     } catch (error) {
@@ -93,7 +97,7 @@ export async function approveReturn(returnId: number, adminNotes?: string): Prom
 
 /** Rejects a return claim, preserving the original stock level as unaccounted for in the audit. */
 export async function rejectReturn(returnId: number): Promise<ActionResult> {
-    await requireAdmin();
+    const session = await requireAdmin();
     try {
         await prisma.returnVerification.update({
             where: { id: returnId },
@@ -102,6 +106,9 @@ export async function rejectReturn(returnId: number): Promise<ActionResult> {
 
         revalidatePath('/admin/returns');
         notifyClients('returns');
+        
+        await writeAuditLog(session, 'REJECT_RETURN', 'ReturnVerification', returnId, null, null);
+        
         return { success: true, data: undefined };
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to reject return" };

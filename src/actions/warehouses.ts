@@ -2,6 +2,7 @@
 import { PrismaClient } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/auth-utils'
+import { writeAuditLog } from '@/lib/audit-utils'
 
 const prisma = new PrismaClient()
 
@@ -39,6 +40,9 @@ export async function createWarehouse(data: { name: string; location?: string; a
                 rental_cost: data.rental_cost || 0
             } as any
         });
+        
+        await writeAuditLog(await requireAdmin(), 'CREATE_WAREHOUSE', 'Warehouse', wh.id, null, wh);
+        
         revalidatePath('/admin/warehouse/locations');
         revalidatePath('/admin/manage');
         return { success: true, data: wh };
@@ -52,8 +56,9 @@ export async function createWarehouse(data: { name: string; location?: string; a
  * Revalidation ensures real-time accurate overhead reporting in financials. 
  */
 export async function updateWarehouse(id: number, data: { name: string; location?: string; address?: string; latitude?: number; longitude?: number; operating_cost?: number; rental_cost?: number }) {
-    await requireAdmin();
+    const session = await requireAdmin();
     try {
+        const oldState = await prisma.warehouse.findUnique({ where: { id } });
         const wh = await prisma.warehouse.update({
             where: { id },
             data: {
@@ -66,6 +71,9 @@ export async function updateWarehouse(id: number, data: { name: string; location
                 rental_cost: data.rental_cost || 0
             } as any
         });
+        
+        await writeAuditLog(session, 'UPDATE_WAREHOUSE', 'Warehouse', wh.id, oldState, wh);
+        
         revalidatePath('/admin/warehouse/locations');
         revalidatePath('/admin/manage');
         return { success: true, data: wh };
@@ -79,12 +87,15 @@ export async function updateWarehouse(id: number, data: { name: string; location
  * Blocks future logistical assignments while preserving historical transaction data. 
  */
 export async function deleteWarehouse(id: number) {
-    await requireAdmin();
+    const session = await requireAdmin();
     try {
-        await prisma.warehouse.update({
+        const wh = await prisma.warehouse.update({
             where: { id },
             data: { isActive: false }
         });
+        
+        await writeAuditLog(session, 'DELETE_WAREHOUSE', 'Warehouse', id, null, wh);
+        
         revalidatePath('/admin/warehouse/locations');
         revalidatePath('/admin/manage');
         return { success: true };

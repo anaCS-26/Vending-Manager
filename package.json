@@ -9,7 +9,11 @@
     "lint": "eslint",
     "db:reset:dev": "tsx scripts/reset.ts --env=dev",
     "db:reset:prod": "tsx scripts/reset.ts --env=prod",
-    "db:seed:dev": "tsx scripts/seed-dev.ts"
+    "db:seed:dev": "tsx scripts/seed-dev.ts",
+    "db:seed-csv:dev": "tsx scripts/seed-csv.ts --env=dev",
+    "db:seed-csv:prod": "tsx scripts/seed-csv.ts --env=prod",
+    "db:seed-stock:dev": "tsx scripts/seed-stock.ts --env=dev",
+    "db:seed-stock:prod": "tsx scripts/seed-stock.ts --env=prod"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",

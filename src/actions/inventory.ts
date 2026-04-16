@@ -10,6 +10,7 @@ import fs from "fs"
 import { put } from '@vercel/blob';
 import bcrypt from "bcryptjs";
 import { requireAdmin, requireSuperAdmin, requireDriver, requireAdminOrDriverOwner } from "@/lib/auth-utils";
+import { writeAuditLog } from "@/lib/audit-utils";
 
 /** Retrieves the global data version to facilitate client-side synchronization and cache invalidation. */
 export async function getVersion(): Promise<number> {
@@ -206,8 +207,9 @@ export async function dispatchToDriver(
     warehouseId: number,
     items: { itemId: number, quantity: number }[]
 ): Promise<ActionResult> {
-    await requireAdmin();
+    const session = await requireAdmin();
     try {
+        let createdDispatchId: number | null = null;
         await prisma.$transaction(async (tx) => {
             if (!items.length) {
                 throw new Error("Dispatch must include at least one item")
@@ -234,7 +236,7 @@ export async function dispatchToDriver(
                 throw new Error("One or more dispatch items are invalid")
             }
 
-            await tx.dispatch.create({
+            const createdDispatch = await tx.dispatch.create({
                 data: {
                     driverId,
                     warehouseId,
@@ -250,6 +252,7 @@ export async function dispatchToDriver(
                     }
                 }
             })
+            createdDispatchId = createdDispatch.id;
 
             // Deduct stock: 1. Try Driver's existing bag (DriverStock), 2. Take remainder from Warehouse.
             for (const item of normalizedItems) {
@@ -289,6 +292,9 @@ export async function dispatchToDriver(
         revalidatePath('/admin')
         revalidatePath('/driver')
         notifyClients('dispatch')
+        
+        await writeAuditLog(session, 'CREATE_DISPATCH', 'Dispatch', createdDispatchId, null, { driverId, warehouseId, items });
+        
         return { success: true, data: undefined }
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to dispatch items"
@@ -327,8 +333,9 @@ export async function logRefill(
     try {
         const dispatchAuthCheck = await prisma.dispatch.findUnique({ where: { id: dispatchId }, select: { driverId: true } });
         if (!dispatchAuthCheck) return { success: false, error: "Dispatch not found" };
-        await requireAdminOrDriverOwner(dispatchAuthCheck.driverId);
+        const session = await requireAdminOrDriverOwner(dispatchAuthCheck.driverId);
 
+        let createdRefillId: number | null = null;
         await prisma.$transaction(async (tx) => {
             assertWholeNonNegative(quantity_refilled, "Refilled quantity")
             assertWholeNonNegative(returned, "Returned quantity")
@@ -383,7 +390,7 @@ export async function logRefill(
             const sales_revenue = sales * historicPrice;
 
             // 2. Create the refill log
-            await tx.refillLog.create({
+            const refill = await tx.refillLog.create({
                 data: {
                     dispatchId,
                     machineId,
@@ -398,6 +405,7 @@ export async function logRefill(
                     expired_quantity: returned
                 } as any
             })
+            createdRefillId = refill.id;
 
             // 3. Update or Create MachineStock
             await tx.machineStock.upsert({
@@ -432,6 +440,9 @@ export async function logRefill(
         revalidatePath('/admin')
         revalidatePath('/admin/machine-stock')
         notifyClients('refill')
+        
+        await writeAuditLog(session, 'LOG_REFILL', 'RefillLog', createdRefillId, null, { dispatchId, machineId, itemId, quantity_refilled, damaged, returned});
+        
         return { success: true, data: undefined }
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to log refill"

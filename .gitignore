@@ -62,3 +62,7 @@ public/sw.js.map
 public/swe-worker*.js
 public/workbox-*.js
 public/fallback-*.js
+
+# Ignore sensitive client seed data
+prisma/seed-data-templates/*.csv
+prisma/seed-data-templates/*.xlsx
