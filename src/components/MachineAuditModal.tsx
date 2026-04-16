@@ -7,6 +7,7 @@ import { useTheme } from "next-themes";
 import type { MachineStockWithItem, MachineType } from "@/types";
 import { reconcileMachineAudit } from "@/actions/inventory";
 import { toast } from "sonner";
+import { ConfirmModal } from "@/components/ConfirmModal";
 
 type Props = {
     isOpen: boolean;
@@ -21,6 +22,7 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [mounted, setMounted] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
     const { resolvedTheme } = useTheme();
 
     useEffect(() => {
@@ -61,7 +63,15 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
         setSearchQuery("");
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
+        if (!selectedMachineId) {
+            toast.error("Please select a machine first");
+            return;
+        }
+        setShowConfirm(true);
+    };
+
+    const executeSubmit = async () => {
         if (!selectedMachineId) {
             toast.error("Please select a machine first");
             return;
@@ -85,6 +95,7 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
             toast.error("Server error during reconciliation");
         } finally {
             setIsSubmitting(false);
+            setShowConfirm(false);
         }
     };
 
@@ -96,6 +107,7 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
     }, 0);
 
     const modalContent = (
+        <>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 text-left" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
             <div className="absolute inset-0 bg-slate-900/40 dark:bg-zinc-950/80 backdrop-blur-md" onClick={onClose} />
             <div className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[90vh] overflow-hidden shadow-2xl">
@@ -245,6 +257,16 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
                 </div>
             </div>
         </div>
+            <ConfirmModal
+                isOpen={showConfirm}
+                isDestructive={false}
+                title="Submit Audit Variance"
+                message={`Are you sure you want to finalize this audit? This action cannot be undone. (Missing items: ${totalMissing})`}
+                confirmText="Yes, Submit Audit"
+                onConfirm={executeSubmit}
+                onCancel={() => setShowConfirm(false)}
+            />
+        </>
     );
 
     return createPortal(

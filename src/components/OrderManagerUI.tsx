@@ -6,6 +6,7 @@ import { Plus, CheckCircle2, History, Package, Clock, Loader2, Search, Store, Fi
 import { motion, AnimatePresence } from "framer-motion";
 import { createPurchaseOrder, completePurchaseOrder, cancelPurchaseOrder, createQuickItem } from "@/actions/orders";
 import { formatCurrency } from "@/lib/utils";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import type { Item, Warehouse, PurchaseOrder, PurchaseOrderItem } from "@prisma/client";
 
 type OrderWithRelations = PurchaseOrder & {
@@ -50,6 +51,13 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
 
     // -- Print State --
     const [printingOrder, setPrintingOrder] = useState<OrderWithRelations | null>(null);
+
+    // -- Confirmation Modal State --
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        action: "RECEIVE" | "CANCEL" | null;
+        payload?: any;
+    }>({ isOpen: false, action: null });
 
     useEffect(() => {
         if (printingOrder) {
@@ -134,34 +142,54 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
     };
 
     const handleCompleteReceipt = (orderId: number) => {
-        // Formats UI state (receivedQtys/Prices) into server payload
-        startTransition(async () => {
-            const payload = Object.keys(receivedQtys).map(k => ({
-                purchaseOrderItemId: Number(k),
-                quantityReceived: receivedQtys[Number(k)],
-                costPerUnit: receivedPrices[Number(k)]?.cost || 0,
-                price_standard: receivedPrices[Number(k)]?.price_standard || 0,
-                price_hospital: receivedPrices[Number(k)]?.price_hospital || 0,
-                price_hotel: receivedPrices[Number(k)]?.price_hotel || 0
-            }));
-            const res = await completePurchaseOrder(orderId, payload);
-            if (res.success) {
-                toast.success("Order received and stock updated!");
-                setReceivingOrderId(null);
-            } else {
-                toast.error(res.error);
-            }
+        setConfirmModal({
+            isOpen: true,
+            action: "RECEIVE",
+            payload: orderId
         });
     };
 
     const handleCancelOrder = (orderId: number) => {
-        if (!confirm("Are you sure you want to cancel this pending order?")) return;
-        startTransition(async () => {
-            const res = await cancelPurchaseOrder(orderId);
-            if (res.success) toast.success("Order cancelled");
-            else toast.error(res.error);
+        setConfirmModal({
+            isOpen: true,
+            action: "CANCEL",
+            payload: orderId
         });
     }
+
+    const executeConfirmAction = () => {
+        if (!confirmModal.action || !confirmModal.payload) return;
+
+        if (confirmModal.action === "RECEIVE") {
+            const orderId = confirmModal.payload;
+            startTransition(async () => {
+                const payload = Object.keys(receivedQtys).map(k => ({
+                    purchaseOrderItemId: Number(k),
+                    quantityReceived: receivedQtys[Number(k)],
+                    costPerUnit: receivedPrices[Number(k)]?.cost || 0,
+                    price_standard: receivedPrices[Number(k)]?.price_standard || 0,
+                    price_hospital: receivedPrices[Number(k)]?.price_hospital || 0,
+                    price_hotel: receivedPrices[Number(k)]?.price_hotel || 0
+                }));
+                const res = await completePurchaseOrder(orderId, payload);
+                if (res.success) {
+                    toast.success("Order received and stock updated!");
+                    setReceivingOrderId(null);
+                } else {
+                    toast.error(res.error);
+                }
+                setConfirmModal({ isOpen: false, action: null });
+            });
+        } else if (confirmModal.action === "CANCEL") {
+            const orderId = confirmModal.payload;
+            startTransition(async () => {
+                const res = await cancelPurchaseOrder(orderId);
+                if (res.success) toast.success("Order cancelled");
+                else toast.error(res.error);
+                setConfirmModal({ isOpen: false, action: null });
+            });
+        }
+    };
 
     /** 
      * Item Priority: 
@@ -211,6 +239,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
     );
 
     return (
+        <>
         <div className="space-y-6">
             <div className="glass-panel border-slate-200 dark:border-white/10 rounded-2xl p-2 flex items-center justify-between">
                 <div className="flex flex-wrap items-center gap-2">
@@ -831,6 +860,20 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                 )}
             </div>
         </div >
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                isDestructive={confirmModal.action === "CANCEL"}
+                title={confirmModal.action === "CANCEL" ? "Cancel Purchase Order" : "Complete Stock Check-In"}
+                message={
+                    confirmModal.action === "CANCEL"
+                        ? "Are you sure you want to cancel this order? This action cannot be undone."
+                        : "Are you sure you want to finalize this receipt? This action cannot be undone."
+                }
+                confirmText={confirmModal.action === "CANCEL" ? "Yes, Cancel Order" : "Confirm Receipt"}
+                onConfirm={executeConfirmAction}
+                onCancel={() => setConfirmModal({ isOpen: false, action: null })}
+            />
+        </>
     );
 }
 

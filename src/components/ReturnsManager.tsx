@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh";
 import { approveReturn, rejectReturn } from "@/actions/returns";
+import { ConfirmModal } from "@/components/ConfirmModal";
 
 // Local types until we update index.ts
 type ReturnVerificationType = {
@@ -31,40 +32,57 @@ type ReturnVerificationType = {
 export function ReturnsManager({ pending, history }: { pending: ReturnVerificationType[], history: ReturnVerificationType[] }) {
     const [isPending, startTransition] = useTransition();
     const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        action: "APPROVE" | "REJECT" | null;
+        id: number | null;
+    }>({ isOpen: false, action: null, id: null });
 
     useRealtimeRefresh();
 
     const handleApprove = (id: number) => {
-        startTransition(async () => {
-            const res = await approveReturn(id, adminNotes[id]);
-            if (res.success) {
-                toast.success("Return Approved", { description: "Item verified and inventory adjusted." });
-                // Clear the note for this ID
-                setAdminNotes(prev => {
-                    const next = { ...prev };
-                    delete next[id];
-                    return next;
-                });
-            } else {
-                toast.error("Failed to approve", { description: res.error });
-            }
-        });
+        setConfirmModal({ isOpen: true, action: "APPROVE", id });
     };
 
     const handleReject = (id: number) => {
-        if (!confirm("Are you sure you want to reject this return? It will be marked invalid.")) return;
+        setConfirmModal({ isOpen: true, action: "REJECT", id });
+    };
 
-        startTransition(async () => {
-            const res = await rejectReturn(id);
-            if (res.success) {
-                toast.success("Return Rejected", { description: "This report has been dismissed." });
-            } else {
-                toast.error("Failed to reject", { description: res.error });
-            }
-        });
+    const executeConfirmAction = () => {
+        if (!confirmModal.action || !confirmModal.id) return;
+        
+        const id = confirmModal.id;
+        
+        if (confirmModal.action === "APPROVE") {
+            startTransition(async () => {
+                const res = await approveReturn(id, adminNotes[id]);
+                if (res.success) {
+                    toast.success("Return Approved", { description: "Item verified and inventory adjusted." });
+                    setAdminNotes(prev => {
+                        const next = { ...prev };
+                        delete next[id];
+                        return next;
+                    });
+                } else {
+                    toast.error("Failed to approve", { description: res.error });
+                }
+                setConfirmModal({ isOpen: false, action: null, id: null });
+            });
+        } else if (confirmModal.action === "REJECT") {
+            startTransition(async () => {
+                const res = await rejectReturn(id);
+                if (res.success) {
+                    toast.success("Return Rejected", { description: "This report has been dismissed." });
+                } else {
+                    toast.error("Failed to reject", { description: res.error });
+                }
+                setConfirmModal({ isOpen: false, action: null, id: null });
+            });
+        }
     };
 
     return (
+        <>
         <div className="space-y-12">
             <div>
                 <div className="flex items-center gap-3 mb-6">
@@ -221,5 +239,19 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                 </div>
             </div>
         </div>
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                isDestructive={confirmModal.action === "REJECT"}
+                title={confirmModal.action === "APPROVE" ? "Verify Return" : "Reject Return"}
+                message={
+                    confirmModal.action === "REJECT" 
+                        ? "Are you sure you want to reject this return? This action cannot be undone."
+                        : "Are you sure you want to formally approve this returned inventory? This action cannot be undone."
+                }
+                confirmText={confirmModal.action === "REJECT" ? "Yes, Reject Return" : "Confirm Verification"}
+                onConfirm={executeConfirmAction}
+                onCancel={() => setConfirmModal({ isOpen: false, action: null, id: null })}
+            />
+        </>
     );
 }

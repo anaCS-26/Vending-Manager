@@ -3,6 +3,7 @@ import { useState, useTransition } from "react";
 import { editDriverBagStock } from "@/actions/inventory";
 import { toast } from "sonner";
 import { Package, Calendar, Loader2, Save, AlertTriangle, ShieldCheck, Trash2 } from "lucide-react";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import type { DriverType } from "@/types";
 
 interface DriverBagManagerProps {
@@ -12,6 +13,10 @@ interface DriverBagManagerProps {
 export function DriverBagManager({ drivers }: DriverBagManagerProps) {
     const [isPending, startTransition] = useTransition();
     const [edits, setEdits] = useState<Record<number, Record<number, number>>>({}); // driverId -> itemId -> new_qty
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        driverId: number | null;
+    }>({ isOpen: false, driverId: null });
 
     const handleQuantityChange = (driverId: number, itemId: number, newQty: number) => {
         setEdits(prev => {
@@ -26,7 +31,14 @@ export function DriverBagManager({ drivers }: DriverBagManagerProps) {
         });
     };
 
-    const handleSave = async (driverId: number) => {
+    const handleSave = (driverId: number) => {
+        setConfirmModal({ isOpen: true, driverId });
+    };
+
+    const executeConfirmAction = () => {
+        if (!confirmModal.driverId) return;
+        
+        const driverId = confirmModal.driverId;
         const driverEdits = edits[driverId];
         if (!driverEdits || Object.keys(driverEdits).length === 0) return;
 
@@ -47,10 +59,12 @@ export function DriverBagManager({ drivers }: DriverBagManagerProps) {
             } else {
                 toast.error("Update failed", { description: result.error });
             }
+            setConfirmModal({ isOpen: false, driverId: null });
         });
     };
 
     return (
+        <>
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {drivers.map(driver => {
                 const stock = driver.DriverStock || [];
@@ -136,5 +150,15 @@ export function DriverBagManager({ drivers }: DriverBagManagerProps) {
                 );
             })}
         </div>
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                isDestructive={false}
+                title="Save Stock Override"
+                message="Are you sure you want to override the driver's stock? This action cannot be undone."
+                confirmText="Yes, Commit Changes"
+                onConfirm={executeConfirmAction}
+                onCancel={() => setConfirmModal({ isOpen: false, driverId: null })}
+            />
+        </>
     );
 }
