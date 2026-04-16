@@ -33,8 +33,8 @@ export async function writeAuditLog(
         }
 
         // Avoid logging massive binaries if objects accidentally contain them
-        const secureOldState = oldState ? JSON.stringify(oldState) : null;
-        const secureNewState = newState ? JSON.stringify(newState) : null;
+        const secureOldState = oldState ? JSON.parse(JSON.stringify(oldState)) : undefined;
+        const secureNewState = newState ? JSON.parse(JSON.stringify(newState)) : undefined;
 
         await prisma.systemAuditLog.create({
             data: {
