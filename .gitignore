@@ -66,3 +66,6 @@ public/fallback-*.js
 # Ignore sensitive client seed data
 prisma/seed-data-templates/*.csv
 prisma/seed-data-templates/*.xlsx
+
+# Scripts and sensitive data tools
+scripts/
