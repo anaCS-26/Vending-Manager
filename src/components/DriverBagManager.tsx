@@ -67,7 +67,7 @@ export function DriverBagManager({ drivers }: DriverBagManagerProps) {
         <>
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {drivers.map(driver => {
-                const stock = driver.DriverStock || [];
+                const stock = (driver.DriverStock || []).filter((s: any) => s.quantity_on_hand > 0);
                 const driverEdits = edits[driver.id] || {};
                 const hasEdits = Object.keys(driverEdits).length > 0;
 
@@ -136,8 +136,8 @@ export function DriverBagManager({ drivers }: DriverBagManagerProps) {
                                                     className={`w-full py-1 text-center bg-white dark:bg-black border rounded font-mono text-sm font-bold transition-colors focus:outline-none ${isEdited ? 'border-accent-blue text-accent-blue' : 'border-slate-200 dark:border-white/10 text-slate-900 dark:text-white hover:border-slate-300 dark:hover:border-white/20'}`}
                                                 />
                                                 {isEdited && editedQty === 0 && (
-                                                    <span className="text-[9px] font-bold text-accent-pink uppercase flex items-center gap-1 mt-1">
-                                                        <Trash2 className="w-3 h-3" /> Clear
+                                                    <span className="text-[9px] font-bold text-accent-pink uppercase flex items-start gap-1 mt-1 leading-tight text-left">
+                                                        <Trash2 className="w-3 h-3 shrink-0" /> Will be removed from bag completely
                                                     </span>
                                                 )}
                                             </div>
