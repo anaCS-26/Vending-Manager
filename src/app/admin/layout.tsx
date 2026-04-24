@@ -12,7 +12,7 @@ export default async function AdminLayout({
     return (
         <div className="flex min-h-screen bg-slate-50 dark:bg-neo-bg text-slate-900 dark:text-white transition-colors duration-300">
             <Sidebar user={session?.user} />
-            <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+            <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden relative z-10 w-full min-w-0">
                 <header className="h-16 bg-white/50 dark:bg-neo-bg/80 backdrop-blur-md border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-8 sticky top-0 z-20 transition-colors">
                     <div className="flex items-center gap-4">
                         <h2 className="text-lg font-semibold text-slate-900 dark:text-white hidden md:block">System Overview</h2>
@@ -25,7 +25,7 @@ export default async function AdminLayout({
                         <ThemeToggle />
                     </div>
                 </header>
-                <main className="flex-1 p-8">
+                <main className="flex-1 p-4 md:p-8">
                     <div className="max-w-6xl mx-auto">
                         {children}
                     </div>

@@ -191,33 +191,33 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                     <table className="w-full text-left border-collapse min-w-[900px]">
                         <thead>
                             <tr className="border-b border-slate-200 dark:border-white/5 text-[11px] text-slate-600 dark:text-slate-400 font-bold bg-slate-50 dark:bg-black/20 tracking-wider">
-                                <th className="px-6 py-4 uppercase w-16 text-center whitespace-nowrap">SR #</th>
-                                <th className="px-6 py-4 uppercase cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("name")}>
+                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase w-16 text-center whitespace-nowrap">SR #</th>
+                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("name")}>
                                     <div className="flex items-center">Item Name <SortIcon columnKey="name" /></div>
                                 </th>
-                                <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("quantity_on_hand")}>
+                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("quantity_on_hand")}>
                                     <div className="flex items-center justify-end"><SortIcon columnKey="quantity_on_hand" /> Stock Remain</div>
                                 </th>
-                                <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("pending_deficit")}>
+                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("pending_deficit")}>
                                     <div className="flex items-center justify-end"><SortIcon columnKey="pending_deficit" /> Due / Owed</div>
                                 </th>
-                                <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("cost")}>
+                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("cost")}>
                                     <div className="flex items-center justify-end"><SortIcon columnKey="cost" /> Unit Cost</div>
                                 </th>
-                                <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_standard")}>
+                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_standard")}>
                                     <div className="flex items-center justify-end"><SortIcon columnKey="price_standard" /> Std Price</div>
                                 </th>
-                                <th className="px-6 py-4 uppercase text-right text-slate-400 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_hospital")}>
+                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right text-slate-400 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_hospital")}>
                                     <div className="flex items-center justify-end"><SortIcon columnKey="price_hospital" /> Hosp Price</div>
                                 </th>
-                                <th className="px-6 py-4 uppercase text-right text-slate-400 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_hotel")}>
+                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right text-slate-400 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_hotel")}>
                                     <div className="flex items-center justify-end"><SortIcon columnKey="price_hotel" /> Hotel Price</div>
                                 </th>
-                                <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("total_amount")}>
+                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("total_amount")}>
                                     <div className="flex items-center justify-end"><SortIcon columnKey="total_amount" /> Total Value</div>
                                 </th>
                                 {selectedWarehouseId === "all" && (
-                                    <th className="px-6 py-4 uppercase text-center cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("location")}>
+                                    <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-center cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("location")}>
                                         <div className="flex items-center justify-center">Location <SortIcon columnKey="location" /></div>
                                     </th>
                                 )}
@@ -231,13 +231,13 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
 
                                 return (
                                     <tr key={`${stock.warehouseId}-${stock.itemId}`} className={`group hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 ${isZero ? 'bg-yellow-500/[0.02]' : ''}`}>
-                                        <td className="px-6 py-4 text-center font-mono text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-slate-500 dark:text-slate-400 dark:text-slate-300 transition-colors">
+                                        <td className="px-3 py-3 md:px-6 md:py-4 text-center font-mono text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-slate-500 dark:text-slate-400 dark:text-slate-300 transition-colors">
                                             {index + 1}
                                         </td>
-                                        <td className="px-6 py-4">
+                                        <td className="px-3 py-3 md:px-6 md:py-4">
                                             <div className="flex flex-col gap-0.5 group/name">
                                                 <div className="flex items-baseline gap-2 flex-wrap">
-                                                    <span className="font-bold text-slate-900 dark:text-white text-sm tracking-tight group-hover/name:text-brand-400 transition-colors uppercase">
+                                                    <span className="font-bold text-slate-900 dark:text-white text-xs md:text-sm tracking-tight group-hover/name:text-brand-400 transition-colors uppercase">
                                                         {stock.item.name}
                                                     </span>
                                                     {bulkFormat.trim() && (
@@ -252,17 +252,17 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                                 <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{stock.item.category}</span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
                                                 {isZero && <AlertCircle className="w-3.5 h-3.5 text-yellow-500" />}
-                                                <span className={`text-sm font-bold font-mono ${isZero ? 'text-yellow-500' : 'text-slate-900 dark:text-white'}`}>
+                                                <span className={`text-xs md:text-sm font-bold font-mono ${isZero ? 'text-yellow-500' : 'text-slate-900 dark:text-white'}`}>
                                                     {stock.quantity_on_hand.toLocaleString()}
                                                 </span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
                                             <div className="flex flex-col items-end">
-                                                <span className={`text-sm font-bold font-mono ${stock.pending_deficit > 0 ? 'text-accent-orange' : 'text-slate-400 opacity-50'}`}>
+                                                <span className={`text-xs md:text-sm font-bold font-mono ${stock.pending_deficit > 0 ? 'text-accent-orange' : 'text-slate-400 opacity-50'}`}>
                                                     {stock.pending_deficit > 0 ? `+${stock.pending_deficit.toLocaleString()}` : '0'}
                                                 </span>
                                                 {stock.pending_deficit > 0 && (
@@ -270,33 +270,33 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
+                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
+                                            <span className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
                                                 {formatCurrency((stock.item as any).cost || 0)}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className="text-sm font-bold text-slate-900 dark:text-white font-mono whitespace-nowrap" dir="ltr">
+                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
+                                            <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white font-mono whitespace-nowrap" dir="ltr">
                                                 {formatCurrency((stock.item as any).price_standard)}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className="text-sm font-bold text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
+                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
+                                            <span className="text-xs md:text-sm font-bold text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
                                                 {formatCurrency((stock.item as any).price_hospital || 0)}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className="text-sm font-bold text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
+                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
+                                            <span className="text-xs md:text-sm font-bold text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
                                                 {formatCurrency((stock.item as any).price_hotel || 0)}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className={`text-sm font-bold font-mono whitespace-nowrap ${isZero ? 'text-yellow-600/80' : 'text-slate-600 dark:text-slate-400'}`} dir="ltr">
+                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
+                                            <span className={`text-xs md:text-sm font-bold font-mono whitespace-nowrap ${isZero ? 'text-yellow-600/80' : 'text-slate-600 dark:text-slate-400'}`} dir="ltr">
                                                 {formatCurrency(totalAmount)}
                                             </span>
                                         </td>
                                         {selectedWarehouseId === "all" && (
-                                            <td className="px-6 py-4 text-center">
+                                            <td className="px-3 py-3 md:px-6 md:py-4 text-center">
                                                 <span className="block mx-auto px-2 py-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300 text-[10px] font-bold uppercase tracking-widest rounded-md truncate max-w-[150px]">
                                                     {stock.warehouse?.name || 'Unknown'}
                                                 </span>

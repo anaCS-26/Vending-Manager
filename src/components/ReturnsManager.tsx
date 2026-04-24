@@ -189,37 +189,37 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="border-b border-slate-200 dark:border-white/10 bg-white/[0.02]">
-                                        <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Date</th>
-                                        <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Driver</th>
-                                        <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Item</th>
-                                        <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Qty / Reason</th>
-                                        <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Audit Notes</th>
-                                        <th className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Result</th>
+                                        <th className="px-3 py-3 md:px-6 md:py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Date</th>
+                                        <th className="px-3 py-3 md:px-6 md:py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Driver</th>
+                                        <th className="px-3 py-3 md:px-6 md:py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Item</th>
+                                        <th className="px-3 py-3 md:px-6 md:py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Qty / Reason</th>
+                                        <th className="px-3 py-3 md:px-6 md:py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Audit Notes</th>
+                                        <th className="px-3 py-3 md:px-6 md:py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Result</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {history.map((his) => (
                                         <tr key={his.id} className="border-b border-slate-200 dark:border-white/5 hover:bg-white/[0.02] transition-colors">
-                                            <td className="px-6 py-4 text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300 whitespace-nowrap">
+                                            <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300 whitespace-nowrap">
                                                 {new Date(his.verified_at || his.reported_at).toLocaleDateString()}
                                             </td>
-                                            <td className="px-6 py-4 text-sm text-slate-900 dark:text-white font-medium">
+                                            <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm text-slate-900 dark:text-white font-medium">
                                                 {his.dispatch.driver.name}
                                                 <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">Route #{his.dispatchId.toString().padStart(4, '0')}</div>
                                             </td>
-                                            <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400 dark:text-slate-300">
+                                            <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm text-slate-500 dark:text-slate-400 dark:text-slate-300">
                                                 {his.item.name}
                                             </td>
-                                            <td className="px-6 py-4 text-sm text-slate-900 dark:text-white">
+                                            <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm text-slate-900 dark:text-white">
                                                 {his.quantity}
                                                 <span className={`ml-2 text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${his.reason === 'DAMAGED' ? 'text-accent-orange bg-accent-orange/10' : his.reason === 'RETURNED' ? 'text-accent-blue bg-accent-blue/10' : 'text-accent-pink bg-accent-pink/10'}`}>
                                                     {his.reason}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400 italic">
+                                            <td className="px-3 py-3 md:px-6 md:py-4 text-xs text-slate-500 dark:text-slate-400 italic">
                                                 {(his as any).notes || "-"}
                                             </td>
-                                            <td className="px-6 py-4">
+                                            <td className="px-3 py-3 md:px-6 md:py-4">
                                                 {his.status === 'APPROVED' ? (
                                                     <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green bg-accent-green/10 border border-accent-green/20 px-2.5 py-1 rounded-full flex items-center gap-1.5 w-max">
                                                         <Check className="w-3 h-3" /> Approved

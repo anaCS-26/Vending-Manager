@@ -177,17 +177,17 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                 <table className="w-full text-left border-collapse min-w-[900px]">
                     <thead>
                         <tr className="border-b border-slate-200 dark:border-white/5 text-[11px] text-slate-600 dark:text-slate-400 font-bold bg-slate-50 dark:bg-black/20 tracking-wider">
-                            <th className="px-6 py-4 uppercase w-16 text-center whitespace-nowrap">SR #</th>
-                            <th className="px-6 py-4 uppercase cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("name")}>
+                            <th className="px-3 py-3 md:px-6 md:py-4 uppercase w-16 text-center whitespace-nowrap">SR #</th>
+                            <th className="px-3 py-3 md:px-6 md:py-4 uppercase cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("name")}>
                                 <div className="flex items-center">Item Name <SortIcon columnKey="name" /></div>
                             </th>
-                            <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("estimated_stock")}>
+                            <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("estimated_stock")}>
                                 <div className="flex items-center justify-end"><SortIcon columnKey="estimated_stock" /> Est. Machine Stock</div>
                             </th>
-                            <th className="px-6 py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("last_refilled_at")}>
+                            <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("last_refilled_at")}>
                                 <div className="flex items-center justify-end"><SortIcon columnKey="last_refilled_at" /> Last Refill</div>
                             </th>
-                            <th className="px-6 py-4 uppercase text-center w-48 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("location")}>
+                            <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-center w-48 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("location")}>
                                 <div className="flex items-center justify-center">Location <SortIcon columnKey="location" /></div>
                             </th>
                         </tr>
@@ -200,13 +200,13 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
 
                             return (
                                 <tr key={`${stock.machineId}-${stock.itemId}`} className={`group hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 ${isLow ? 'bg-accent-pink/[0.01]' : ''}`}>
-                                    <td className="px-6 py-4 text-center font-mono text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-slate-500 dark:text-slate-400 dark:text-slate-300 transition-colors">
+                                    <td className="px-3 py-3 md:px-6 md:py-4 text-center font-mono text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-slate-500 dark:text-slate-400 dark:text-slate-300 transition-colors">
                                         {index + 1}
                                     </td>
-                                    <td className="px-6 py-4">
+                                    <td className="px-3 py-3 md:px-6 md:py-4">
                                         <div className="flex flex-col gap-0.5 group/name">
                                             <div className="flex items-baseline gap-2 flex-wrap">
-                                                <span className="font-bold text-slate-900 dark:text-white text-sm tracking-tight group-hover/name:text-brand-400 transition-colors uppercase">
+                                                <span className="font-bold text-slate-900 dark:text-white text-xs md:text-sm tracking-tight group-hover/name:text-brand-400 transition-colors uppercase">
                                                     {stock.item.name}
                                                 </span>
                                                 <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase">
@@ -216,15 +216,15 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                                             <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{stock.item.category}</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
+                                    <td className="px-3 py-3 md:px-6 md:py-4 text-right">
                                         <div className="flex items-center justify-end gap-2">
                                             {isLow && <AlertCircle className={`w-3.5 h-3.5 ${isZero ? 'text-accent-pink' : 'text-orange-400'}`} />}
-                                            <span className={`text-sm font-bold font-mono ${isZero ? 'text-accent-pink' : isLow ? 'text-orange-400' : 'text-slate-900 dark:text-white'}`}>
+                                            <span className={`text-xs md:text-sm font-bold font-mono ${isZero ? 'text-accent-pink' : isLow ? 'text-orange-400' : 'text-slate-900 dark:text-white'}`}>
                                                 {stock.estimated_stock.toLocaleString()} UNITS
                                             </span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
+                                    <td className="px-3 py-3 md:px-6 md:py-4 text-right">
                                         <div className="flex flex-col items-end opacity-70 group-hover:opacity-100 transition-opacity">
                                             <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 dark:text-slate-300 text-xs font-medium">
                                                 <Clock className="w-3 h-3 text-slate-500 dark:text-slate-400" />
@@ -232,7 +232,7 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-center">
+                                    <td className="px-3 py-3 md:px-6 md:py-4 text-center">
                                         <span className="block mx-auto px-2 py-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300 text-[10px] font-bold uppercase tracking-widest rounded-md truncate max-w-[160px]">
                                             {stock.machine?.location_name || 'Unknown'}
                                         </span>

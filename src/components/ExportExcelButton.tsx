@@ -37,10 +37,10 @@ export default function ExportExcelButton({
     return (
         <button
             onClick={handleExport}
-            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-bold transition-all flex gap-2 items-center shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+            className="px-3 py-2 sm:px-5 sm:py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-bold transition-all flex gap-2 items-center shadow-[0_0_20px_rgba(16,185,129,0.2)]"
         >
             <Download className="w-4 h-4" />
-            {label}
+            <span className="hidden sm:inline">{label}</span>
         </button>
     );
 }

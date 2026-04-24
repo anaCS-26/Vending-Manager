@@ -111,37 +111,37 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
             <table className="w-full text-left border-collapse min-w-[1000px]">
                 <thead>
                     <tr className="border-b border-slate-200 dark:border-white/5 text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 select-none">
-                        <th className="py-4 pr-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("label")}>
+                        <th className="py-3 pr-3 md:py-4 md:pr-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("label")}>
                             <div className="flex items-center">
                                 Segment Information
                                 <SortIcon columnKey="label" />
                             </div>
                         </th>
-                        <th className="py-4 px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("revenue")}>
+                        <th className="py-3 px-3 md:py-4 md:px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("revenue")}>
                             <div className="flex items-center justify-end">
                                 <SortIcon columnKey="revenue" />
                                 Captured Revenue
                             </div>
                         </th>
-                        <th className="py-4 px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("cogs")}>
+                        <th className="py-3 px-3 md:py-4 md:px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("cogs")}>
                             <div className="flex items-center justify-end">
                                 <SortIcon columnKey="cogs" />
                                 Est. COGS
                             </div>
                         </th>
-                        <th className="py-4 px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("shrinkage")}>
+                        <th className="py-3 px-3 md:py-4 md:px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("shrinkage")}>
                             <div className="flex items-center justify-end">
                                 <SortIcon columnKey="shrinkage" />
                                 Shrinkage Loss
                             </div>
                         </th>
-                        <th className="py-4 px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("expenses")}>
+                        <th className="py-3 px-3 md:py-4 md:px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("expenses")}>
                             <div className="flex items-center justify-end">
                                 <SortIcon columnKey="expenses" />
                                 Operating Exp
                             </div>
                         </th>
-                        <th className="py-4 pl-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("netProfit")}>
+                        <th className="py-3 pl-3 md:py-4 md:pl-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("netProfit")}>
                             <div className="flex items-center justify-end">
                                 <SortIcon columnKey="netProfit" />
                                 Net Benefit
@@ -159,24 +159,24 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
                     ) : (
                         sortedData.map((item) => (
                             <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 flex-row">
-                                <td className="py-5 pr-6">
-                                    <div className="font-bold text-slate-900 dark:text-white text-sm uppercase">{item.label}</div>
-                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">{item.subLabel}</div>
+                                <td className="py-3 pr-3 md:py-5 md:pr-6">
+                                    <div className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase">{item.label}</div>
+                                    <div className="text-[9px] md:text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">{item.subLabel}</div>
                                 </td>
-                                <td className="py-5 px-6 text-right">
-                                    <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">{formatCurrency(item.revenue)}</span>
+                                <td className="py-3 px-3 md:py-5 md:px-6 text-right">
+                                    <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white font-mono">{formatCurrency(item.revenue)}</span>
                                 </td>
-                                <td className="py-5 px-6 text-right">
-                                    <span className="text-sm font-medium text-slate-500 dark:text-slate-400 font-mono">{formatCurrency(item.cogs)}</span>
+                                <td className="py-3 px-3 md:py-5 md:px-6 text-right">
+                                    <span className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400 font-mono">{formatCurrency(item.cogs)}</span>
                                 </td>
-                                <td className="py-5 px-6 text-right">
-                                    <span className="text-sm font-medium text-amber-500/80 font-mono">-{formatCurrency(item.shrinkage)}</span>
+                                <td className="py-3 px-3 md:py-5 md:px-6 text-right">
+                                    <span className="text-xs md:text-sm font-medium text-amber-500/80 font-mono">-{formatCurrency(item.shrinkage)}</span>
                                 </td>
-                                <td className="py-5 px-6 text-right">
-                                    <span className="text-sm font-medium text-slate-500 dark:text-slate-400 font-mono">{formatCurrency(item.expenses)}</span>
+                                <td className="py-3 px-3 md:py-5 md:px-6 text-right">
+                                    <span className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400 font-mono">{formatCurrency(item.expenses)}</span>
                                 </td>
-                                <td className="py-5 pl-6 text-right">
-                                    <span className="text-base font-black text-brand-500 font-mono">{formatCurrency(item.netProfit)}</span>
+                                <td className="py-3 pl-3 md:py-5 md:pl-6 text-right">
+                                    <span className="text-sm md:text-base font-black text-brand-500 font-mono">{formatCurrency(item.netProfit)}</span>
                                 </td>
                             </tr>
                         ))

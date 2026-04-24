@@ -222,11 +222,11 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
                                 <table className="w-full text-left border-collapse min-w-[1000px]">
                                     <thead>
                                         <tr className="border-b border-slate-200 dark:border-white/5 text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                                            <th className="py-4 px-6 text-left">Timestamp</th>
-                                            <th className="py-4 px-6 text-left">Personnel</th>
-                                            <th className="py-4 px-6 text-left">Machine Location</th>
-                                            <th className="py-4 px-6 text-left">Product Asset</th>
-                                            <th className="py-4 px-6 text-center">Telemetry Adjust</th>
+                                            <th className="py-3 px-3 md:py-4 md:px-6 text-left">Timestamp</th>
+                                            <th className="py-3 px-3 md:py-4 md:px-6 text-left">Personnel</th>
+                                            <th className="py-3 px-3 md:py-4 md:px-6 text-left">Machine Location</th>
+                                            <th className="py-3 px-3 md:py-4 md:px-6 text-left">Product Asset</th>
+                                            <th className="py-3 px-3 md:py-4 md:px-6 text-center">Telemetry Adjust</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200 dark:divide-white/[0.03]">
@@ -432,38 +432,38 @@ function EventRow({ log }: { log: any }) {
 
     return (
         <tr className="hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 border-l-[3px] border-l-transparent hover:border-l-brand-500 group flex-row">
-            <td className="py-5 px-6">
+            <td className="py-3 px-3 md:py-5 md:px-6">
                 <div className="flex flex-col">
-                    <span className="text-sm font-bold text-slate-900 dark:text-white">{new Date(log.refilled_at).toLocaleDateString()}</span>
-                    <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">{new Date(log.refilled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                    <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white">{new Date(log.refilled_at).toLocaleDateString()}</span>
+                    <span className="text-[9px] md:text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">{new Date(log.refilled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
                 </div>
             </td>
-            <td className="py-5 px-6">
+            <td className="py-3 px-3 md:py-5 md:px-6">
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-slate-600 dark:text-slate-400 font-bold text-xs uppercase shadow-sm">
                         {log.dispatch.driver.name.charAt(0)}
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white">{log.dispatch.driver.name}</span>
-                        <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">Route #{formatID(log.dispatchId)}</span>
+                        <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white">{log.dispatch.driver.name}</span>
+                        <span className="text-[9px] md:text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">Route #{formatID(log.dispatchId)}</span>
                     </div>
                 </div>
             </td>
-            <td className="py-5 px-6">
+            <td className="py-3 px-3 md:py-5 md:px-6">
                 <div className="flex flex-col">
-                    <span className="text-sm font-bold text-slate-900 dark:text-white">{log.machine.location_name}</span>
-                    <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
+                    <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white">{log.machine.location_name}</span>
+                    <span className="text-[9px] md:text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
                         <MapPin className="w-3 h-3 text-slate-400" /> M-{log.machine.id.toString().padStart(4, '0')}
                     </span>
                 </div>
             </td>
-            <td className="py-5 px-6">
+            <td className="py-3 px-3 md:py-5 md:px-6">
                 <div className="flex flex-col">
-                    <span className="text-sm font-bold text-slate-900 dark:text-white">{log.item.name}</span>
+                    <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white">{log.item.name}</span>
                     <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest px-1.5 py-0.5 border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 rounded-md w-max mt-1.5">{log.item.category}</span>
                 </div>
             </td>
-            <td className="py-5 px-6">
+            <td className="py-3 px-3 md:py-5 md:px-6">
                 <div className="flex justify-center opacity-80 group-hover:opacity-100 transition-opacity">
                     <EditLogModal log={log} />
                 </div>

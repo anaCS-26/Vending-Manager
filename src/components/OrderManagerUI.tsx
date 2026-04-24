@@ -693,11 +693,11 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                 <table className="w-full text-left border-collapse min-w-[900px]">
                                     <thead>
                                         <tr className="border-b border-slate-200 dark:border-white/10 text-[11px] text-slate-600 dark:text-slate-400 font-bold bg-slate-50 dark:bg-black/20 tracking-wider">
-                                            <th className="px-6 py-4 uppercase">PO Number</th>
-                                            <th className="px-6 py-4 uppercase">Destination</th>
-                                            <th className="px-6 py-4 uppercase">Items Received</th>
-                                            <th className="px-6 py-4 uppercase">Status</th>
-                                            <th className="px-6 py-4 uppercase text-right">Completion Date</th>
+                                            <th className="px-3 py-3 md:px-6 md:py-4 uppercase">PO Number</th>
+                                            <th className="px-3 py-3 md:px-6 md:py-4 uppercase">Destination</th>
+                                            <th className="px-3 py-3 md:px-6 md:py-4 uppercase">Items Received</th>
+                                            <th className="px-3 py-3 md:px-6 md:py-4 uppercase">Status</th>
+                                            <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right">Completion Date</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200 dark:divide-white/5">
@@ -705,19 +705,19 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                             const totalItems = o.Items.reduce((a: number, c: any) => a + c.quantityReceived, 0);
                                             return (
                                                 <tr key={o.id} onClick={() => setSelectedHistoryOrder(o)} className="group hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
-                                                    <td className="px-6 py-4 font-mono text-sm text-slate-900 dark:text-white font-medium">PO-{o.id.toString().padStart(4, '0')}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-sm font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/5 flex items-center gap-2 w-max">
+                                                    <td className="px-3 py-3 md:px-6 md:py-4 font-mono text-xs md:text-sm text-slate-900 dark:text-white font-medium">PO-{o.id.toString().padStart(4, '0')}</td>
+                                                    <td className="px-3 py-3 md:px-6 md:py-4">
+                                                        <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/5 flex items-center gap-2 w-max">
                                                             <Store className="w-3.5 h-3.5 text-slate-500" /> {o.warehouse.name}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4 text-sm font-mono text-slate-600 dark:text-slate-400">{totalItems} units</td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm font-mono text-slate-600 dark:text-slate-400">{totalItems} units</td>
+                                                    <td className="px-3 py-3 md:px-6 md:py-4">
                                                         <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-widest border ${o.status === "COMPLETED" ? "bg-accent-green/10 text-accent-green border-accent-green/20" : "bg-accent-pink/10 text-accent-pink border-accent-pink/20"}`}>
                                                             {o.status}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4 text-right text-sm font-mono text-slate-500 dark:text-slate-400">
+                                                    <td className="px-3 py-3 md:px-6 md:py-4 text-right text-xs md:text-sm font-mono text-slate-500 dark:text-slate-400">
                                                         {o.completedAt ? `${new Date(o.completedAt).toLocaleDateString()} ${new Date(o.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "--"}
                                                     </td>
                                                 </tr>
@@ -725,7 +725,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                         })}
                                         {filteredHistory.length === 0 && (
                                             <tr>
-                                                <td colSpan={5} className="px-6 py-12 text-center text-slate-600 dark:text-slate-400 text-sm">
+                                                <td colSpan={5} className="px-6 py-12 text-center text-slate-600 dark:text-slate-400 text-xs md:text-sm">
                                                     No past orders or invoices found.
                                                 </td>
                                             </tr>

@@ -255,7 +255,7 @@ function ViewOption({ active, label, value, icon }: { active: boolean, label: st
             className={`relative px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${active ? 'text-slate-900 dark:text-white bg-white dark:bg-white/10 shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
         >
             {icon}
-            <span className="capitalize">{label}</span>
+            <span className="capitalize hidden sm:inline">{label}</span>
         </Link>
     );
 }

@@ -233,12 +233,12 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
         <div className="glass-panel border-slate-200 dark:border-white/5 rounded-[2rem] p-6 lg:p-8 relative">
             {/* Header / Search Controls */}
             <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-8 relative z-10">
-                <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100 dark:bg-black/40 rounded-2xl w-fit border border-slate-200 dark:border-white/10 relative z-10">
+                <div className="flex w-full sm:w-fit gap-1 sm:gap-2 p-1 sm:p-1.5 bg-slate-100 dark:bg-black/40 rounded-2xl border border-slate-200 dark:border-white/10 relative z-10">
                     {(["warehouses", "machines", "items", "drivers"] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => handleTabChange(tab)}
-                            className={`relative px-6 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === tab ? "text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white"
+                            className={`relative flex-1 sm:flex-none px-2 sm:px-6 py-2 sm:py-2.5 rounded-xl text-sm font-bold transition-colors flex justify-center items-center ${activeTab === tab ? "text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white"
                                 }`}
                         >
                             {activeTab === tab && (
@@ -249,12 +249,12 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                                 />
                             )}
-                            <span className="relative z-10 capitalize flex items-center gap-2">
+                            <span className="relative z-10 capitalize flex items-center justify-center gap-2">
                                 {tab === "items" && <Package className="w-4 h-4" />}
                                 {tab === "machines" && <MapPin className="w-4 h-4" />}
                                 {tab === "drivers" && <Users className="w-4 h-4" />}
                                 {tab === "warehouses" && <Store className="w-4 h-4" />}
-                                {tab}
+                                <span className="hidden sm:inline">{tab}</span>
                             </span>
                         </button>
                     ))}
@@ -277,7 +277,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                 {/* ITEMS TAB */}
                 {activeTab === "items" && (
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center mb-6">
                             <div>
                                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">Product Catalog</h2>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">Manage snack and beverage inventory across all warehouses.</p>
@@ -436,7 +436,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                 {/* MACHINES TAB */}
                 {activeTab === "machines" && (
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center mb-6">
                             <div>
                                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">Machine Locations</h2>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">Manage your active vending points and machine codes.</p>
@@ -458,8 +458,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                     label="Export Machines"
                                 />
                                 {!isAdding && (
-                                    <button onClick={() => { resetForms(); setIsAdding(true); }} className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_25px_rgba(59,130,246,0.4)]">
-                                        <Plus className="w-4 h-4" /> Add Machine
+                                    <button onClick={() => { resetForms(); setIsAdding(true); }} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_25px_rgba(59,130,246,0.4)]">
+                                        <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Machine</span>
                                     </button>
                                 )}
                             </div>
@@ -611,14 +611,14 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                 {/* DRIVERS TAB */}
                 {activeTab === "drivers" && (
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center mb-6">
                             <div>
                                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">Route Drivers</h2>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">Manage your delivery and maintenance team.</p>
                             </div>
                             {!isAdding && (
-                                <button onClick={() => { resetForms(); setIsAdding(true); }} className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)]">
-                                    <Plus className="w-4 h-4" /> Add Driver
+                                <button onClick={() => { resetForms(); setIsAdding(true); }} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)]">
+                                    <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Driver</span>
                                 </button>
                             )}
                         </div>
@@ -737,7 +737,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                 {/* WAREHOUSES TAB */}
                 {activeTab === "warehouses" && (
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center mb-6">
                             <div>
                                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">Storage Warehouses</h2>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">Manage your distribution hubs and inventory centers.</p>
@@ -756,8 +756,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                     label="Export Warehouses"
                                 />
                                 {!isAdding && (
-                                    <button onClick={() => { resetForms(); setIsAdding(true); }} className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)]">
-                                        <Plus className="w-4 h-4" /> Add Warehouse
+                                    <button onClick={() => { resetForms(); setIsAdding(true); }} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)]">
+                                        <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Warehouse</span>
                                     </button>
                                 )}
                             </div>
