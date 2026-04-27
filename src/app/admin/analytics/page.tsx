@@ -2,6 +2,7 @@ export const revalidate = 60; // Revalidate every minute for background updating
 import prisma from "@/lib/prisma";
 import { Package, TrendingUp, Users, MapPin, Truck, AlertTriangle, CheckCircle2, Factory, PackageOpen, LayoutGrid, Clock, RefreshCw, BarChart2, CalendarDays, LineChart, Activity, ShieldCheck, Target, TrendingDown } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import AnalyticsDashboardClient from "@/components/AnalyticsDashboardClient";
 
 export default async function AnalyticsPage() {
     // Parallelize all initial database fetches
@@ -39,8 +40,8 @@ export default async function AnalyticsPage() {
             totalRefilled: refill._sum.quantity_refilled || 0
         }
     });
-    const fastMoving = formattedData.slice(0, Math.ceil(formattedData.length / 2));
-    const slowMoving = formattedData.slice(Math.ceil(formattedData.length / 2));
+    const fastMoving = formattedData.slice(0, 10);
+    const slowMoving = [...formattedData].reverse().slice(0, 10);
 
     // 2. Machine Demand Data (Processing)
     const topMachines = machineRefills.map(mr => {
@@ -153,6 +154,8 @@ export default async function AnalyticsPage() {
                     )}
                 </div>
             </div>
+
+            <AnalyticsDashboardClient machinesData={machinesData} allRefillsData={formattedData} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                 {/* 1. Driver Status & Accuracy Board */}

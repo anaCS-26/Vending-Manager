@@ -142,7 +142,7 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                             <option value="all" className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">All Machines</option>
                             {machines.map(m => (
                                 <option key={m.id} value={m.id} className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">
-                                    {m.location_name}
+                                    {m.id} - {m.location_name}
                                 </option>
                             ))}
                         </select>
