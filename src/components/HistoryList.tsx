@@ -5,7 +5,7 @@ import { useState, useMemo, useTransition } from "react";
 import type { DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine } from "@/types";
 import { editDispatchReturn } from "@/actions/inventory";
 import { toast } from "sonner";
-import { formatCurrency, formatID } from "@/lib/utils";
+import { formatCurrency, formatID, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 
 type HistoryListProps = {
     dispatches: DispatchWithRelations[];
@@ -246,7 +246,7 @@ export default function HistoryList({ dispatches, hideHeader }: HistoryListProps
                                                 )}
                                             </div>
                                             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 flex items-center gap-2 font-medium">
-                                                {new Date(dispatch.dispatch_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at {new Date(dispatch.dispatch_date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                                                {formatSaudiDate(dispatch.dispatch_date, { weekday: 'short', month: 'short', day: 'numeric' })} at {formatSaudiTime(dispatch.dispatch_date, { hour: 'numeric', minute: '2-digit' })}
                                             </p>
                                         </div>
                                     </div>

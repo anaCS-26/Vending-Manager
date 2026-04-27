@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Package, MapPin, Search, AlertCircle, TrendingDown, Clock, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import type { MachineStockWithItem, MachineType } from "@/types";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import MachineAuditModal from "./MachineAuditModal";
 
 type Props = {
@@ -211,7 +211,7 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                         {paginatedData.map((stock, index) => {
                             const isLow = stock.estimated_stock < 5;
                             const isZero = stock.estimated_stock === 0;
-                            const lastRefill = new Date(stock.last_refilled_at).toLocaleDateString() + ' ' + new Date(stock.last_refilled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            const lastRefill = formatSaudiDate(stock.last_refilled_at) + ' ' + formatSaudiTime(stock.last_refilled_at, { hour: '2-digit', minute: '2-digit' });
                             const globalIndex = (currentPage - 1) * PAGE_SIZE + index + 1;
 
                             return (

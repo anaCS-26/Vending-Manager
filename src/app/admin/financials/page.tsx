@@ -1,7 +1,7 @@
 export const revalidate = 60;
 import { PieChart, TrendingUp, Download, Building2, Package, MapPin, LayoutGrid } from "lucide-react";
 import prisma from "@/lib/prisma";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatSaudiDate } from "@/lib/utils";
 import Link from "next/link";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import SortableFinancialTable from "@/components/SortableFinancialTable";
@@ -252,7 +252,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                                 <TimelineOption active={currentRange === "all"} label="ALL" value="all" currentView={currentView} />
                             </div>
                             <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-widest px-2">
-                                Data since {startDate.toLocaleDateString()}
+                                Data since {formatSaudiDate(startDate)}
                             </span>
                         </div>
 

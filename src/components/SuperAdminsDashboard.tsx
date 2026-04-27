@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Plus, Trash2, Edit2, Loader2, Users, Search, MoreVertical, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { createAdmin, updateAdmin, deleteAdmin } from "@/actions/super";
+import { formatSaudiDate } from "@/lib/utils";
 import { ConfirmModal } from "@/components/ConfirmModal";
 
 type Admin = {
@@ -140,7 +141,7 @@ export default function SuperAdminsDashboard({ admins }: { admins: Admin[] }) {
                                     </div>
 
                                     <div className="pt-4 mt-6 border-t border-slate-800 flex justify-between items-center text-xs text-slate-500">
-                                        <span>Joined: {new Date(admin.createdAt).toLocaleDateString()}</span>
+                                        <span>Joined: {formatSaudiDate(admin.createdAt)}</span>
                                         <div className="flex gap-2">
                                             <button onClick={() => { setEditingId(admin.id); setAdminForm({ email: admin.email, name: admin.name || "", password: "" }) }} className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-all"><Edit2 className="w-4 h-4" /></button>
                                             <button onClick={() => setDeleteModal({ isOpen: true, id: admin.id })} className="p-2 text-slate-400 hover:text-accent-pink bg-slate-800 hover:bg-slate-700 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>

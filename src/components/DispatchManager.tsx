@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh";
 import type { DriverType, WarehouseWithItem, DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine, WarehouseType } from "@/types";
-import { formatID } from "@/lib/utils";
+import { formatID, formatSaudiTime } from "@/lib/utils";
 import { DriverBagManager } from "./DriverBagManager";
 
 type DispatchManagerProps = {
@@ -461,7 +461,7 @@ function DispatchCard({ dispatch }: { dispatch: DispatchWithRelations }) {
                     </motion.div>
                     <div>
                         <h3 className="font-bold text-slate-900 dark:text-white tracking-tight">{dispatch.driver.name}</h3>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Route started: {new Date(dispatch.dispatch_date).toLocaleTimeString()}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Route started: {formatSaudiTime(dispatch.dispatch_date)}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">

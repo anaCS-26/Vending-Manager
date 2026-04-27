@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { TrendingUp, TrendingDown, Target, MapPin, DollarSign, Package, AlertTriangle } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatSaudiDate } from "@/lib/utils";
 
 type Props = {
     machinesData: any[]; // Has RefillLogs
@@ -41,7 +41,7 @@ export default function AnalyticsDashboardClient({ machinesData, allRefillsData 
         const dateMap: Record<string, number> = {};
         machinesData.forEach(m => {
             m.RefillLogs?.forEach((rl: any) => {
-                const date = new Date(rl.refilled_at).toLocaleDateString();
+                const date = formatSaudiDate(rl.refilled_at);
                 if (!dateMap[date]) dateMap[date] = 0;
                 dateMap[date] += rl.quantity_refilled;
             });
@@ -57,7 +57,7 @@ export default function AnalyticsDashboardClient({ machinesData, allRefillsData 
             const itemMap: Record<string, number> = {};
 
             machine.RefillLogs?.forEach((rl: any) => {
-                const date = new Date(rl.refilled_at).toLocaleDateString();
+                const date = formatSaudiDate(rl.refilled_at);
                 if (!dateMap[date]) dateMap[date] = 0;
                 dateMap[date] += rl.quantity_refilled;
 

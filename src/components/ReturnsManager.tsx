@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh";
 import { approveReturn, rejectReturn } from "@/actions/returns";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { formatSaudiDate } from "@/lib/utils";
 
 // Local types until we update index.ts
 type ReturnVerificationType = {
@@ -121,7 +122,7 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                                 {ret.reason}
                                             </span>
                                             <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                                                {new Date(ret.reported_at).toLocaleDateString()}
+                                                {formatSaudiDate(ret.reported_at)}
                                             </span>
                                         </div>
 
@@ -201,7 +202,7 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                     {history.map((his) => (
                                         <tr key={his.id} className="border-b border-slate-200 dark:border-white/5 hover:bg-white/[0.02] transition-colors">
                                             <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-300 whitespace-nowrap">
-                                                {new Date(his.verified_at || his.reported_at).toLocaleDateString()}
+                                                {formatSaudiDate(his.verified_at || his.reported_at)}
                                             </td>
                                             <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm text-slate-900 dark:text-white font-medium">
                                                 {his.dispatch.driver.name}
