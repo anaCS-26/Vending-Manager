@@ -139,7 +139,7 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
                         >
                             <option value="" className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">-- Select Machine to Audit --</option>
                             {machines.map(m => (
-                                <option key={m.id} value={m.id} className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">{m.location_name}</option>
+                                <option key={m.id} value={m.id} className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">{m.id} - {m.location_name}</option>
                             ))}
                         </select>
                     </div>
