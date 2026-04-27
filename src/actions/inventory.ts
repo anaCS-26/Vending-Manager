@@ -353,7 +353,7 @@ export async function logRefill(
             })
             const totalGiven = (dispatchItem?.quantity_given || 0) + (driverStock?.quantity_on_hand || 0)
             
-            if (totalGiven === 0) throw new Error("Item is not assigned to this driver")
+            if (totalGiven === 0 && quantity_refilled > 0) throw new Error("Item is not assigned to this driver")
 
             const refillAgg = await tx.refillLog.aggregate({
                 where: { dispatchId, itemId },
@@ -486,7 +486,7 @@ export async function logBatchRefills(
                 })
                 const totalGiven = (dispatchItem?.quantity_given || 0) + (driverStock?.quantity_on_hand || 0)
 
-                if (totalGiven === 0) {
+                if (totalGiven === 0 && item.refilled > 0) {
                     throw new Error(`Item ${item.itemId} is not assigned to this driver`)
                 }
 
