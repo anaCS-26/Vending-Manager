@@ -12,7 +12,7 @@ import AddressAutocomplete from "./AddressAutocomplete";
 import ExportExcelButton from "./ExportExcelButton";
 
 type Driver = { id: number; name: string; phone?: string | null; email?: string | null; pin?: string | null; };
-type Machine = { id: number; location_name: string; district: string; address?: string | null; notes?: string | null; terminalId?: string | null; operating_cost: number; rental_cost: number; tier: string; };
+type Machine = { id: number; location_name: string; district: string; address?: string | null; notes?: string | null; terminalId?: string | null; latitude?: number | null; longitude?: number | null; operating_cost: number; rental_cost: number; tier: string; };
 type ItemWithWarehouse = {
     id: number;
     name: string;
@@ -449,6 +449,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                         "Machine Code": m.id,
                                         "Terminal ID (TID)": m.terminalId || "N/A",
                                         "Address": m.address || "N/A",
+                                        "Latitude": m.latitude || "N/A",
+                                        "Longitude": m.longitude || "N/A",
                                         "Operating Cost": formatCurrency(m.operating_cost || 0),
                                         "Rental Cost": formatCurrency(m.rental_cost || 0),
                                         "Tier": m.tier,
@@ -588,6 +590,17 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         <MapPin className="w-4 h-4 text-slate-500 dark:text-slate-400 mt-0.5 flex-shrink-0" />
                                                         <span className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">{machine.address || "Address not specified"}</span>
                                                     </div>
+                                                    {(machine.latitude && machine.longitude) ? (
+                                                        <div className="flex items-start gap-2.5">
+                                                            <MapPin className="w-4 h-4 text-brand-500 mt-0.5 flex-shrink-0" />
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[10px] font-bold text-brand-400 uppercase">GPS Coordinates</span>
+                                                                <span className="text-xs text-slate-600 dark:text-slate-400 font-mono">
+                                                                    {machine.latitude.toFixed(6)}, {machine.longitude.toFixed(6)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ) : null}
                                                     {machine.notes && (
                                                         <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-brand-500/5 border border-brand-500/10">
                                                             <Info className="w-4 h-4 text-brand-400 mt-0.5 flex-shrink-0" />
