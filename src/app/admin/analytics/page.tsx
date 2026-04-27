@@ -166,9 +166,9 @@ export default async function AnalyticsPage() {
                             Driver Performance & Status
                         </h3>
                     </div>
-                    <div className="divide-y divide-white/5 bg-black/10">
+                    <div className="divide-y divide-slate-200 dark:divide-white/5 bg-slate-50/50 dark:bg-black/10">
                         {driverStats.map((driver, i) => (
-                            <div key={i} className="p-5 hover:bg-white/[0.04] transition-colors relative group border-l-2 border-transparent hover:border-accent-purple animate-in fade-in slide-in-from-right-4 fill-mode-both" style={{ animationDelay: `${i * 100}ms` }}>
+                            <div key={i} className="p-5 hover:bg-slate-100 dark:hover:bg-white/[0.04] transition-colors relative group border-l-2 border-transparent hover:border-accent-purple animate-in fade-in slide-in-from-right-4 fill-mode-both" style={{ animationDelay: `${i * 100}ms` }}>
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-xl bg-accent-purple/10 flex items-center justify-center text-accent-purple font-bold">
@@ -213,9 +213,9 @@ export default async function AnalyticsPage() {
                             Highest Machine Demand
                         </h3>
                     </div>
-                    <div className="divide-y divide-white/5 p-2 bg-black/10">
+                    <div className="divide-y divide-slate-200 dark:divide-white/5 p-2 bg-slate-50/50 dark:bg-black/10">
                         {topMachines.length > 0 ? topMachines.map((machine, i) => (
-                            <div key={i} className="flex items-center justify-between p-4 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors animate-in fade-in slide-in-from-right-4 fill-mode-both" style={{ animationDelay: `${(i + 4) * 100}ms` }}>
+                            <div key={i} className="flex items-center justify-between p-4 bg-transparent hover:bg-slate-100 dark:hover:bg-white/[0.04] rounded-xl transition-colors animate-in fade-in slide-in-from-right-4 fill-mode-both" style={{ animationDelay: `${(i + 4) * 100}ms` }}>
                                 <div className="flex items-center gap-4">
                                     <div className="w-8 h-8 rounded-lg bg-accent-green/10 text-accent-green flex items-center justify-center font-bold text-sm">
                                         {i + 1}
@@ -247,9 +247,9 @@ export default async function AnalyticsPage() {
                             Fast Moving Inventory
                         </h3>
                     </div>
-                    <div className="divide-y divide-white/5 p-2 bg-black/10">
+                    <div className="divide-y divide-slate-200 dark:divide-white/5 p-2 bg-slate-50/50 dark:bg-black/10">
                         {fastMoving.length > 0 ? fastMoving.map((item, i) => (
-                            <div key={i} className="flex items-center justify-between p-4 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors animate-in fade-in slide-in-from-bottom-4 fill-mode-both" style={{ animationDelay: `${(i + 2) * 100}ms` }}>
+                            <div key={i} className="flex items-center justify-between p-4 bg-transparent hover:bg-slate-100 dark:hover:bg-white/[0.04] rounded-xl transition-colors animate-in fade-in slide-in-from-bottom-4 fill-mode-both" style={{ animationDelay: `${(i + 2) * 100}ms` }}>
                                 <div className="flex items-center gap-4">
                                     <div className="w-8 h-8 rounded-lg bg-accent-blue/10 text-accent-blue flex items-center justify-center font-bold text-sm">
                                         {i + 1}
@@ -276,9 +276,9 @@ export default async function AnalyticsPage() {
                             Slow Moving Inventory
                         </h3>
                     </div>
-                    <div className="divide-y divide-white/5 p-2 bg-black/10">
+                    <div className="divide-y divide-slate-200 dark:divide-white/5 p-2 bg-slate-50/50 dark:bg-black/10">
                         {slowMoving.length > 0 ? slowMoving.map((item, i) => (
-                            <div key={i} className="flex items-center justify-between p-4 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors animate-in fade-in slide-in-from-bottom-4 fill-mode-both" style={{ animationDelay: `${(i + 4) * 100}ms` }}>
+                            <div key={i} className="flex items-center justify-between p-4 bg-transparent hover:bg-slate-100 dark:hover:bg-white/[0.04] rounded-xl transition-colors animate-in fade-in slide-in-from-bottom-4 fill-mode-both" style={{ animationDelay: `${(i + 4) * 100}ms` }}>
                                 <div className="flex items-center gap-4">
                                     <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 flex items-center justify-center font-bold text-sm">
                                         {fastMoving.length + i + 1}

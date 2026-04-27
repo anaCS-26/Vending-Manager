@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { formatCurrency } from "@/lib/utils";
-import { ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 export type FinancialRowData = {
     id: string | number;
@@ -12,6 +12,7 @@ export type FinancialRowData = {
     cogs: number;
     shrinkage: number;
     expenses: number;
+    baseExpenses?: number;
     netProfit: number;
 };
 
@@ -26,6 +27,10 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
         direction: "asc" | "desc";
     }>({ key: "revenue", direction: "desc" });
 
+    const [searchQuery, setSearchQuery] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
+    const PAGE_SIZE = 10;
+
     const handleSort = (key: keyof FinancialRowData) => {
         if (sortConfig.key === key) {
             // Toggle direction if clicking same column
@@ -36,20 +41,38 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
         }
     };
 
-    const sortedData = [...data].sort((a, b) => {
-        if (!sortConfig.key) return 0;
-        
-        const aVal = a[sortConfig.key];
-        const bVal = b[sortConfig.key];
+    const filteredData = useMemo(() => {
+        let result = data;
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(item => 
+                item.label.toLowerCase().includes(q) || 
+                item.subLabel.toLowerCase().includes(q)
+            );
+        }
+        return result;
+    }, [data, searchQuery]);
 
-        if (aVal < bVal) {
-            return sortConfig.direction === "asc" ? -1 : 1;
-        }
-        if (aVal > bVal) {
-            return sortConfig.direction === "asc" ? 1 : -1;
-        }
-        return 0;
-    });
+    const sortedData = useMemo(() => {
+        return [...filteredData].sort((a, b) => {
+            if (!sortConfig.key) return 0;
+            
+            const aVal = a[sortConfig.key] ?? 0;
+            const bVal = b[sortConfig.key] ?? 0;
+
+            if (aVal < bVal) {
+                return sortConfig.direction === "asc" ? -1 : 1;
+            }
+            if (aVal > bVal) {
+                return sortConfig.direction === "asc" ? 1 : -1;
+            }
+            return 0;
+        });
+    }, [filteredData, sortConfig]);
+
+    const totalPages = Math.max(1, Math.ceil(sortedData.length / PAGE_SIZE));
+    const safePage = Math.min(currentPage, totalPages);
+    const paginatedData = sortedData.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
     const SortIcon = ({ columnKey }: { columnKey: keyof FinancialRowData }) => {
         if (sortConfig.key !== columnKey) return <span className="w-4 h-4 inline-block ml-1 opacity-0 group-hover:opacity-30 transition-opacity" />;
@@ -90,7 +113,22 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
     }, [data]);
 
     return (
-        <div className="relative">
+        <div className="space-y-6">
+            {/* Search Bar */}
+            <div className="flex justify-end">
+                <div className="w-full sm:w-72 bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-2xl px-4 py-2.5 flex items-center gap-2 focus-within:border-brand-500/50 focus-within:shadow-[0_0_15px_rgba(59,130,246,0.15)] transition-all">
+                    <Search className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                        placeholder="Search segments..."
+                        className="bg-transparent border-none outline-none text-sm text-slate-900 dark:text-white w-full placeholder:text-slate-500 dark:text-slate-400"
+                    />
+                </div>
+            </div>
+
+            <div className="relative">
             {/* Top Synchronized Scrollbar */}
             {isScrollable && (
                 <div 
@@ -150,14 +188,14 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-white/[0.03]">
-                    {sortedData.length === 0 ? (
+                    {paginatedData.length === 0 ? (
                         <tr>
                             <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest text-xs">
                                 No telemetry matches selected segment filters.
                             </td>
                         </tr>
                     ) : (
-                        sortedData.map((item) => (
+                        paginatedData.map((item) => (
                             <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 flex-row">
                                 <td className="py-3 pr-3 md:py-5 md:pr-6">
                                     <div className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase">{item.label}</div>
@@ -173,7 +211,12 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
                                     <span className="text-xs md:text-sm font-medium text-amber-500/80 font-mono">-{formatCurrency(item.shrinkage)}</span>
                                 </td>
                                 <td className="py-3 px-3 md:py-5 md:px-6 text-right">
-                                    <span className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400 font-mono">{formatCurrency(item.expenses)}</span>
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400 font-mono">{formatCurrency(item.expenses)}</span>
+                                        {item.baseExpenses ? (
+                                            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono uppercase tracking-widest mt-0.5">({formatCurrency(item.baseExpenses)}/mo)</span>
+                                        ) : null}
+                                    </div>
                                 </td>
                                 <td className="py-3 pl-3 md:py-5 md:pl-6 text-right">
                                     <span className="text-sm md:text-base font-black text-brand-500 font-mono">{formatCurrency(item.netProfit)}</span>
@@ -184,6 +227,63 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
                 </tbody>
             </table>
         </div>
+        </div>
+        
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 pt-2">
+                <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={safePage === 1}
+                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                    title="First Page"
+                >
+                    <ChevronsLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={safePage === 1}
+                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                    title="Previous Page"
+                >
+                    <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                
+                {Array.from(new Set([1, safePage - 10, safePage - 5, safePage - 1, safePage, safePage + 1, safePage + 5, safePage + 10, totalPages]))
+                    .filter(p => p >= 1 && p <= totalPages)
+                    .sort((a, b) => a - b)
+                    .map((p, index, array) => (
+                        <div key={p} className="flex items-center">
+                            {index > 0 && p - array[index - 1] > 1 && (
+                                <span className="text-slate-400 dark:text-slate-500 px-1 font-bold">...</span>
+                            )}
+                            <button
+                                onClick={() => setCurrentPage(p)}
+                                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl text-xs font-bold transition-all shadow-sm ${p === safePage ? 'bg-brand-500 text-white dark:text-white border border-brand-500 shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-400 dark:hover:border-white/20'}`}
+                            >
+                                {p}
+                            </button>
+                        </div>
+                    ))}
+
+                <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={safePage === totalPages}
+                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                    title="Next Page"
+                >
+                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={safePage === totalPages}
+                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                    title="Last Page"
+                >
+                    <ChevronsRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+            </div>
+        )}
         </div>
     );
 }

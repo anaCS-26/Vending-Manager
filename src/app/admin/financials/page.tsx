@@ -6,13 +6,41 @@ import Link from "next/link";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import SortableFinancialTable from "@/components/SortableFinancialTable";
 
-export default async function FinancialsPage(props: { searchParams: Promise<{ view?: string }> }) {
+export default async function FinancialsPage(props: { searchParams: Promise<{ view?: string, range?: string }> }) {
     const searchParams = await props.searchParams;
     const currentView = searchParams.view || "machine";
+    const currentRange = searchParams.range || "all";
+
+    // Date Filtering & Pro-Rating Logic
+    const now = new Date();
+    let startDate = new Date(0); // Epoch as fallback
+    let expenseMultiplier = 1;
+
+    if (currentRange !== "all") {
+        if (currentRange === "7days") {
+            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            expenseMultiplier = 7 / 30.44;
+        } else if (currentRange === "30days") {
+            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            expenseMultiplier = 1;
+        } else if (currentRange === "ytd") {
+            startDate = new Date(now.getFullYear(), 0, 1);
+            const daysInPeriod = Math.max(1, (now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+            expenseMultiplier = daysInPeriod / 30.44;
+        }
+    } else {
+        // Calculate All-Time Multiplier
+        const earliestLog = await prisma.refillLog.findFirst({ orderBy: { refilled_at: 'asc' } });
+        if (earliestLog) {
+            const daysInPeriod = Math.max(1, (now.getTime() - earliestLog.refilled_at.getTime()) / (1000 * 60 * 60 * 24));
+            expenseMultiplier = daysInPeriod / 30.44;
+        }
+    }
 
     // 1. Fetch Master Data in Parallel
     const [refillLogsRaw, machinesRaw, itemsRaw, warehousesRaw, returnVerificationsRaw, dispatchItemsRaw] = await Promise.all([
         prisma.refillLog.findMany({
+            where: { refilled_at: { gte: startDate } },
             include: {
                 item: true,
                 machine: true,
@@ -23,11 +51,11 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
         prisma.item.findMany(),
         prisma.warehouse.findMany(),
         prisma.returnVerification.findMany({
-            where: { status: "APPROVED" },
+            where: { status: "APPROVED", reported_at: { gte: startDate } },
             include: { item: true, dispatch: true }
         }),
         prisma.dispatchItem.findMany({
-            where: { quantity_damaged: { gt: 0 } },
+            where: { quantity_damaged: { gt: 0 }, dispatch: { dispatch_date: { gte: startDate } } },
             include: { item: true, dispatch: true }
         })
     ]);
@@ -50,8 +78,8 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
     const shrinkageFromReturns = dispatchItemsRaw.reduce((sum, di) => sum + ((di.quantity_damaged || 0) * ((di.item as any).cost || 0)), 0);
     const totalShrinkageCOGS = shrinkageFromRoutes + shrinkageFromReturns;
 
-    const totalMachineExpenses = machinesRaw.reduce((acc, m) => acc + ((m as any).operating_cost || 0) + ((m as any).rental_cost || 0), 0);
-    const totalWarehouseExpenses = warehousesRaw.reduce((acc, w) => acc + ((w as any).operating_cost || 0) + ((w as any).rental_cost || 0), 0);
+    const totalMachineExpenses = machinesRaw.reduce((acc, m) => acc + (((m as any).operating_cost || 0) + ((m as any).rental_cost || 0)) * expenseMultiplier, 0);
+    const totalWarehouseExpenses = warehousesRaw.reduce((acc, w) => acc + (((w as any).operating_cost || 0) + ((w as any).rental_cost || 0)) * expenseMultiplier, 0);
     const totalExpenses = totalMachineExpenses + totalWarehouseExpenses;
 
     // Net Profit = Collected Revenue - Cost of Sold Items - Shrinkage Cost - Fixed Expenses
@@ -74,7 +102,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                 cogs += sold * cost;
                 shrinkage += (l.damaged_quantity || 0) * cost;
             });
-            const expenses = ((m as any).operating_cost || 0) + ((m as any).rental_cost || 0);
+            const expenses = (((m as any).operating_cost || 0) + ((m as any).rental_cost || 0)) * expenseMultiplier;
             return {
                 id: m.id,
                 label: m.location_name,
@@ -83,6 +111,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                 cogs,
                 shrinkage,
                 expenses,
+                baseExpenses: ((m as any).operating_cost || 0) + ((m as any).rental_cost || 0),
                 netProfit: revenue - cogs - shrinkage - expenses
             };
         }).sort((a, b) => b.revenue - a.revenue);
@@ -107,7 +136,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
             wReturnVerifs.forEach(rv => shrinkage += (rv.quantity * ((rv.item as any).cost || 0)));
             wDispatchItems.forEach(di => shrinkage += ((di.quantity_damaged || 0) * ((di.item as any).cost || 0)));
 
-            const expenses = ((w as any).operating_cost || 0) + ((w as any).rental_cost || 0);
+            const expenses = (((w as any).operating_cost || 0) + ((w as any).rental_cost || 0)) * expenseMultiplier;
             return {
                 id: w.id,
                 label: w.name,
@@ -116,6 +145,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                 cogs,
                 shrinkage,
                 expenses,
+                baseExpenses: ((w as any).operating_cost || 0) + ((w as any).rental_cost || 0),
                 netProfit: revenue - cogs - shrinkage - expenses
             };
         }).sort((a, b) => b.revenue - a.revenue);
@@ -212,11 +242,26 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                         </div>
                     </div>
 
-                    {/* View Toggle Group */}
-                    <div className="flex bg-slate-100 dark:bg-black/40 p-1 rounded-2xl border border-slate-200 dark:border-white/10 relative">
-                        <ViewOption active={currentView === "machine"} label="Machines" value="machine" icon={<MapPin className="w-4 h-4" />} />
-                        <ViewOption active={currentView === "warehouse"} label="Warehouses" value="warehouse" icon={<Building2 className="w-4 h-4" />} />
-                        <ViewOption active={currentView === "item"} label="Items" value="item" icon={<Package className="w-4 h-4" />} />
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                        {/* Timeline Toggle Group */}
+                        <div className="flex flex-col items-end gap-1.5">
+                            <div className="flex bg-slate-100 dark:bg-black/40 p-1 rounded-2xl border border-slate-200 dark:border-white/10 relative">
+                                <TimelineOption active={currentRange === "7days"} label="7D" value="7days" currentView={currentView} />
+                                <TimelineOption active={currentRange === "30days"} label="30D" value="30days" currentView={currentView} />
+                                <TimelineOption active={currentRange === "ytd"} label="YTD" value="ytd" currentView={currentView} />
+                                <TimelineOption active={currentRange === "all"} label="ALL" value="all" currentView={currentView} />
+                            </div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-widest px-2">
+                                Data since {startDate.toLocaleDateString()}
+                            </span>
+                        </div>
+
+                        {/* View Toggle Group */}
+                        <div className="flex bg-slate-100 dark:bg-black/40 p-1 rounded-2xl border border-slate-200 dark:border-white/10 relative">
+                            <ViewOption active={currentView === "machine"} label="Machines" value="machine" icon={<MapPin className="w-4 h-4" />} currentRange={currentRange} />
+                            <ViewOption active={currentView === "warehouse"} label="Warehouses" value="warehouse" icon={<Building2 className="w-4 h-4" />} currentRange={currentRange} />
+                            <ViewOption active={currentView === "item"} label="Items" value="item" icon={<Package className="w-4 h-4" />} currentRange={currentRange} />
+                        </div>
                     </div>
                 </div>
 
@@ -248,14 +293,25 @@ function MetricCard({ title, value, color, icon, glow = false }: { title: string
     );
 }
 
-function ViewOption({ active, label, value, icon }: { active: boolean, label: string, value: string, icon: React.ReactNode }) {
+function ViewOption({ active, label, value, icon, currentRange }: { active: boolean, label: string, value: string, icon: React.ReactNode, currentRange: string }) {
     return (
         <Link
-            href={`/admin/financials?view=${value}`}
+            href={`/admin/financials?view=${value}&range=${currentRange}`}
             className={`relative px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${active ? 'text-slate-900 dark:text-white bg-white dark:bg-white/10 shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
         >
             {icon}
             <span className="capitalize hidden sm:inline">{label}</span>
+        </Link>
+    );
+}
+
+function TimelineOption({ active, label, value, currentView }: { active: boolean, label: string, value: string, currentView: string }) {
+    return (
+        <Link
+            href={`/admin/financials?view=${currentView}&range=${value}`}
+            className={`relative px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${active ? 'text-slate-900 dark:text-white bg-white dark:bg-white/10 shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
+        >
+            {label}
         </Link>
     );
 }

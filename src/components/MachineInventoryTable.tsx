@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Package, MapPin, Search, AlertCircle, TrendingDown, Clock, ArrowUp, ArrowDown } from "lucide-react";
+import { Package, MapPin, Search, AlertCircle, TrendingDown, Clock, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import type { MachineStockWithItem, MachineType } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import MachineAuditModal from "./MachineAuditModal";
@@ -21,6 +21,12 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
     const [searchQuery, setSearchQuery] = useState("");
     const [sortConfig, setSortConfig] = useState<{ key: SortKey | null; direction: "asc" | "desc" }>({ key: null, direction: "desc" });
     const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const PAGE_SIZE = 10;
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, selectedMachineId]);
 
     // Filter stock based on selected machine
     let filteredInventory = selectedMachineId === "all"
@@ -79,6 +85,15 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
         if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
         return 0;
     });
+
+    const totalPages = Math.ceil(sortedInventory.length / PAGE_SIZE);
+    const paginatedData = sortedInventory.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+    const handlePageChange = (newPage: number) => {
+        if (newPage >= 1 && newPage <= totalPages) {
+            setCurrentPage(newPage);
+        }
+    };
 
     const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
         if (sortConfig.key !== columnKey) return <span className="w-4 h-4 inline-block ml-1 opacity-0 group-hover:opacity-30 transition-opacity" />;
@@ -193,15 +208,16 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-white/5">
-                        {sortedInventory.map((stock, index) => {
+                        {paginatedData.map((stock, index) => {
                             const isLow = stock.estimated_stock < 5;
                             const isZero = stock.estimated_stock === 0;
                             const lastRefill = new Date(stock.last_refilled_at).toLocaleDateString() + ' ' + new Date(stock.last_refilled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            const globalIndex = (currentPage - 1) * PAGE_SIZE + index + 1;
 
                             return (
                                 <tr key={`${stock.machineId}-${stock.itemId}`} className={`group hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 ${isLow ? 'bg-accent-pink/[0.01]' : ''}`}>
                                     <td className="px-3 py-3 md:px-6 md:py-4 text-center font-mono text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-slate-500 dark:text-slate-400 dark:text-slate-300 transition-colors">
-                                        {index + 1}
+                                        {globalIndex}
                                     </td>
                                     <td className="px-3 py-3 md:px-6 md:py-4">
                                         <div className="flex flex-col gap-0.5 group/name">
@@ -251,6 +267,76 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                         </div>
                         <p className="text-slate-900 dark:text-white font-bold mb-1">No Machine Stock Data</p>
                         <p className="text-sm text-slate-600 dark:text-slate-400">Restock machines via driver portal to see estimates.</p>
+                    </div>
+                )}
+
+                {totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 bg-slate-50/50 dark:bg-white/[0.02] border-t border-slate-200 dark:border-white/5 gap-4">
+                        <div className="text-xs font-medium text-slate-500 dark:text-slate-400 text-center sm:text-left">
+                            Showing <span className="text-slate-900 dark:text-white font-bold">{(currentPage - 1) * PAGE_SIZE + 1}</span> to <span className="text-slate-900 dark:text-white font-bold">{Math.min(currentPage * PAGE_SIZE, sortedInventory.length)}</span> of <span className="text-slate-900 dark:text-white font-bold">{sortedInventory.length}</span> items
+                        </div>
+                        <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-2 sm:pb-0 custom-scrollbar">
+                            <button
+                                onClick={() => handlePageChange(1)}
+                                disabled={currentPage === 1}
+                                className="w-8 h-8 flex shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                            >
+                                <ChevronsLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                className="w-8 h-8 flex shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+
+                            <div className="flex items-center px-2 gap-1">
+                                {Array.from({ length: totalPages }).map((_, i) => {
+                                    const page = i + 1;
+                                    if (
+                                        page === 1 ||
+                                        page === totalPages ||
+                                        (page >= currentPage - 1 && page <= currentPage + 1)
+                                    ) {
+                                        return (
+                                            <button
+                                                key={page}
+                                                onClick={() => handlePageChange(page)}
+                                                className={`w-8 h-8 flex shrink-0 items-center justify-center rounded-lg text-sm font-bold transition-all ${
+                                                    currentPage === page
+                                                        ? 'bg-brand-500 text-white shadow-md shadow-brand-500/20 border-transparent'
+                                                        : 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'
+                                                }`}
+                                            >
+                                                {page}
+                                            </button>
+                                        );
+                                    } else if (
+                                        page === currentPage - 2 ||
+                                        page === currentPage + 2
+                                    ) {
+                                        return <span key={page} className="text-slate-400 dark:text-slate-500 px-1">...</span>;
+                                    }
+                                    return null;
+                                })}
+                            </div>
+
+                            <button
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                className="w-8 h-8 flex shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handlePageChange(totalPages)}
+                                disabled={currentPage === totalPages}
+                                className="w-8 h-8 flex shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                            >
+                                <ChevronsRight className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
