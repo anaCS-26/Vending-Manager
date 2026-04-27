@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Plus, CheckCircle2, History, Package, Clock, Loader2, Search, Store, FileText, X, Trash2, ArrowRight, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPurchaseOrder, completePurchaseOrder, cancelPurchaseOrder, createQuickItem } from "@/actions/orders";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import type { Item, Warehouse, PurchaseOrder, PurchaseOrderItem } from "@prisma/client";
 
@@ -543,7 +543,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                 <Store className="w-5 h-5 text-slate-400" /> {order.warehouse.name}
                                                             </h3>
                                                             <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
-                                                                <Clock className="w-4 h-4" /> Ordered on {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                <Clock className="w-4 h-4" /> Ordered on {formatSaudiDate(order.createdAt)} at {formatSaudiTime(order.createdAt, { hour: '2-digit', minute: '2-digit' })}
                                                             </p>
                                                         </div>
 
@@ -718,7 +718,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                         </span>
                                                     </td>
                                                     <td className="px-3 py-3 md:px-6 md:py-4 text-right text-xs md:text-sm font-mono text-slate-500 dark:text-slate-400">
-                                                        {o.completedAt ? `${new Date(o.completedAt).toLocaleDateString()} ${new Date(o.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "--"}
+                                                        {o.completedAt ? `${formatSaudiDate(o.completedAt)} ${formatSaudiTime(o.completedAt, { hour: '2-digit', minute: '2-digit' })}` : "--"}
                                                     </td>
                                                 </tr>
                                             )
@@ -751,9 +751,9 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                 <Store className="w-6 h-6 text-slate-400" /> {selectedHistoryOrder.warehouse.name}
                                             </h3>
                                             <p className="text-sm text-slate-500 mt-2 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 font-mono">
-                                                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Ordered: {new Date(selectedHistoryOrder.createdAt).toLocaleDateString()} {new Date(selectedHistoryOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Ordered: {formatSaudiDate(selectedHistoryOrder.createdAt)} {formatSaudiTime(selectedHistoryOrder.createdAt, { hour: '2-digit', minute: '2-digit' })}</span>
                                                 {selectedHistoryOrder.completedAt && (
-                                                    <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Handled: {new Date(selectedHistoryOrder.completedAt).toLocaleDateString()} {new Date(selectedHistoryOrder.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Handled: {formatSaudiDate(selectedHistoryOrder.completedAt)} {formatSaudiTime(selectedHistoryOrder.completedAt, { hour: '2-digit', minute: '2-digit' })}</span>
                                                 )}
                                             </p>
                                         </div>
@@ -815,7 +815,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                             <div className="text-right">
                                 <p className="font-bold text-xl uppercase tracking-widest mb-1">Company Vending</p>
                                 <p className="text-sm font-medium">Destination: {printingOrder.warehouse.name}</p>
-                                <p className="text-sm font-medium text-slate-500">PO Date: {new Date(printingOrder.createdAt).toLocaleDateString()}</p>
+                                <p className="text-sm font-medium text-slate-500">PO Date: {formatSaudiDate(printingOrder.createdAt)}</p>
                             </div>
                         </div>
 

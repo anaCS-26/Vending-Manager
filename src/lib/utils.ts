@@ -15,3 +15,19 @@ export function formatCurrency(amount: number): string {
 export function formatID(id: number, padding: number = 4): string {
     return id.toString().padStart(padding, '0');
 }
+
+/** Formats date to Saudi Arabia Timezone */
+export function formatSaudiDate(date: Date | string | number, options?: Intl.DateTimeFormatOptions): string {
+    return new Date(date).toLocaleDateString('en-US', {
+        timeZone: 'Asia/Riyadh',
+        ...options
+    });
+}
+
+/** Formats time to Saudi Arabia Timezone */
+export function formatSaudiTime(date: Date | string | number, options?: Intl.DateTimeFormatOptions): string {
+    return new Date(date).toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Riyadh',
+        ...options
+    });
+}

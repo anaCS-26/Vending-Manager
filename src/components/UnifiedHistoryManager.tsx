@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { formatCurrency, formatID } from "@/lib/utils";
+import { formatCurrency, formatID, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { editDispatchReturn } from "@/actions/inventory";
 import { EditLogModal } from "./EditLogModal";
 import type { DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine } from "@/types";
@@ -364,7 +364,7 @@ function RouteCard({ dispatch, isEditing, onEdit, onSave, onCancel, editQtys, se
                                 </div>
                                 <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 flex items-center gap-2">
                                     <Clock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                                    {new Date(dispatch.dispatch_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at {new Date(dispatch.dispatch_date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                                    {formatSaudiDate(dispatch.dispatch_date, { weekday: 'short', month: 'short', day: 'numeric' })} at {formatSaudiTime(dispatch.dispatch_date, { hour: 'numeric', minute: '2-digit' })}
                                 </p>
                             </div>
                         </div>
@@ -463,8 +463,8 @@ function EventRow({ log }: { log: any }) {
         <tr className="hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 border-l-[3px] border-l-transparent hover:border-l-brand-500 group flex-row">
             <td className="py-3 px-3 md:py-5 md:px-6">
                 <div className="flex flex-col">
-                    <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white">{new Date(log.refilled_at).toLocaleDateString()}</span>
-                    <span className="text-[9px] md:text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">{new Date(log.refilled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                    <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white">{formatSaudiDate(log.refilled_at)}</span>
+                    <span className="text-[9px] md:text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">{formatSaudiTime(log.refilled_at, { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
                 </div>
             </td>
             <td className="py-3 px-3 md:py-5 md:px-6">
