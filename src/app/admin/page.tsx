@@ -5,6 +5,7 @@ import { getPredictedDepletion } from "@/actions/predictions";
 import { PackageOpen, Truck, AlertCircle, Activity, MapPin, Clock, ShieldCheck, CheckCircle2, TrendingUp, Package, Zap } from "lucide-react";
 import prisma from "@/lib/prisma";
 import MapVisualWrapper from "@/components/MapVisualWrapper";
+import { formatSaudiTime } from "@/lib/utils";
 
 export default async function AdminDashboard() {
     const startOfDay = new Date();
@@ -318,7 +319,7 @@ export default async function AdminDashboard() {
                                                     {log.dispatch ? "Refill Synchronized" : "Audit Reconciled"}
                                                 </p>
                                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                                                    {new Intl.DateTimeFormat('en', { timeStyle: 'short' }).format(new Date(log.refilled_at))}
+                                                    {formatSaudiTime(log.refilled_at, { timeStyle: 'short' })}
                                                 </span>
                                             </div>
                                             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
