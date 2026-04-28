@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Edit2, TrendingUp, Package, Check, X, Loader2, Undo2 } from "lucide-react";
+import { Edit2, TrendingUp, Package, Check, X, Loader2, Undo2, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { updateRefillLog } from "@/actions/history";
 import { toast } from "sonner";
 
 interface EditLogProps {
     log: any;
+    verifiedCount?: number;
+    pendingCount?: number;
 }
 
-export function EditLogModal({ log }: EditLogProps) {
+export function EditLogModal({ log, verifiedCount, pendingCount }: EditLogProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -42,11 +44,41 @@ export function EditLogModal({ log }: EditLogProps) {
     }
 
     if (isReturnOnly) {
+        const isVerified = verifiedCount !== undefined && verifiedCount === returnQuantity;
+        const isPending = pendingCount !== undefined && pendingCount > 0;
+        const isRejected = returnQuantity > 0 && !isPending && (verifiedCount === 0 || verifiedCount === undefined);
+
+        let statusColor = "text-accent-orange";
+        let bgColor = "bg-accent-orange/10";
+        let borderColor = "border-accent-orange/20";
+        let Icon = Clock;
+        let title = "Pending Verification";
+
+        if (isVerified) {
+            statusColor = "text-emerald-500";
+            bgColor = "bg-emerald-500/10";
+            borderColor = "border-emerald-500/20";
+            Icon = CheckCircle2;
+            title = "Verified Return";
+        } else if (isRejected) {
+            statusColor = "text-slate-500";
+            bgColor = "bg-slate-500/10";
+            borderColor = "border-slate-500/20";
+            Icon = XCircle;
+            title = "Rejected Return";
+        }
+
         return (
-            <div className="flex items-center gap-4 bg-accent-orange/10 px-3 py-1.5 rounded-lg border border-accent-orange/20 transition-all duration-200">
+            <div 
+                className={`flex items-center gap-4 ${bgColor} px-3 py-1.5 rounded-lg border ${borderColor} transition-all duration-200`}
+                title={title}
+            >
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-accent-orange uppercase flex items-center gap-1"><Undo2 className="w-3 h-3" /> Returned</span>
-                    <span className="text-sm font-bold text-accent-orange font-mono tracking-tight">
+                    <span className={`text-[10px] font-bold ${statusColor} uppercase flex items-center gap-1.5`}>
+                        <Icon className="w-3.5 h-3.5" /> 
+                        Returned
+                    </span>
+                    <span className={`text-sm font-bold ${statusColor} font-mono tracking-tight ${isRejected ? 'line-through opacity-70' : ''}`}>
                         {returnQuantity}
                     </span>
                 </div>

@@ -462,7 +462,7 @@ export async function logBatchRefills(
     try {
         const dispatchAuthCheck = await prisma.dispatch.findUnique({ where: { id: dispatchId }, select: { driverId: true } });
         if (!dispatchAuthCheck) return { success: false, error: "Dispatch not found" };
-        await requireAdminOrDriverOwner(dispatchAuthCheck.driverId);
+        const session = await requireAdminOrDriverOwner(dispatchAuthCheck.driverId);
 
         await prisma.$transaction(async (tx) => {
             const dispatch = await tx.dispatch.findUnique({
@@ -565,6 +565,9 @@ export async function logBatchRefills(
         revalidatePath('/admin')
         revalidatePath('/admin/machine-stock')
         notifyClients('refill')
+        
+        await writeAuditLog(session, 'LOG_BATCH_REFILL', 'Dispatch', dispatchId, null, { machineId, items });
+        
         return { success: true, data: undefined }
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to log batch refill"
@@ -589,7 +592,7 @@ export async function returnDispatch(
     try {
         const dispatchAuthCheck = await prisma.dispatch.findUnique({ where: { id: dispatchId }, select: { driverId: true } });
         if (!dispatchAuthCheck) return { success: false, error: "Dispatch not found" };
-        await requireAdminOrDriverOwner(dispatchAuthCheck.driverId);
+        const session = await requireAdminOrDriverOwner(dispatchAuthCheck.driverId);
 
         await prisma.$transaction(async (tx) => {
             const dispatch = await tx.dispatch.findUnique({
@@ -696,6 +699,9 @@ export async function returnDispatch(
         revalidatePath('/admin')
         revalidatePath('/driver')
         notifyClients('return')
+        
+        await writeAuditLog(session, 'SUBMIT_UNVERIFIED_RETURN', 'Dispatch', dispatchId, null, { returns });
+        
         return { success: true, data: undefined }
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to process return"
@@ -708,6 +714,7 @@ export async function editDispatchReturn(
     dispatchId: number,
     edits: { dispatchItemId: number, new_quantity_returned: number }[]
 ): Promise<ActionResult> {
+    const session = await requireAdmin();
     try {
         await prisma.$transaction(async (tx) => {
             const dispatch = await tx.dispatch.findUnique({
@@ -792,6 +799,9 @@ export async function editDispatchReturn(
         revalidatePath('/admin')
         revalidatePath('/driver')
         notifyClients('return')
+        
+        await writeAuditLog(session, 'EDIT_UNVERIFIED_RETURN', 'DispatchItem', dispatchId, null, { edits });
+        
         return { success: true, data: undefined }
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to edit return"

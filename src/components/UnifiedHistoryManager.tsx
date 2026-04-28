@@ -494,7 +494,7 @@ function EventRow({ log }: { log: any }) {
             </td>
             <td className="py-3 px-3 md:py-5 md:px-6">
                 <div className="flex justify-center opacity-80 group-hover:opacity-100 transition-opacity">
-                    <EditLogModal log={log} />
+                    <EditLogModal log={log} verifiedCount={verifiedLoss} pendingCount={pendingCount} />
                 </div>
             </td>
         </tr>
