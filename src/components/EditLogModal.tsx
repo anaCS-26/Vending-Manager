@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Edit2, TrendingUp, Package, Check, X, Loader2 } from "lucide-react";
+import { Edit2, TrendingUp, Package, Check, X, Loader2, Undo2 } from "lucide-react";
 import { updateRefillLog } from "@/actions/history";
 import { toast } from "sonner";
 
@@ -15,6 +15,9 @@ export function EditLogModal({ log }: EditLogProps) {
 
     // Initializing with existing values
     const [refilled, setRefilled] = useState(log.quantity_refilled || 0);
+
+    const isReturnOnly = log.quantity_refilled === 0 && ((log.expired_quantity || 0) > 0 || (log.damaged_quantity || 0) > 0);
+    const returnQuantity = (log.expired_quantity || 0) + (log.damaged_quantity || 0);
 
     async function handleSave() {
         if (refilled < 0) {
@@ -36,6 +39,19 @@ export function EditLogModal({ log }: EditLogProps) {
         } finally {
             setIsSaving(false);
         }
+    }
+
+    if (isReturnOnly) {
+        return (
+            <div className="flex items-center gap-4 bg-accent-orange/10 px-3 py-1.5 rounded-lg border border-accent-orange/20 transition-all duration-200">
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-accent-orange uppercase flex items-center gap-1"><Undo2 className="w-3 h-3" /> Returned</span>
+                    <span className="text-sm font-bold text-accent-orange font-mono tracking-tight">
+                        {returnQuantity}
+                    </span>
+                </div>
+            </div>
+        );
     }
 
     if (!isOpen) {

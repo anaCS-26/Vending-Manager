@@ -228,7 +228,7 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
                                             <th className="py-3 px-3 md:py-4 md:px-6 text-left">Personnel</th>
                                             <th className="py-3 px-3 md:py-4 md:px-6 text-left">Machine Location</th>
                                             <th className="py-3 px-3 md:py-4 md:px-6 text-left">Product Asset</th>
-                                            <th className="py-3 px-3 md:py-4 md:px-6 text-center">Telemetry Adjust</th>
+                                            <th className="py-3 px-3 md:py-4 md:px-6 text-center">Inventory Action</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200 dark:divide-white/[0.03]">

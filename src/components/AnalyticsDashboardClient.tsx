@@ -114,11 +114,25 @@ export default function AnalyticsDashboardClient({ machinesData, allRefillsData 
                             <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                                 <LineChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                                    <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                    <XAxis 
+                                        dataKey="date" 
+                                        stroke="#888888" 
+                                        fontSize={12} 
+                                        tickLine={false} 
+                                        axisLine={false} 
+                                        tickFormatter={(val) => {
+                                            const d = new Date(val);
+                                            return isNaN(d.getTime()) ? val : d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+                                        }}
+                                    />
                                     <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                                     <Tooltip 
                                         contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
                                         itemStyle={{ color: '#fff' }}
+                                        labelFormatter={(val) => {
+                                            const d = new Date(val);
+                                            return isNaN(d.getTime()) ? val : d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                                        }}
                                     />
                                     <Line 
                                         type="monotone" 
