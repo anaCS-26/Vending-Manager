@@ -12,25 +12,53 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install PostgreSQL Tools
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install PostgreSQL 17 client (matches Supabase server version)
+        run: |
+          set -euo pipefail
+          # Add the official PostgreSQL apt repo so we can install client v17.
+          # Ubuntu's default postgresql-client package lags behind Supabase
+          # and pg_dump refuses to run when client < server version.
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | \
+            sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          # Verify version is 17.x — fail loudly if not
+          pg_dump --version
 
       - name: Create Database Dump
         env:
+          # IMPORTANT: this must be the DIRECT connection URL (port 5432),
+          # not the pooler URL (port 6543). The pgbouncer pooler does not
+          # support the full Postgres protocol that pg_dump requires.
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          # Create a dynamic filename with the current date
-          BACKUP_FILE="db_backup_$(date +'%Y_%m_%d_%H%M%S').sql"
-          
+          set -euo pipefail
+          # `pipefail` makes a pipeline fail if ANY command in it fails.
+          # Without this, a failed pg_dump piped into gzip silently produces
+          # a ~20-byte empty gzip and the workflow reports success.
+
+          BACKUP_FILE="db_backup_$(date +'%Y_%m_%d_%H%M%S').sql.gz"
+
           echo "Starting pg_dump..."
-          
-          # We use the clean (-c) flag so the restoration drops old tables before creating new ones
-          pg_dump "$SUPABASE_DB_URL" -c -F p | gzip > $BACKUP_FILE.gz
-          
-          echo "Database successfully dumped and compressed to $BACKUP_FILE.gz"
-          
-          # Pass the variables to subsequent steps
-          echo "BACKUP_FILE=$BACKUP_FILE.gz" >> $GITHUB_ENV
+          pg_dump "$SUPABASE_DB_URL" -c -F p | gzip > "$BACKUP_FILE"
+
+          # Sanity check: a real dump of a populated database should be at
+          # least tens of KB. Anything under 1KB almost certainly means
+          # pg_dump produced an empty stream that gzip happily wrapped.
+          BACKUP_SIZE=$(stat -c%s "$BACKUP_FILE")
+          echo "Backup size: ${BACKUP_SIZE} bytes"
+          if [ "$BACKUP_SIZE" -lt 1024 ]; then
+            echo "ERROR: Backup file is suspiciously small (${BACKUP_SIZE} bytes)."
+            echo "This usually means pg_dump failed. Aborting before uploading."
+            exit 1
+          fi
+
+          echo "Database successfully dumped and compressed to $BACKUP_FILE"
+          echo "BACKUP_FILE=$BACKUP_FILE" >> "$GITHUB_ENV"
 
       - name: Upload to Supabase S3 Storage Bucket
         env:
@@ -39,8 +67,9 @@ jobs:
           SUPABASE_S3_ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
           SUPABASE_BACKUP_BUCKET: ${{ secrets.SUPABASE_BACKUP_BUCKET }}
         run: |
-          aws s3 cp $BACKUP_FILE s3://$SUPABASE_BACKUP_BUCKET/$BACKUP_FILE \
-            --endpoint-url $SUPABASE_S3_ENDPOINT \
+          set -euo pipefail
+          aws s3 cp "$BACKUP_FILE" "s3://$SUPABASE_BACKUP_BUCKET/$BACKUP_FILE" \
+            --endpoint-url "$SUPABASE_S3_ENDPOINT" \
             --region us-east-1
-          
+
           echo "Successfully uploaded $BACKUP_FILE to Supabase Storage!"
