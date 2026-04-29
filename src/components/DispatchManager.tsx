@@ -4,7 +4,6 @@ import { Truck, PackageOpen, Check, AlertTriangle, Crosshair, Navigation, Chevro
 import { dispatchToDriver, returnDispatch, getRecentDispatchForDriver } from "@/actions/inventory";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh";
 import type { DriverType, WarehouseWithItem, DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine, WarehouseType } from "@/types";
 import { formatID, formatSaudiTime } from "@/lib/utils";
 import { DriverBagManager } from "./DriverBagManager";
@@ -25,9 +24,6 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
     const [isCopying, setIsCopying] = useState(false);
     const [bulkQty, setBulkQty] = useState<string>("");
     const [activeTab, setActiveTab] = useState<"dispatch" | "bags">("dispatch");
-
-    // SSE-based real-time refresh (replaces 5s polling)
-    useRealtimeRefresh();
 
     const handleDispatch = async () => {
         // Dispatches inventory from Warehouse -> Driver bag.
