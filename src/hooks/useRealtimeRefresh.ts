@@ -32,10 +32,14 @@ export function useRealtimeRefresh() {
             .on(
                 "postgres_changes",
                 {
-                    event: "UPDATE",
+                    // No filter — SystemMeta is intended to hold a single
+                    // version row, so any change on it is the one we care
+                    // about. Filtered UPDATE subscriptions in Supabase
+                    // Realtime require REPLICA IDENTITY FULL on the table,
+                    // which we'd rather not add for one extra column.
+                    event: "*",
                     schema: "public",
                     table: "SystemMeta",
-                    filter: "key=eq.realtime_version",
                 },
                 () => {
                     router.refresh();
