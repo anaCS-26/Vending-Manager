@@ -52,8 +52,12 @@ Inside actions, the guards in `src/lib/auth-utils.ts` are the second line:
 
 Every server action MUST start with one of these. Driver-scoped writes use the ownership variant.
 
-### Realtime: Version Polling, Not SSE
-Despite the README and `.sse/` directory name, the system does NOT use SSE. `src/lib/notify.ts` writes a monotonically incrementing counter to `.sse/version` on every `notifyClients()` call. The `useRealtimeRefresh` hook (`src/hooks/useRealtimeRefresh.ts`) polls `getVersion()` (a server action) every 3 seconds and calls `router.refresh()` only when the value changes. Always call `notifyClients()` after mutating actions, otherwise other tabs won't update.
+### Realtime: Upstash-backed version polling, not SSE
+Despite the README and the legacy `.sse/` directory name, the system does NOT use SSE. `src/lib/notify.ts` increments a counter at the Upstash Redis key `vms:realtime:version` on every `notifyClients()` call (Upstash is shared across all Vercel instances; the previous filesystem implementation silently no-op'd in production because Vercel disks are read-only). The `useRealtimeRefresh` hook (`src/hooks/useRealtimeRefresh.ts`) polls `getVersion()` every 3 seconds and calls `router.refresh()` only when the value changes.
+
+The hook is mounted **once per page tree** via `<RealtimeRefresher />` in `src/app/admin/layout.tsx` and `src/app/super/layout.tsx` — every page underneath inherits auto-refresh from a single shared poll. Do NOT add `useRealtimeRefresh()` calls inside individual page/component bodies; that would double-poll. The driver portal is intentionally NOT subscribed (offline-first Zustand state would be clobbered by forced refreshes).
+
+Always call `notifyClients(eventTag)` after mutating actions, otherwise other tabs won't update. `notifyClients` is fire-and-forget — Redis errors are caught and logged, never propagated.
 
 ### Audit Trail
 Two complementary mechanisms — use both where they apply:
