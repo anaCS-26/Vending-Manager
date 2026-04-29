@@ -939,6 +939,7 @@ export async function createMachine(location_name: string, district: string, add
 
 /** Updates machine metadata and recalculates coordinates if address changes. */
 export async function updateMachine(id: number, location_name: string, district: string, address?: string, notes?: string, latitude?: number, longitude?: number, terminalId?: string, operating_cost?: number, rental_cost?: number, tier?: string): Promise<ActionResult> {
+    const session = await requireAdmin();
     try {
         let finalLat = latitude;
         let finalLon = longitude;
@@ -950,7 +951,8 @@ export async function updateMachine(id: number, location_name: string, district:
             if (coords.longitude) finalLon = coords.longitude;
         }
 
-        await prisma.machine.update({
+        const oldState = await prisma.machine.findUnique({ where: { id } });
+        const updated = await prisma.machine.update({
             where: { id },
             data: {
                 location_name,
@@ -965,6 +967,9 @@ export async function updateMachine(id: number, location_name: string, district:
                 tier: tier || "STANDARD"
             } as any
         })
+
+        await writeAuditLog(session, 'UPDATE_MACHINE', 'Machine', id, oldState, updated);
+
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
@@ -974,8 +979,13 @@ export async function updateMachine(id: number, location_name: string, district:
 
 /** Permanently removes a machine from the system. Rejects if logs exist. */
 export async function deleteMachine(id: number): Promise<ActionResult> {
+    const session = await requireAdmin();
     try {
+        const oldState = await prisma.machine.findUnique({ where: { id } });
         await prisma.machine.delete({ where: { id } })
+
+        await writeAuditLog(session, 'DELETE_MACHINE', 'Machine', id, oldState, null);
+
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
@@ -1042,8 +1052,13 @@ export async function createItem(name: string, category: string, sku: string, pr
 
 /** Updates standard pricing and metadata for an item. */
 export async function updateItem(id: number, name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, bulk_format?: string): Promise<ActionResult> {
+    const session = await requireAdmin();
     try {
-        await prisma.item.update({ where: { id }, data: { name, category, sku, price_standard, price_hospital, price_hotel, bulk_format } })
+        const oldState = await prisma.item.findUnique({ where: { id } });
+        const updated = await prisma.item.update({ where: { id }, data: { name, category, sku, price_standard, price_hospital, price_hotel, bulk_format } })
+
+        await writeAuditLog(session, 'UPDATE_ITEM', 'Item', id, oldState, updated);
+
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
@@ -1053,15 +1068,21 @@ export async function updateItem(id: number, name: string, category: string, sku
 
 /** Fast-track stock update for the primary system warehouse. */
 export async function updateItemStock(id: number, quantity_on_hand: number): Promise<ActionResult> {
+    const session = await requireAdmin();
     try {
         const defaultWarehouse = await prisma.warehouse.findFirst();
         if (defaultWarehouse) {
+            const oldStock = await prisma.warehouseStock.findUnique({
+                where: { warehouseId_itemId: { warehouseId: defaultWarehouse.id, itemId: id } }
+            });
             await prisma.warehouseStock.update({
                 where: {
                     warehouseId_itemId: { warehouseId: defaultWarehouse.id, itemId: id }
                 },
                 data: { quantity_on_hand }
             })
+
+            await writeAuditLog(session, 'UPDATE_ITEM_STOCK', 'WarehouseStock', oldStock?.id ?? null, oldStock, { ...oldStock, quantity_on_hand });
         }
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
@@ -1078,25 +1099,31 @@ export async function updateItemStock(id: number, quantity_on_hand: number): Pro
  */
 /** Increments stock for a specific Item-Warehouse pair. */
 export async function updateWarehouseItemStock(warehouseId: number, itemId: number, quantityToAdd: number): Promise<ActionResult> {
+    const session = await requireAdmin();
     try {
         if (quantityToAdd <= 0) throw new Error("Quantity must be positive");
 
+        let resultId: number | null = null;
         await prisma.$transaction(async (tx) => {
             const existingStock = await tx.warehouseStock.findFirst({
                 where: { warehouseId, itemId }
             });
 
             if (existingStock) {
-                await tx.warehouseStock.update({
+                const updated = await tx.warehouseStock.update({
                     where: { id: existingStock.id },
                     data: { quantity_on_hand: { increment: quantityToAdd } }
                 });
+                resultId = updated.id;
             } else {
-                await tx.warehouseStock.create({
+                const created = await tx.warehouseStock.create({
                     data: { warehouseId, itemId, quantity_on_hand: quantityToAdd }
                 });
+                resultId = created.id;
             }
         });
+
+        await writeAuditLog(session, 'INCREMENT_WAREHOUSE_STOCK', 'WarehouseStock', resultId, null, { warehouseId, itemId, quantityToAdd });
 
         revalidatePath('/admin/warehouse');
         return { success: true, data: undefined };
@@ -1107,20 +1134,25 @@ export async function updateWarehouseItemStock(warehouseId: number, itemId: numb
 
 /** Creates a new item and links it immediately to a warehouse. */
 export async function createWarehouseItem(warehouseId: number, name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, initialStock: number, bulk_format?: string): Promise<ActionResult> {
+    const session = await requireAdmin();
     try {
         if (initialStock < 0) throw new Error("Initial stock cannot be negative");
 
+        let createdItemId: number | null = null;
         await prisma.$transaction(async (tx) => {
             // First create the unified item
             const item = await tx.item.create({
                 data: { name, category, sku, price_standard, price_hospital, price_hotel, bulk_format }
             });
+            createdItemId = item.id;
 
             // Map it specifically to the requested warehouse
             await tx.warehouseStock.create({
                 data: { warehouseId, itemId: item.id, quantity_on_hand: initialStock }
             });
         });
+
+        await writeAuditLog(session, 'CREATE_WAREHOUSE_ITEM', 'Item', createdItemId, null, { warehouseId, name, sku, initialStock });
 
         revalidatePath('/admin/warehouse');
         return { success: true, data: undefined };
@@ -1131,11 +1163,16 @@ export async function createWarehouseItem(warehouseId: number, name: string, cat
 
 /** Permanently deletes an item and all its inventory mapping records. */
 export async function deleteItem(id: number): Promise<ActionResult> {
+    const session = await requireAdmin();
     try {
+        const oldState = await prisma.item.findUnique({ where: { id } });
         await prisma.$transaction(async (tx) => {
             await tx.warehouseStock.deleteMany({ where: { itemId: id } })
             await tx.item.delete({ where: { id } })
         })
+
+        await writeAuditLog(session, 'DELETE_ITEM', 'Item', id, oldState, null);
+
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
