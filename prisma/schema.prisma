@@ -315,6 +315,17 @@ model Admin {
   updatedAt        DateTime  @updatedAt
 }
 
+/// Single-row table holding a version counter that bumps on every data
+/// mutation (via notifyClients()). The browser subscribes to this row's
+/// updates over Supabase Realtime to know when to refresh the dashboard.
+/// Replaces the previous Upstash-polled counter.
+model SystemMeta {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  version   BigInt   @default(0)
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
 /// Universal ledger for tracking system mutations
 model SystemAuditLog {
   id          Int      @id @default(autoincrement())

@@ -1,40 +1,49 @@
-import { Redis } from "@upstash/redis";
+import prisma from "@/lib/prisma";
 
 /**
  * ============================================================================
- * REAL-TIME REFRESH SYSTEM (Upstash-backed)
- * Synchronizes client-side UI with server-side mutations using a shared
- * version counter. Stored in Upstash Redis so every Vercel instance sees
- * the same number — the previous filesystem-backed implementation silently
- * no-op'd on Vercel because the disk is read-only.
+ * REAL-TIME REFRESH SYSTEM (Supabase Realtime, push-based)
+ * Synchronizes client UI with server-side mutations by bumping a single
+ * version row. Browsers subscribe to that row over Supabase Realtime
+ * (WebSocket) and refresh themselves when it changes — no polling.
  * ============================================================================
  */
 
-const VERSION_KEY = "vms:realtime:version";
-
-const redis = Redis.fromEnv();
+const VERSION_KEY = "realtime_version";
 
 /**
  * Signals a data mutation by incrementing the shared version counter.
- * Fire-and-forget: errors are swallowed so a Redis hiccup never breaks
- * the user-facing action that triggered the mutation. Clients will pick
- * up the change on the next successful poll either way.
+ * Fire-and-forget: errors are swallowed so a transient DB hiccup never
+ * breaks the user-facing action that triggered the mutation. Subscribed
+ * clients pick up the next successful bump.
+ *
+ * The eventType arg is currently informational only (logged on failure)
+ * but kept in the signature so future per-event channels are non-breaking.
  */
-export function notifyClients(_eventType: string): void {
-    redis.incr(VERSION_KEY).catch((err) => {
-        console.error("[notify] failed to increment version:", err);
-    });
+export function notifyClients(eventType: string): void {
+    prisma.systemMeta
+        .upsert({
+            where: { key: VERSION_KEY },
+            update: { version: { increment: BigInt(1) } },
+            create: { key: VERSION_KEY, version: BigInt(1) },
+        })
+        .catch((err) => {
+            console.error(`[notify:${eventType}] failed to bump version row:`, err);
+        });
 }
 
 /**
- * Retrieves the current data version for client-side comparison.
- * Returns 0 if the key is missing or Redis is unreachable, matching the
- * pre-existing fallback semantics so polling clients stay quiet.
+ * Reads the current version. Retained for back-compat with the
+ * `getVersion` server action, but no longer the primary path —
+ * subscribed clients learn of changes via push, not poll.
  */
 export async function getDataVersion(): Promise<number> {
     try {
-        const value = await redis.get<number>(VERSION_KEY);
-        return typeof value === "number" ? value : 0;
+        const row = await prisma.systemMeta.findUnique({
+            where: { key: VERSION_KEY },
+            select: { version: true },
+        });
+        return row ? Number(row.version) : 0;
     } catch (err) {
         console.error("[notify] failed to read version:", err);
         return 0;
