@@ -1199,7 +1199,6 @@ export async function resetDatabase(): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
             // 1. Delete all records in correct order
-            await tx.customerRefund.deleteMany({});
             await tx.inventoryAdjustment.deleteMany({});
             await tx.purchaseInvoiceItem.deleteMany({});
             await tx.purchaseInvoice.deleteMany({});
