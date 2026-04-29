@@ -213,10 +213,10 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
                         filename={`Financial_Report_${currentView.charAt(0).toUpperCase() + currentView.slice(1)}`}
                         label={`Export ${currentView.charAt(0).toUpperCase() + currentView.slice(1)}s (Excel)`}
                     />
-                    <a href="/api/export-zatca" className="hidden sm:flex px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all gap-2 items-center shadow-[0_0_20px_rgba(59,130,246,0.2)] opacity-50 cursor-not-allowed" title="Coming soon">
+                    <button type="button" disabled aria-disabled="true" title="Coming soon" className="hidden sm:flex px-5 py-2.5 bg-brand-500 text-slate-900 dark:text-white rounded-xl text-sm font-bold gap-2 items-center shadow-[0_0_20px_rgba(59,130,246,0.2)] opacity-50 cursor-not-allowed">
                         <Download className="w-4 h-4" />
                         ZATCA XML
-                    </a>
+                    </button>
                 </div>
             </div>
 
