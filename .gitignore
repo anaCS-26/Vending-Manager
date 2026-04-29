@@ -44,6 +44,9 @@ yarn-error.log*
 *.db
 *.db-journal
 
+# Database backups / dumps — never commit these
+backups/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
