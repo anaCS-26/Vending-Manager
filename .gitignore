@@ -47,6 +47,9 @@ yarn-error.log*
 # Database backups / dumps — never commit these
 backups/
 
+# Local Supabase CLI working directory (config + per-machine state)
+supabase/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
