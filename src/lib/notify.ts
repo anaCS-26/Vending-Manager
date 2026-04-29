@@ -1,54 +1,42 @@
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
-import { join } from "path";
+import { Redis } from "@upstash/redis";
 
 /**
  * ============================================================================
- * LIGHTWEIGHT REAL-TIME REFRESH SYSTEM
- * Synchronizes client-side UI with server-side mutations using version polling.
- * Replaces complex SSE logic with efficient version-check polling to trigger 
- * Next.js router.refresh() only when data integrity has changed.
+ * REAL-TIME REFRESH SYSTEM (Upstash-backed)
+ * Synchronizes client-side UI with server-side mutations using a shared
+ * version counter. Stored in Upstash Redis so every Vercel instance sees
+ * the same number — the previous filesystem-backed implementation silently
+ * no-op'd on Vercel because the disk is read-only.
  * ============================================================================
  */
 
-const SIGNAL_DIR = join(process.cwd(), ".sse");
-const VERSION_FILE = join(SIGNAL_DIR, "version");
+const VERSION_KEY = "vms:realtime:version";
 
-/** 
- * Bootstraps the signal directory for version orchestration. 
- */
-function ensureDir() {
-    if (!existsSync(SIGNAL_DIR)) {
-        mkdirSync(SIGNAL_DIR, { recursive: true });
-    }
-}
+const redis = Redis.fromEnv();
 
-/** 
- * Reads the latest system data version from the filesystem or returns 0 as fallback. 
- */
-function getVersion(): number {
-    try {
-        if (existsSync(VERSION_FILE)) {
-            return parseInt(readFileSync(VERSION_FILE, "utf-8").trim(), 10) || 0;
-        }
-    } catch { /* ignore */ }
-    return 0;
-}
-
-/** 
- * Signals a data mutation by incrementing the system version count. 
- * Clients polling /api/version will detect this change and trigger an UI refresh. 
+/**
+ * Signals a data mutation by incrementing the shared version counter.
+ * Fire-and-forget: errors are swallowed so a Redis hiccup never breaks
+ * the user-facing action that triggered the mutation. Clients will pick
+ * up the change on the next successful poll either way.
  */
 export function notifyClients(_eventType: string): void {
-    try {
-        ensureDir();
-        const current = getVersion();
-        writeFileSync(VERSION_FILE, String(current + 1), "utf-8");
-    } catch {
-        // Soft failure: Clients will miss the atomic trigger but sync on next scheduled poll.
-    }
+    redis.incr(VERSION_KEY).catch((err) => {
+        console.error("[notify] failed to increment version:", err);
+    });
 }
 
-/** Retrieves the current data version for client-side comparison and polling. */
-export function getDataVersion(): number {
-    return getVersion();
+/**
+ * Retrieves the current data version for client-side comparison.
+ * Returns 0 if the key is missing or Redis is unreachable, matching the
+ * pre-existing fallback semantics so polling clients stay quiet.
+ */
+export async function getDataVersion(): Promise<number> {
+    try {
+        const value = await redis.get<number>(VERSION_KEY);
+        return typeof value === "number" ? value : 0;
+    } catch (err) {
+        console.error("[notify] failed to read version:", err);
+        return 0;
+    }
 }
