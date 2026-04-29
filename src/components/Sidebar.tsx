@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Truck, Package, Activity, LogOut, AlertTriangle, RefreshCw, History, Settings, CreditCard, FileWarning, PieChart, Store, ExternalLink, ChevronLeft } from "lucide-react";
+import { LayoutDashboard, Truck, Package, Activity, LogOut, AlertTriangle, RefreshCw, History, Settings, FileWarning, PieChart, Store, ExternalLink, ChevronLeft } from "lucide-react";
 import { useState, useTransition, useEffect } from "react";
 import { AdminSettingsModal } from "@/components/AdminSettingsModal";
 import { signOut } from "next-auth/react";
@@ -11,7 +11,6 @@ import { signOut } from "next-auth/react";
 const mainNav = [
     { name: 'Overview', href: '/admin', icon: LayoutDashboard },
     { name: 'Dispatches', href: '/admin/dispatches', icon: Truck },
-    // { name: 'Refunds', href: '/admin/refunds', icon: CreditCard }, // Archived for now
     { name: 'Financials', href: '/admin/financials', icon: PieChart },
     { name: 'Analytics', href: '/admin/analytics', icon: Activity },
 ];

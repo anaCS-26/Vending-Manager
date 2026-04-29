@@ -31,21 +31,3 @@ export function notifyClients(eventType: string): void {
             console.error(`[notify:${eventType}] failed to bump version row:`, err);
         });
 }
-
-/**
- * Reads the current version. Retained for back-compat with the
- * `getVersion` server action, but no longer the primary path —
- * subscribed clients learn of changes via push, not poll.
- */
-export async function getDataVersion(): Promise<number> {
-    try {
-        const row = await prisma.systemMeta.findUnique({
-            where: { key: VERSION_KEY },
-            select: { version: true },
-        });
-        return row ? Number(row.version) : 0;
-    } catch (err) {
-        console.error("[notify] failed to read version:", err);
-        return 0;
-    }
-}

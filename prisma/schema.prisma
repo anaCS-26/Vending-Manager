@@ -243,21 +243,6 @@ model PurchaseInvoiceItem {
   @@index([itemId])
 }
 
-/// Records of refunds issued to vending machine customers.
-model CustomerRefund {
-  id            Int       @id @default(autoincrement())
-  refundNumber  String
-  phoneNumber   String?
-  itemPrice     Float     @default(0.0)
-  status        String    @default("PENDING")
-  receivedMoney Float?    @default(0.0)
-  dateReceived  DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  @@index([status])
-}
-
 /// External log for any manual stock changes.
 model InventoryAdjustment {
   id                Int      @id @default(autoincrement())

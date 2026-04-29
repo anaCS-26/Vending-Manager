@@ -2,7 +2,7 @@
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
-import { notifyClients, getDataVersion } from "@/lib/notify"
+import { notifyClients } from "@/lib/notify"
 import type { ActionResult, PaginatedResult, DispatchWithRelations } from "@/types"
 import { join } from "path"
 import { writeFile, mkdir } from "fs/promises"
@@ -11,11 +11,6 @@ import { put } from '@vercel/blob';
 import bcrypt from "bcryptjs";
 import { requireAdmin, requireSuperAdmin, requireDriver, requireAdminOrDriverOwner } from "@/lib/auth-utils";
 import { writeAuditLog } from "@/lib/audit-utils";
-
-/** Retrieves the global data version to facilitate client-side synchronization and cache invalidation. */
-export async function getVersion(): Promise<number> {
-    return getDataVersion();
-}
 
 /**
  * ============================================================================
@@ -1199,7 +1194,6 @@ export async function resetDatabase(): Promise<ActionResult> {
     try {
         await prisma.$transaction(async (tx) => {
             // 1. Delete all records in correct order
-            await tx.customerRefund.deleteMany({});
             await tx.inventoryAdjustment.deleteMany({});
             await tx.purchaseInvoiceItem.deleteMany({});
             await tx.purchaseInvoice.deleteMany({});
