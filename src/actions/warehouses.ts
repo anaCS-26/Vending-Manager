@@ -1,10 +1,8 @@
 "use server";
-import { PrismaClient } from '@prisma/client'
+import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/auth-utils'
 import { writeAuditLog } from '@/lib/audit-utils'
-
-const prisma = new PrismaClient()
 
 /**
  * ============================================================================
@@ -27,7 +25,7 @@ export async function getWarehouses() {
  * Includes precise geographical data and fixed operational overhead metrics. 
  */
 export async function createWarehouse(data: { name: string; location?: string; address?: string; latitude?: number; longitude?: number; operating_cost?: number; rental_cost?: number }) {
-    await requireAdmin();
+    const session = await requireAdmin();
     try {
         const wh = await prisma.warehouse.create({
             data: {
@@ -40,8 +38,8 @@ export async function createWarehouse(data: { name: string; location?: string; a
                 rental_cost: data.rental_cost || 0
             } as any
         });
-        
-        await writeAuditLog(await requireAdmin(), 'CREATE_WAREHOUSE', 'Warehouse', wh.id, null, wh);
+
+        await writeAuditLog(session, 'CREATE_WAREHOUSE', 'Warehouse', wh.id, null, wh);
         
         revalidatePath('/admin/warehouse/locations');
         revalidatePath('/admin/manage');

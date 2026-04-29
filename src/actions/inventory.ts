@@ -971,6 +971,7 @@ export async function updateMachine(id: number, location_name: string, district:
         await writeAuditLog(session, 'UPDATE_MACHINE', 'Machine', id, oldState, updated);
 
         revalidatePath('/admin/manage')
+        notifyClients('machine')
         return { success: true, data: undefined }
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to update machine" }
@@ -987,6 +988,7 @@ export async function deleteMachine(id: number): Promise<ActionResult> {
         await writeAuditLog(session, 'DELETE_MACHINE', 'Machine', id, oldState, null);
 
         revalidatePath('/admin/manage')
+        notifyClients('machine')
         return { success: true, data: undefined }
     } catch (error) {
         return { success: false, error: "Cannot delete machine (likely has existing logs/history)" }
@@ -1060,6 +1062,7 @@ export async function updateItem(id: number, name: string, category: string, sku
         await writeAuditLog(session, 'UPDATE_ITEM', 'Item', id, oldState, updated);
 
         revalidatePath('/admin/manage')
+        notifyClients('item')
         return { success: true, data: undefined }
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to update item" }
@@ -1085,6 +1088,7 @@ export async function updateItemStock(id: number, quantity_on_hand: number): Pro
             await writeAuditLog(session, 'UPDATE_ITEM_STOCK', 'WarehouseStock', oldStock?.id ?? null, oldStock, { ...oldStock, quantity_on_hand });
         }
         revalidatePath('/admin/manage')
+        notifyClients('warehouseStock')
         return { success: true, data: undefined }
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to update item stock" }
@@ -1126,6 +1130,7 @@ export async function updateWarehouseItemStock(warehouseId: number, itemId: numb
         await writeAuditLog(session, 'INCREMENT_WAREHOUSE_STOCK', 'WarehouseStock', resultId, null, { warehouseId, itemId, quantityToAdd });
 
         revalidatePath('/admin/warehouse');
+        notifyClients('warehouseStock');
         return { success: true, data: undefined };
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to restock warehouse item" };
@@ -1155,6 +1160,7 @@ export async function createWarehouseItem(warehouseId: number, name: string, cat
         await writeAuditLog(session, 'CREATE_WAREHOUSE_ITEM', 'Item', createdItemId, null, { warehouseId, name, sku, initialStock });
 
         revalidatePath('/admin/warehouse');
+        notifyClients('item');
         return { success: true, data: undefined };
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to specify new warehouse item" };
@@ -1174,6 +1180,7 @@ export async function deleteItem(id: number): Promise<ActionResult> {
         await writeAuditLog(session, 'DELETE_ITEM', 'Item', id, oldState, null);
 
         revalidatePath('/admin/manage')
+        notifyClients('item')
         return { success: true, data: undefined }
     } catch (error) {
         return { success: false, error: "Cannot delete item (likely has existing logs/history)" }

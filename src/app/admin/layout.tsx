@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { RealtimeRefresher } from "@/components/RealtimeRefresher";
 import { auth } from "@/auth";
 
 export default async function AdminLayout({
@@ -11,6 +12,7 @@ export default async function AdminLayout({
 
     return (
         <div className="flex min-h-screen bg-slate-50 dark:bg-neo-bg text-slate-900 dark:text-white transition-colors duration-300">
+            <RealtimeRefresher />
             <Sidebar user={session?.user} />
             <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden relative z-10 w-full min-w-0">
                 <header className="h-16 bg-white/50 dark:bg-neo-bg/80 backdrop-blur-md border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-8 sticky top-0 z-20 transition-colors">

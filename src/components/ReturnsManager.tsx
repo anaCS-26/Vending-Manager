@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { Check, X, AlertTriangle, PackageX, Loader2, Calendar, History } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh";
 import { approveReturn, rejectReturn } from "@/actions/returns";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { formatSaudiDate } from "@/lib/utils";
@@ -38,8 +37,6 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
         action: "APPROVE" | "REJECT" | null;
         id: number | null;
     }>({ isOpen: false, action: null, id: null });
-
-    useRealtimeRefresh();
 
     const handleApprove = (id: number) => {
         setConfirmModal({ isOpen: true, action: "APPROVE", id });
