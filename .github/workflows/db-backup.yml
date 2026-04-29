@@ -26,8 +26,16 @@ jobs:
             sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
-          # Verify version is 17.x — fail loudly if not
-          pg_dump --version
+
+          # Ubuntu runners ship with postgresql-client-16 pre-installed and
+          # /usr/bin/pg_dump is a wrapper that picks v16. Prepend v17's
+          # binary path to GITHUB_PATH so subsequent steps invoke v17.
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+          # Verify the v17 binary is what subsequent steps will actually run.
+          # `command -v` resolves the binary on PATH; we re-source GITHUB_PATH
+          # for this step's own check via the absolute path.
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Create Database Dump
         env:
