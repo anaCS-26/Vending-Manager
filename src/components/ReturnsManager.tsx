@@ -9,9 +9,12 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { formatSaudiDate } from "@/lib/utils";
 
 // Local types until we update index.ts
+// dispatchId/dispatch are nullable post-Phase-B (dispatchless returns); the
+// direct driver relation is the authoritative driver source going forward.
 type ReturnVerificationType = {
     id: number;
-    dispatchId: number;
+    dispatchId: number | null;
+    driverId: number | null;
     itemId: number;
     quantity: number;
     reason: string;
@@ -26,7 +29,10 @@ type ReturnVerificationType = {
         driver: {
             name: string;
         };
-    };
+    } | null;
+    driver: {
+        name: string;
+    } | null;
 };
 
 export function ReturnsManager({ pending, history }: { pending: ReturnVerificationType[], history: ReturnVerificationType[] }) {
@@ -131,11 +137,11 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                         <div className="flex flex-col gap-2 p-3 bg-black/20 rounded-xl border border-slate-200 dark:border-white/5 mb-6">
                                             <div className="flex items-center justify-between text-sm">
                                                 <span className="text-slate-600 dark:text-slate-400">Driver</span>
-                                                <span className="font-semibold text-slate-900 dark:text-white">{ret.dispatch.driver.name}</span>
+                                                <span className="font-semibold text-slate-900 dark:text-white">{ret.driver?.name ?? ret.dispatch?.driver.name ?? "—"}</span>
                                             </div>
                                             <div className="flex items-center justify-between text-sm">
-                                                <span className="text-slate-600 dark:text-slate-400">Dispatch ID</span>
-                                                <span className="font-mono text-slate-900 dark:text-white">#{ret.dispatchId.toString().padStart(4, '0')}</span>
+                                                <span className="text-slate-600 dark:text-slate-400">Source</span>
+                                                <span className="font-mono text-slate-900 dark:text-white">{ret.dispatchId !== null ? `Dispatch #${ret.dispatchId.toString().padStart(4, '0')}` : 'Driver bag'}</span>
                                             </div>
                                         </div>
 
@@ -202,8 +208,8 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                                 {formatSaudiDate(his.verified_at || his.reported_at)}
                                             </td>
                                             <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm text-slate-900 dark:text-white font-medium">
-                                                {his.dispatch.driver.name}
-                                                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">Route #{his.dispatchId.toString().padStart(4, '0')}</div>
+                                                {his.driver?.name ?? his.dispatch?.driver.name ?? "—"}
+                                                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">{his.dispatchId !== null ? `Route #${his.dispatchId.toString().padStart(4, '0')}` : 'Driver bag'}</div>
                                             </td>
                                             <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm text-slate-500 dark:text-slate-400 dark:text-slate-300">
                                                 {his.item.name}
