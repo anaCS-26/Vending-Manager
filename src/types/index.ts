@@ -43,6 +43,16 @@ export type DriverType = Omit<Prisma.DriverGetPayload<{
     };
 }>, "pin">;
 
+/** A row of stock currently in the driver's bag (with item metadata). */
+export type DriverBagRow = Prisma.DriverStockGetPayload<{
+    include: { item: true };
+}>;
+
+/** A stock-assignment audit row, used by the driver-side acknowledgment banner. */
+export type StockAssignmentWithItem = Prisma.StockAssignmentGetPayload<{
+    include: { item: true };
+}>;
+
 /** A machine record */
 export type MachineType = Prisma.MachineGetPayload<{}>;
 

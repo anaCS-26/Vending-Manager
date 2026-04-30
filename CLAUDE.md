@@ -78,10 +78,19 @@ Weighted Average Cost is recomputed when Purchase Orders are received. Supplier 
 
 ### Domain Model Highlights (`prisma/schema.prisma`)
 - `Item` carries three pricing tiers (`price_standard`, `price_hospital`, `price_hotel`) plus `cost` (WAC) and `last_purchase_cost`. `Machine.tier` selects which price applies at refill.
-- `Dispatch` has status `OPEN | CLOSED`; `DispatchItem` snapshots `price_at_dispatch`. `RefillLog` links back to the dispatch and snapshots both price and cost. `ReturnVerification` is the admin-approval queue (`PENDING | VERIFIED`, with reason `DAMAGED | EXPIRED | SURPLUS`).
-- `DriverStock` tracks "in-vehicle" inventory between shifts (back-stock).
+- `Dispatch` has status `OPEN | CLOSED`; `DispatchItem` snapshots `price_at_dispatch`. `RefillLog` links back to the dispatch (legacy) AND carries a denormalized `driverId` (Phase B). `ReturnVerification` is the admin-approval queue (`PENDING | VERIFIED`, with reason `DAMAGED | EXPIRED | SURPLUS`); both `dispatchId` and `driverId` are nullable so legacy and dispatchless rows coexist.
+- `DriverStock` is the running per-driver bag — "in-vehicle" inventory. Post-refactor it is the primary allocation surface (admin pushes here, driver consumes from here).
+- `StockAssignment` is the audit row for an admin-to-driver push: snapshots `cost_at_assignment` (WAC at issue time) and tracks `status` (`PENDING_ACK` → `ACKNOWLEDGED` | `DISPUTED`). Drives the driver-side ack banner.
 - `PurchaseOrder` (status `PENDING | COMPLETED`) is the only path for new stock into a warehouse.
 - `Admin.role` stores `ADMIN` or `SUPER_ADMIN` (uppercase in DB; lowercase in session — see the mapping in `src/auth.ts`).
+
+### Dispatchless Driver Stock (Phase B, dual-run)
+The "Dispatch/Route" wrapper is being retired in favor of direct `DriverStock` mutations. Both code paths coexist behind `NEXT_PUBLIC_USE_DISPATCHLESS`:
+- `src/actions/driver-stock.ts` holds the new flow: `assignToDriver`, `acknowledgeAssignment`, `disputeAssignment`, `submitDriverReturn`, `getDriverBag`.
+- `src/actions/inventory.ts` keeps `dispatchToDriver`/`returnDispatch` operational during cutover.
+- `Dispatch`/`DispatchItem` rows are NEVER deleted — they're frozen historical records. New flows write `dispatchId: null` on `RefillLog`/`ReturnVerification` and rely on `driverId` instead.
+- Acknowledgment model: stock lands in `DriverStock` immediately at assignment time so the driver isn't blocked. The `StockAssignment` row sits in `PENDING_ACK` until the driver clicks "Accept all" (status → `ACKNOWLEDGED`) or reports a discrepancy (status → `DISPUTED`, with an `InventoryAdjustment` row written using reason `ASSIGNMENT_DISCREPANCY`).
+- Driver returns are item-by-item, any time — `submitDriverReturn` creates one `ReturnVerification(status='PENDING', dispatchId=null)` per line and decrements `DriverStock` immediately. Existing `approveReturn` is unchanged and works on both legacy and dispatchless rows.
 
 ### UI Conventions (Neo-Design System)
 - Glassmorphism + slate base. Use the project tokens (`accent-blue`, `accent-green`, `neo-bg`, etc.) — never raw Tailwind color names like `bg-blue-500`.

@@ -24,6 +24,9 @@ export async function getPendingReturns() {
         where: { status: "PENDING" },
         include: {
             item: true,
+            // Both relations are populated where applicable: legacy rows carry
+            // dispatch (with nested driver), dispatchless rows carry driver directly.
+            driver: true,
             dispatch: {
                 include: { driver: true }
             }
@@ -39,6 +42,7 @@ export async function getProcessedReturns() {
         where: { status: { in: ["APPROVED", "REJECTED"] } },
         include: {
             item: true,
+            driver: true,
             dispatch: {
                 include: { driver: true }
             }

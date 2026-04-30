@@ -32,6 +32,7 @@ model Item {
   ReturnVerifications  ReturnVerification[]
   WarehouseStock       WarehouseStock[]
   DriverStock          DriverStock[]
+  StockAssignments     StockAssignment[]
   isActive             Boolean               @default(true)
 }
 
@@ -45,10 +46,11 @@ model Warehouse {
   longitude      Float?
   operating_cost Float            @default(0.0)
   rental_cost    Float            @default(0.0)
-  Dispatches     Dispatch[]
-  PurchaseOrders PurchaseOrder[]
-  Stock          WarehouseStock[]
-  isActive       Boolean          @default(true)
+  Dispatches       Dispatch[]
+  PurchaseOrders   PurchaseOrder[]
+  Stock            WarehouseStock[]
+  StockAssignments StockAssignment[]
+  isActive         Boolean           @default(true)
 }
 
 /// Tracks stock levels of an Item in a Warehouse.
@@ -101,14 +103,17 @@ model MachineStock {
 
 /// User who delivers items and refills machines.
 model Driver {
-  id          Int           @id @default(autoincrement())
-  name        String
-  phone       String?       @unique
-  email       String?
-  pin         String? // Hashed login PIN
-  Dispatches  Dispatch[]
-  DriverStock DriverStock[]
-  isActive    Boolean       @default(true)
+  id                  Int                  @id @default(autoincrement())
+  name                String
+  phone               String?              @unique
+  email               String?
+  pin                 String? // Hashed login PIN
+  Dispatches          Dispatch[]
+  DriverStock         DriverStock[]
+  StockAssignments    StockAssignment[]
+  RefillLogs          RefillLog[]
+  ReturnVerifications ReturnVerification[]
+  isActive            Boolean              @default(true)
 }
 
 /// Items currently in the driver's possession (e.g., in their vehicle).
@@ -159,34 +164,43 @@ model DispatchItem {
   @@index([itemId])
 }
 
-/// Records a driver refilling an Item into a Machine during a Dispatch.
+/// Records a driver refilling an Item into a Machine. Originally tied to a Dispatch;
+/// after the dispatchless refactor (Phase B) new rows carry a direct driverId
+/// instead. Both columns coexist so legacy rows remain queryable.
 model RefillLog {
-  id                           Int      @id @default(autoincrement())
+  id                           Int       @id @default(autoincrement())
   dispatchId                   Int?
+  driverId                     Int?
   machineId                    Int
   itemId                       Int
   quantity_refilled            Int
   items_sold_since_last_refill Int?
-  sales_revenue                Float    @default(0.0)
-  price_at_refill              Float    @default(0.0)
-  cost_at_refill               Float    @default(0.0)
-  damaged_quantity             Int      @default(0)
-  expired_quantity             Int      @default(0)
-  refilled_at                  DateTime @default(now())
+  sales_revenue                Float     @default(0.0)
+  price_at_refill              Float     @default(0.0)
+  cost_at_refill               Float     @default(0.0)
+  damaged_quantity             Int       @default(0)
+  expired_quantity             Int       @default(0)
+  refilled_at                  DateTime  @default(now())
   dispatch                     Dispatch? @relation(fields: [dispatchId], references: [id])
-  item                         Item     @relation(fields: [itemId], references: [id])
-  machine                      Machine  @relation(fields: [machineId], references: [id])
+  driver                       Driver?   @relation(fields: [driverId], references: [id])
+  item                         Item      @relation(fields: [itemId], references: [id])
+  machine                      Machine   @relation(fields: [machineId], references: [id])
 
   @@index([itemId])
   @@index([dispatchId])
+  @@index([driverId])
   @@index([machineId])
   @@index([refilled_at])
 }
 
-/// Request for admin to verify items returned by a Driver.
+/// Request for admin to verify items returned by a Driver. dispatchId was
+/// required in the legacy flow; in the dispatchless flow drivers return
+/// directly against their bag, so dispatchId is nullable and driverId is
+/// the authoritative source of "who returned this".
 model ReturnVerification {
   id          Int       @id @default(autoincrement())
-  dispatchId  Int
+  dispatchId  Int?
+  driverId    Int?
   itemId      Int
   quantity    Int
   reason      String // DAMAGED, EXPIRED, SURPLUS
@@ -194,11 +208,42 @@ model ReturnVerification {
   reported_at DateTime  @default(now())
   verified_at DateTime?
   notes       String?
-  dispatch    Dispatch  @relation(fields: [dispatchId], references: [id])
+  dispatch    Dispatch? @relation(fields: [dispatchId], references: [id])
+  driver      Driver?   @relation(fields: [driverId], references: [id])
   item        Item      @relation(fields: [itemId], references: [id])
 
   @@index([itemId])
   @@index([dispatchId])
+  @@index([driverId])
+  @@index([status])
+}
+
+/// Audit record for an admin-to-driver stock push (the dispatchless replacement
+/// for DispatchItem-as-receipt). Each row is one item-quantity-driver event;
+/// the driver acknowledges or disputes it via the ack banner.
+model StockAssignment {
+  id                 Int       @id @default(autoincrement())
+  driverId           Int
+  itemId             Int
+  warehouseId        Int?
+  quantity           Int
+  cost_at_assignment Float     @default(0.0) // snapshot of Item.cost (WAC) at issue time
+  notes              String?
+  assigned_by        Int? // Admin.id (nullable for system-generated rows)
+  assigned_at        DateTime  @default(now())
+
+  // Acknowledgment state — drives the driver-side ack banner.
+  status           String    @default("PENDING_ACK") // PENDING_ACK, ACKNOWLEDGED, DISPUTED
+  acknowledged_at  DateTime?
+  acknowledged_qty Int? // What the driver says they actually received (null until acked)
+
+  driver    Driver     @relation(fields: [driverId], references: [id])
+  item      Item       @relation(fields: [itemId], references: [id])
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  @@index([driverId])
+  @@index([itemId])
+  @@index([assigned_at])
   @@index([status])
 }
 
