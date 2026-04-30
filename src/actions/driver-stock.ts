@@ -363,10 +363,37 @@ export async function submitDriverReturn(
 }
 
 /**
+ * Admin-side feed for the /admin/driver-stock page: every active driver
+ * with their current bag, pending acks, and the latest disputed assignments
+ * (so admins can resolve discrepancies). Tries to keep payloads small —
+ * only PENDING_ACK and recent DISPUTED rows, not the full assignment history.
+ */
+export async function getDriversWithBagAndPending() {
+    await requireAdmin()
+    return await prisma.driver.findMany({
+        where: { isActive: true },
+        omit: { pin: true },
+        include: {
+            DriverStock: {
+                where: { quantity_on_hand: { gt: 0 } },
+                include: { item: true },
+                orderBy: { item: { name: "asc" } },
+            },
+            StockAssignments: {
+                where: { status: { in: ["PENDING_ACK", "DISPUTED"] } },
+                include: { item: true },
+                orderBy: { assigned_at: "desc" },
+                take: 50,
+            },
+        },
+        orderBy: { name: "asc" },
+    })
+}
+
+/**
  * Reads the driver's bag (DriverStock) AND any pending acknowledgments. The
  * driver portal calls this in place of getActiveDispatches() once dispatchless
- * mode is on. Driver-only — admin views go through getDrivers() which already
- * includes DriverStock and is admin-guarded.
+ * mode is on. Driver-only — admin views go through getDriversWithBagAndPending().
  */
 export async function getDriverBag() {
     const session = await requireDriver()

@@ -3,14 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Truck, Package, Activity, LogOut, AlertTriangle, RefreshCw, History, Settings, FileWarning, PieChart, Store, ExternalLink, ChevronLeft } from "lucide-react";
+import { LayoutDashboard, Truck, Package, Activity, LogOut, AlertTriangle, RefreshCw, History, Settings, FileWarning, PieChart, Store, ExternalLink, ChevronLeft, Backpack } from "lucide-react";
 import { useState, useTransition, useEffect } from "react";
 import { AdminSettingsModal } from "@/components/AdminSettingsModal";
 import { signOut } from "next-auth/react";
+import { USE_DISPATCHLESS } from "@/lib/feature-flags";
 
+// In dispatchless mode the "Dispatches" page is replaced by "Driver Stock".
+// Both entries exist in code; only one is rendered based on the flag so the
+// nav doesn't grow during the cutover window.
 const mainNav = [
     { name: 'Overview', href: '/admin', icon: LayoutDashboard },
-    { name: 'Dispatches', href: '/admin/dispatches', icon: Truck },
+    USE_DISPATCHLESS
+        ? { name: 'Driver Stock', href: '/admin/driver-stock', icon: Backpack }
+        : { name: 'Dispatches', href: '/admin/dispatches', icon: Truck },
     { name: 'Financials', href: '/admin/financials', icon: PieChart },
     { name: 'Analytics', href: '/admin/analytics', icon: Activity },
 ];
