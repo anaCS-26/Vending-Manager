@@ -13,3 +13,12 @@ export const loginRateLimit = new Ratelimit({
   analytics: true,
   prefix: "vms_ratelimit_login",
 });
+
+// Self-service PIN change: 5 attempts per 15 minutes per driver — defends the
+// current-PIN bcrypt check against brute force without locking out a forgetful driver.
+export const pinChangeRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, "15 m"),
+  analytics: true,
+  prefix: "vms_ratelimit_pin_change",
+});

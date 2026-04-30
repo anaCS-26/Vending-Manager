@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useTransition } from "react";
+import React, { useState, useMemo, useTransition, useEffect, useRef } from "react";
 import {
     History,
     Truck,
@@ -21,32 +21,67 @@ import {
     X,
     LayoutList,
     Activity,
-    Loader2
+    Loader2,
+    Calendar
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { formatCurrency, formatID, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { editDispatchReturn } from "@/actions/inventory";
+import { getRefillLogsPaginated, type RefillLogRow } from "@/actions/history";
 import { EditLogModal } from "./EditLogModal";
-import type { DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine } from "@/types";
+import type { DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine, PaginatedResult } from "@/types";
+
+type DriverOption = { id: number; name: string };
 
 type UnifiedHistoryManagerProps = {
     dispatches: DispatchWithRelations[];
-    logs: any[]; // Specific type for granular logs
+    initialEvents: PaginatedResult<RefillLogRow>;
+    drivers: DriverOption[];
 };
 
-const PAGE_SIZE = 10;
+const ROUTES_PAGE_SIZE = 10;
 
-export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHistoryManagerProps) {
+export default function UnifiedHistoryManager({ dispatches, initialEvents, drivers }: UnifiedHistoryManagerProps) {
     const [activeView, setActiveView] = useState<"ROUTES" | "EVENTS">("ROUTES");
     const [searchQuery, setSearchQuery] = useState("");
     const [activeFilter, setActiveFilter] = useState<"ALL" | "ISSUES" | "MATCHES">("ALL");
     const [currentPage, setCurrentPage] = useState(1);
 
+    // EVENTS-tab server-driven state
+    const [eventDriverId, setEventDriverId] = useState<number | "">("");
+    const [eventDateFrom, setEventDateFrom] = useState<string>("");
+    const [eventDateTo, setEventDateTo] = useState<string>("");
+    const [eventPage, setEventPage] = useState(1);
+    const [eventData, setEventData] = useState<PaginatedResult<RefillLogRow>>(initialEvents);
+    const [isFetchingEvents, startEventsFetch] = useTransition();
+    const eventsInitialMount = useRef(true);
+
     // Edit state for Routes
     const [editingDispatchId, setEditingDispatchId] = useState<number | null>(null);
     const [editQtys, setEditQtys] = useState<Record<number, number>>({});
     const [isPending, startTransition] = useTransition();
+
+    // Re-fetch events whenever any events-tab filter changes (skips first mount — initialEvents is already correct)
+    useEffect(() => {
+        if (eventsInitialMount.current) {
+            eventsInitialMount.current = false;
+            return;
+        }
+        startEventsFetch(async () => {
+            const result = await getRefillLogsPaginated({
+                driverId: eventDriverId === "" ? null : eventDriverId,
+                dateFrom: eventDateFrom || null,
+                dateTo: eventDateTo || null,
+                searchQuery: activeView === "EVENTS" ? searchQuery : null,
+                page: eventPage,
+            });
+            setEventData(result);
+        });
+    }, [eventDriverId, eventDateFrom, eventDateTo, eventPage, activeView, searchQuery]);
+
+    // Reset events pagination when any filter (other than page itself) changes
+    const resetEventsPage = () => setEventPage(1);
 
     const handleStartEdit = (dispatch: DispatchWithRelations) => {
         const initialQtys = dispatch.DispatchItems.reduce((acc: Record<number, number>, curr: DispatchItemWithItem) => {
@@ -101,30 +136,37 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
         return result;
     }, [dispatches, searchQuery, activeFilter]);
 
-    // --- Filter Logic for EVENTS ---
-    const filteredLogs = useMemo(() => {
-        let result = logs;
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            result = result.filter(l =>
-                l.machine.location_name.toLowerCase().includes(q) ||
-                l.item.name.toLowerCase().includes(q) ||
-                l.dispatch.driver.name.toLowerCase().includes(q)
-            );
-        }
-        return result;
-    }, [logs, searchQuery]);
+    // EVENTS filtering happens server-side via getRefillLogsPaginated; no client-side filter needed.
 
-    const activeListLength = activeView === "ROUTES" ? filteredDispatches.length : filteredLogs.length;
-    const totalPages = Math.max(1, Math.ceil(activeListLength / PAGE_SIZE));
-    const safePage = Math.min(currentPage, totalPages);
+    // ROUTES tab uses client-side pagination on filteredDispatches.
+    // EVENTS tab uses server-side pagination from eventData.
+    const totalPages = activeView === "ROUTES"
+        ? Math.max(1, Math.ceil(filteredDispatches.length / ROUTES_PAGE_SIZE))
+        : eventData.totalPages;
+    const safePage = activeView === "ROUTES"
+        ? Math.min(currentPage, totalPages)
+        : Math.min(eventPage, totalPages);
 
-    const paginatedDispatches = filteredDispatches.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-    const paginatedLogs = filteredLogs.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+    const paginatedDispatches = filteredDispatches.slice((safePage - 1) * ROUTES_PAGE_SIZE, safePage * ROUTES_PAGE_SIZE);
+    const paginatedLogs = eventData.data;
+
+    const goToPage = (p: number) => {
+        if (activeView === "ROUTES") setCurrentPage(p);
+        else setEventPage(p);
+    };
 
     const handleViewChange = (view: "ROUTES" | "EVENTS") => {
         setActiveView(view);
         setCurrentPage(1);
+        setEventPage(1);
+    };
+
+    const hasActiveEventFilters = eventDriverId !== "" || eventDateFrom !== "" || eventDateTo !== "";
+    const clearEventFilters = () => {
+        setEventDriverId("");
+        setEventDateFrom("");
+        setEventDateTo("");
+        setEventPage(1);
     };
 
     return (
@@ -166,7 +208,7 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
                         <input
                             type="text"
                             value={searchQuery}
-                            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); setEventPage(1); }}
                             placeholder="Search archive..."
                             className="bg-transparent border-none outline-none text-sm text-slate-900 dark:text-white w-full placeholder:text-slate-500 dark:text-slate-400"
                         />
@@ -180,6 +222,70 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
                     <FilterButton active={activeFilter === "ALL"} onClick={() => { setActiveFilter("ALL"); setCurrentPage(1); }}>All Routes</FilterButton>
                     <FilterButton active={activeFilter === "ISSUES"} onClick={() => { setActiveFilter("ISSUES"); setCurrentPage(1); }} color="text-accent-pink" icon={<AlertTriangle className="w-3.5 h-3.5" />}>Issues Detected</FilterButton>
                     <FilterButton active={activeFilter === "MATCHES"} onClick={() => { setActiveFilter("MATCHES"); setCurrentPage(1); }} color="text-emerald-500" icon={<CheckCircle2 className="w-3.5 h-3.5" />}>Perfect Sync</FilterButton>
+                </div>
+            )}
+
+            {/* Event Filters (Only for Events tab) */}
+            {activeView === "EVENTS" && (
+                <div className="flex flex-wrap items-end gap-3 px-1">
+                    <div className="flex flex-col gap-1 min-w-[180px]">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                            <User className="w-3 h-3" /> Driver
+                        </label>
+                        <select
+                            value={eventDriverId}
+                            onChange={(e) => { setEventDriverId(e.target.value === "" ? "" : Number(e.target.value)); resetEventsPage(); }}
+                            className="bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-500/50 transition-all"
+                        >
+                            <option value="">All drivers</option>
+                            {drivers.map(d => (
+                                <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                            <Calendar className="w-3 h-3" /> From
+                        </label>
+                        <input
+                            type="date"
+                            value={eventDateFrom}
+                            onChange={(e) => { setEventDateFrom(e.target.value); resetEventsPage(); }}
+                            className="bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-500/50 transition-all"
+                        />
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                            <Calendar className="w-3 h-3" /> To
+                        </label>
+                        <input
+                            type="date"
+                            value={eventDateTo}
+                            onChange={(e) => { setEventDateTo(e.target.value); resetEventsPage(); }}
+                            className="bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-500/50 transition-all"
+                        />
+                    </div>
+
+                    {hasActiveEventFilters && (
+                        <button
+                            onClick={clearEventFilters}
+                            className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-black/40 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/20 transition-all flex items-center gap-1.5 self-end"
+                        >
+                            <X className="w-3 h-3" /> Clear filters
+                        </button>
+                    )}
+
+                    {isFetchingEvents && (
+                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 self-end pb-2">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading
+                        </div>
+                    )}
+
+                    <div className="ml-auto self-end pb-2 text-xs font-mono text-slate-500 dark:text-slate-400">
+                        {eventData.total.toLocaleString()} {eventData.total === 1 ? 'event' : 'events'}
+                    </div>
                 </div>
             )}
 
@@ -253,7 +359,7 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
             {totalPages > 1 && (
                 <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 pt-6">
                     <button
-                        onClick={() => setCurrentPage(1)}
+                        onClick={() => goToPage(1)}
                         disabled={safePage === 1}
                         className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
                         title="First Page"
@@ -261,14 +367,14 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
                         <ChevronsLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
                     <button
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        onClick={() => goToPage(Math.max(1, safePage - 1))}
                         disabled={safePage === 1}
                         className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
                         title="Previous Page"
                     >
                         <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
-                    
+
                     {Array.from(new Set([1, safePage - 10, safePage - 5, safePage - 1, safePage, safePage + 1, safePage + 5, safePage + 10, totalPages]))
                         .filter(p => p >= 1 && p <= totalPages)
                         .sort((a, b) => a - b)
@@ -278,7 +384,7 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
                                     <span className="text-slate-400 dark:text-slate-500 px-1 font-bold">...</span>
                                 )}
                                 <button
-                                    onClick={() => setCurrentPage(p)}
+                                    onClick={() => goToPage(p)}
                                     className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl text-xs font-bold transition-all shadow-sm ${p === safePage ? 'bg-brand-500 text-white dark:text-white border border-brand-500 shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-400 dark:hover:border-white/20'}`}
                                 >
                                     {p}
@@ -287,7 +393,7 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
                         ))}
 
                     <button
-                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        onClick={() => goToPage(Math.min(totalPages, safePage + 1))}
                         disabled={safePage === totalPages}
                         className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
                         title="Next Page"
@@ -295,7 +401,7 @@ export default function UnifiedHistoryManager({ dispatches, logs }: UnifiedHisto
                         <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
                     <button
-                        onClick={() => setCurrentPage(totalPages)}
+                        onClick={() => goToPage(totalPages)}
                         disabled={safePage === totalPages}
                         className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
                         title="Last Page"
