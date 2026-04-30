@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
-import { ShieldCheck, LogOut } from "lucide-react"
+import { ShieldCheck, LogOut, Settings } from "lucide-react"
 import type { MachineType, DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine } from "@/types"
 
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -383,9 +383,14 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                             <ShieldCheck className="w-5 h-5 text-accent-green" />
                         </Link>
                     ) : (
-                        <button onClick={() => signOut({ callbackUrl: '/login' })} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10" title="Sign Out">
-                            <LogOut className="w-5 h-5 text-accent-pink" />
-                        </button>
+                        <>
+                            <Link href="/driver/settings" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10" title="Settings">
+                                <Settings className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+                            </Link>
+                            <button onClick={() => signOut({ callbackUrl: '/login' })} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10" title="Sign Out">
+                                <LogOut className="w-5 h-5 text-accent-pink" />
+                            </button>
+                        </>
                     )}
                     <ThemeToggle />
                 </div>
@@ -646,7 +651,20 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                         <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Returned (Warehouse)</span>
                                                         <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
                                                             <button onClick={() => updateItem(row.itemId, 'returned', Math.max(0, row.returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                            <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.returned}</span>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="numeric"
+                                                                pattern="[0-9]*"
+                                                                autoComplete="off"
+                                                                value={String(row.returned)}
+                                                                onChange={(e) => {
+                                                                    const raw = e.target.value.replace(/[^0-9]/g, "");
+                                                                    const n = raw === "" ? 0 : parseInt(raw, 10);
+                                                                    updateItem(row.itemId, 'returned', Math.max(0, n));
+                                                                }}
+                                                                aria-label="Returned quantity"
+                                                                className="flex-1 min-w-0 text-center font-bold text-slate-900 dark:text-white bg-transparent border-none outline-none"
+                                                            />
                                                             <button onClick={() => {
                                                                 const newVal = row.returned + 1;
                                                                 updateItem(row.itemId, 'returned', Math.max(0, newVal));
@@ -661,7 +679,28 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                         <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1">Refilled (Machine)</span>
                                                         <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
                                                             <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                            <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">{row.refilled}</span>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="numeric"
+                                                                pattern="[0-9]*"
+                                                                autoComplete="off"
+                                                                value={String(row.refilled)}
+                                                                onChange={(e) => {
+                                                                    const raw = e.target.value.replace(/[^0-9]/g, "");
+                                                                    const n = raw === "" ? 0 : parseInt(raw, 10);
+                                                                    // Let the driver type freely; bag-capacity is enforced on commit
+                                                                    // (the "+" button still clamps for tap-to-increment UX).
+                                                                    updateItem(row.itemId, 'refilled', Math.max(0, n));
+                                                                }}
+                                                                onBlur={() => {
+                                                                    if (row.refilled > row.bagQuantity) {
+                                                                        updateItem(row.itemId, 'refilled', row.bagQuantity);
+                                                                        toast.warning(`Capped to bag size (${row.bagQuantity}).`);
+                                                                    }
+                                                                }}
+                                                                aria-label="Refilled quantity"
+                                                                className={`flex-1 min-w-0 text-center font-bold bg-transparent border-none outline-none ${row.refilled > row.bagQuantity ? 'text-accent-pink' : 'text-slate-900 dark:text-white'}`}
+                                                            />
                                                             <button onClick={() => {
                                                                 const newVal = Math.min(row.bagQuantity, row.refilled + 1); // Can only refill up to what is in the bag
                                                                 updateItem(row.itemId, 'refilled', newVal);

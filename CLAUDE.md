@@ -96,6 +96,14 @@ Weighted Average Cost is recomputed when Purchase Orders are received. Supplier 
 - **JSDoc**: server actions use a boxed-comment header for groups and a single-line JSDoc per export. Match the surrounding style.
 - **Lint posture**: `@typescript-eslint/no-explicit-any` and `no-unused-vars` are off; the convention is still to type things — don't lean on `any` casually.
 - **Image uploads** go through `@vercel/blob` (`put`) inside server actions, not raw filesystem writes (the `writeFile`/`mkdir` imports in `inventory.ts` are legacy local-dev fallbacks).
+- **Server-side pagination for archive feeds**: large historical lists (refill logs, audit-style tables) MUST go through a paginated server action that returns `PaginatedResult<T>` from `src/types/index.ts`. The page does an initial fetch with default filters and the client component refetches via `useTransition` on filter change — never ship a full unbounded `findMany()` to the client. See `getRefillLogsPaginated` in `src/actions/history.ts` for the pattern.
+- **Mobile numeric input**: use `<input type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off">` for quantity fields, not `type="number"`. Keeps the iOS/Android numeric keypad while avoiding spinner buttons, scientific-notation parsing, and locale-specific quirks. Avoid `onFocus={e.target.select()}` on these — mobile keyboards re-fire focus between keystrokes and you'll lose all but the last digit.
+
+### Driver Portal Routes
+The driver portal is no longer a single screen — keep navigation light and mobile-first.
+- `/driver` — main refill workflow.
+- `/driver/settings` — self-service PIN change (driver role only; admins shadowing the portal are redirected away). Backed by `changeDriverPin` in `src/actions/auth.ts`, which is rate-limited per-driver via `pinChangeRateLimit` in `src/lib/rate-limit.ts` and writes a `CHANGE_DRIVER_PIN` audit row. Never log PIN values.
+- The driver portal is intentionally NOT subscribed to `<RealtimeRefresher />` — same offline-first reasoning as before. Any new driver page should follow that rule.
 
 ## Domain Skills
 
