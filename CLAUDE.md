@@ -85,12 +85,19 @@ Weighted Average Cost is recomputed when Purchase Orders are received. Supplier 
 - `Admin.role` stores `ADMIN` or `SUPER_ADMIN` (uppercase in DB; lowercase in session — see the mapping in `src/auth.ts`).
 
 ### Dispatchless Driver Stock (Phase B, dual-run)
-The "Dispatch/Route" wrapper is being retired in favor of direct `DriverStock` mutations. Both code paths coexist behind `NEXT_PUBLIC_USE_DISPATCHLESS`:
-- `src/actions/driver-stock.ts` holds the new flow: `assignToDriver`, `acknowledgeAssignment`, `disputeAssignment`, `submitDriverReturn`, `getDriverBag`.
-- `src/actions/inventory.ts` keeps `dispatchToDriver`/`returnDispatch` operational during cutover.
+The "Dispatch/Route" wrapper is being retired in favor of direct `DriverStock` mutations. Both code paths coexist behind `NEXT_PUBLIC_USE_DISPATCHLESS` (read centrally via `src/lib/feature-flags.ts → USE_DISPATCHLESS`):
+- `src/actions/driver-stock.ts` holds the new flow: `assignToDriver`, `acknowledgeAssignment`, `disputeAssignment`, `submitDriverReturn`, `getDriverBag`, `getDriversWithBagAndPending`.
+- `src/actions/inventory.ts` keeps `dispatchToDriver`/`returnDispatch` operational during cutover. `logBatchRefills` is **still dispatch-required** — flag-gated dispatchless refilling lands in B2b.
 - `Dispatch`/`DispatchItem` rows are NEVER deleted — they're frozen historical records. New flows write `dispatchId: null` on `RefillLog`/`ReturnVerification` and rely on `driverId` instead.
 - Acknowledgment model: stock lands in `DriverStock` immediately at assignment time so the driver isn't blocked. The `StockAssignment` row sits in `PENDING_ACK` until the driver clicks "Accept all" (status → `ACKNOWLEDGED`) or reports a discrepancy (status → `DISPUTED`, with an `InventoryAdjustment` row written using reason `ASSIGNMENT_DISCREPANCY`).
 - Driver returns are item-by-item, any time — `submitDriverReturn` creates one `ReturnVerification(status='PENDING', dispatchId=null)` per line and decrements `DriverStock` immediately. Existing `approveReturn` is unchanged and works on both legacy and dispatchless rows.
+
+**Phase B UI surfaces (Phase B2):**
+- `/admin/driver-stock` ([src/app/admin/driver-stock/page.tsx](src/app/admin/driver-stock/page.tsx)) — admin pushes items, sees per-driver bag totals + pending acks + disputed assignments. Built with `DriverStockManager` ([src/components/DriverStockManager.tsx](src/components/DriverStockManager.tsx)). Sidebar nav swaps `/admin/dispatches` → `/admin/driver-stock` when `USE_DISPATCHLESS` is on.
+- `AssignmentAckBanner` ([src/components/AssignmentAckBanner.tsx](src/components/AssignmentAckBanner.tsx)) — mounted on `/driver` whenever the logged-in driver has any `StockAssignment(status='PENDING_ACK')` rows. "Accept all" calls `acknowledgeAssignment` per row; "Report missing" switches to per-line input mode and calls `disputeAssignment` for the lines that diverge from the pushed quantity.
+- `DriverReturnSheet` + `DriverReturnTrigger` ([src/components/DriverReturnSheet.tsx](src/components/DriverReturnSheet.tsx), [src/components/DriverReturnTrigger.tsx](src/components/DriverReturnTrigger.tsx)) — floating "Return" button on the driver portal opens a sheet listing the bag with per-line reason picker (DAMAGED/EXPIRED/SURPLUS) and quantity input. Hidden when the bag is empty.
+
+**Testable today (B2-on):** admin push → driver ack/dispute → driver return → admin verify. Refilling machines still goes through the legacy dispatch flow until B2b lands.
 
 ### UI Conventions (Neo-Design System)
 - Glassmorphism + slate base. Use the project tokens (`accent-blue`, `accent-green`, `neo-bg`, etc.) — never raw Tailwind color names like `bg-blue-500`.
