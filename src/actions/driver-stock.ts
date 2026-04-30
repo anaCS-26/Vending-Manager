@@ -364,9 +364,11 @@ export async function submitDriverReturn(
 
 /**
  * Admin-side feed for the /admin/driver-stock page: every active driver
- * with their current bag, pending acks, and the latest disputed assignments
- * (so admins can resolve discrepancies). Tries to keep payloads small —
- * only PENDING_ACK and recent DISPUTED rows, not the full assignment history.
+ * with their current bag, pending acks, the latest disputed assignments
+ * (so admins can resolve discrepancies), and a window of recent refills
+ * so the admin can see "what they have refilled and how much they currently
+ * have" at a glance. Tries to keep payloads small — only PENDING_ACK and
+ * recent DISPUTED rows, last 20 refills, not full history.
  */
 export async function getDriversWithBagAndPending() {
     await requireAdmin()
@@ -384,6 +386,11 @@ export async function getDriversWithBagAndPending() {
                 include: { item: true },
                 orderBy: { assigned_at: "desc" },
                 take: 50,
+            },
+            RefillLogs: {
+                include: { item: true, machine: true },
+                orderBy: { refilled_at: "desc" },
+                take: 20,
             },
         },
         orderBy: { name: "asc" },
