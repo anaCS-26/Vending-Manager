@@ -12,7 +12,8 @@ import {
     ChevronDown,
     Plus,
     Minus,
-    Check
+    Check,
+    ClipboardList
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -297,11 +298,12 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
 }
 
 function DriverDashboard({ driver }: { driver: DriverWithBag }) {
-    const [activeTab, setActiveTab] = useState<"STOCK" | "REFILLS" | "PENDING">("STOCK");
+    const [activeTab, setActiveTab] = useState<"STOCK" | "REFILLS" | "PENDING" | "HISTORY">("STOCK");
     const [stockSearchQuery, setStockSearchQuery] = useState("");
     
     const pending = driver.StockAssignments.filter((a) => a.status === "PENDING_ACK");
     const disputed = driver.StockAssignments.filter((a) => a.status === "DISPUTED");
+    const assignmentHistory = driver.StockAssignments.filter((a) => a.status === "ACKNOWLEDGED");
     const issuesCount = pending.length + disputed.length;
     
     const bagTotalQty = driver.DriverStock.reduce((s, r) => s + r.quantity_on_hand, 0);
@@ -353,6 +355,13 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
                     label="Pending / Disputed" 
                     count={issuesCount}
                     alert={issuesCount > 0}
+                />
+                <TabButton 
+                    active={activeTab === "HISTORY"} 
+                    onClick={() => setActiveTab("HISTORY")} 
+                    icon={<ClipboardList className="w-3.5 h-3.5" />} 
+                    label="Assignment History" 
+                    count={assignmentHistory.length}
                 />
             </div>
 
@@ -464,6 +473,18 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
                             )}
                         </motion.div>
                     )}
+
+                    {activeTab === "HISTORY" && (
+                        <motion.div key="history" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                            {assignmentHistory.length === 0 ? (
+                                <EmptyState icon={<ClipboardList className="w-8 h-8" />} title="No History" message="No acknowledged stock assignments found." />
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {assignmentHistory.map(a => <AssignmentCard key={a.id} assignment={a} isDisputed={false} />)}
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
                 </AnimatePresence>
             </div>
         </div>
@@ -503,12 +524,13 @@ function EmptyState({ icon, title, message }: { icon: React.ReactNode; title: st
 
 function AssignmentCard({ assignment, isDisputed }: { assignment: StockAssignmentLite; isDisputed: boolean }) {
     return (
-        <div className={`p-3.5 rounded-xl border ${isDisputed ? 'bg-accent-pink/5 border-accent-pink/20' : 'bg-white dark:bg-neo-bg border-slate-200 dark:border-white/10 shadow-sm'}`}>
+        <div className={`p-3.5 rounded-xl border ${isDisputed ? 'bg-accent-pink/5 border-accent-pink/20' : assignment.status === 'ACKNOWLEDGED' ? 'bg-accent-green/5 border-accent-green/20' : 'bg-white dark:bg-neo-bg border-slate-200 dark:border-white/10 shadow-sm'}`}>
             <div className="flex items-start justify-between">
                 <div>
                     <h5 className="font-bold text-xs text-slate-900 dark:text-white mb-1 line-clamp-1">{assignment.item.name}</h5>
                     <div className="text-[9px] font-mono text-slate-500">
-                        {formatSaudiDate(assignment.assigned_at)} {formatSaudiTime(assignment.assigned_at, { hour: "2-digit", minute: "2-digit" })}
+                        {assignment.status === 'ACKNOWLEDGED' ? 'Ack\'d: ' : 'Assigned: '}
+                        {formatSaudiDate(assignment.status === 'ACKNOWLEDGED' && assignment.acknowledged_at ? assignment.acknowledged_at : assignment.assigned_at)} {formatSaudiTime(assignment.status === 'ACKNOWLEDGED' && assignment.acknowledged_at ? assignment.acknowledged_at : assignment.assigned_at, { hour: "2-digit", minute: "2-digit" })}
                     </div>
                     {isDisputed && assignment.acknowledged_qty !== null && (
                         <div className="mt-2 text-[10px] text-accent-pink font-medium flex items-center gap-1 bg-accent-pink/10 px-1.5 py-1 rounded inline-flex">

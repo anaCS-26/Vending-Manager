@@ -382,10 +382,9 @@ export async function getDriversWithBagAndPending() {
                 orderBy: { item: { name: "asc" } },
             },
             StockAssignments: {
-                where: { status: { in: ["PENDING_ACK", "DISPUTED"] } },
                 include: { item: true },
                 orderBy: { assigned_at: "desc" },
-                take: 50,
+                take: 100,
             },
             RefillLogs: {
                 include: { item: true, machine: true },
