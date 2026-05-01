@@ -59,6 +59,10 @@ next-env.d.ts
 # SSE signal file
 .sse/
 
+# Local AI assistant state (Claude Code, Gemini CLI)
+.claude/
+.gemini/
+
 # OpenNext
 .open-next
 

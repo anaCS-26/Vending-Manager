@@ -12,7 +12,7 @@ As a recent graduate specializing in **Artificial Intelligence & Machine Learnin
 
 - **Centralized Inventory Ledger**: Real-time tracking of item flow using Weighted Average Cost (WAC) methodology to ensure precise financial reporting and Cost of Goods Sold (COGS) calculations.
 - **Role-Based Access Control (RBAC)**: Secure multi-tenant portals tailored for Administrators and Drivers, utilizing NextAuth.js and custom middleware guards.
-- **Live Dispatch Synchronization**: Server-Sent Events (SSE) stream real-time updates between drivers in the field and the central warehouse.
+- **Live Dispatch Synchronization**: Supabase Realtime WebSocket push delivers ~50ms cross-tab updates between drivers in the field and the warehouse, with zero idle background traffic.
 - **Automated Return & Claim Verification**: Intelligent workflows to process back-stock, damaged, or expired items, with automatic financial deduction and shrinkage tracking.
 - **Neo-Glassmorphism UI**: A highly polished, responsive interface utilizing modern CSS design tokens, dynamic container queries, and fluid animations.
 
@@ -33,9 +33,9 @@ As a recent graduate specializing in **Artificial Intelligence & Machine Learnin
 ### APIs & Protocols
 
 - **Next.js Server Actions (RPC/REST)**: Handlers for secure data mutations, bypassing traditional API routes for direct, typed server execution.
-- **Server-Sent Events (SSE)**: A unidirectional protocol for pushing live dispatch updates from the server to clients with low overhead.
+- **Supabase Realtime (WebSocket)**: Single shared subscription per page tree pushes change events to all connected admin clients; replaced an earlier SSE/polling design.
 - **Geoapify API**: External geocoding and mapping integration for precise geographical data handling.
-- **NextAuth.js Protocol**: Robust authentication flow managing secure session tokens and role-based permissions.
+- **NextAuth.js v5**: Authentication flow managing secure session tokens and role-based permissions, with separate credential branches for admins (email + bcrypt) and drivers (phone + PIN).
 
 ## 🔄 Logistics Flow Diagram
 
@@ -75,8 +75,8 @@ To understand how the system is used in production, consider the following daily
 
 1. **Procurement (Admin)**: The warehouse receives 500 units of Coca-Cola. The Admin logs a Purchase Order. The system dynamically recalculates the WAC (Weighted Average Cost) to ensure accurate financial reporting.
 2. **Dispatching (Admin)**: The Admin creates a route for "Driver Ali", allocating 100 units of Coca-Cola to his vehicle from the Dammam Warehouse.
-3. **Route Execution (Driver)**: Ali opens his mobile dashboard, views his assigned route, and arrives at "Machine A". He inputs that he refilled 20 units. Thanks to **SSE (Server-Sent Events)**, the Admin dashboard updates instantly without page refreshes.
-4. **Reconciliation (Admin & Driver)**: At the end of the shift, Ali returns to the warehouse with 80 units. He logs 78 units as "Back-Stock" (for tomorrow) and 2 units as "Damaged". The Admin verifies the return, the system automatically deducts the 2 damaged units as shrinkage on the financial ledger, and the shift is securely closed.
+3. **Route Execution (Driver)**: Ali opens his mobile dashboard (PWA, offline-first), views his bag, and arrives at "Machine A" to refill 20 units. The Admin dashboard updates instantly via Supabase Realtime push — no manual refresh.
+4. **Reconciliation (Admin & Driver)**: At the end of the shift, Ali returns 80 units — 78 as back-stock and 2 as damaged via the per-line `DriverReturnSheet`. The Admin verifies the return; damaged units are deducted as shrinkage on the WAC ledger and the shift closes.
 
 ## ⚙️ Local Development
 
@@ -96,11 +96,12 @@ To understand how the system is used in production, consider the following daily
    npm install
    ```
 3. Set up environment variables:
-   Copy `.env.example` to `.env` and configure your local SQLite/Postgres URLs and Auth secrets.
+   Copy `.env.example` to `.env` and configure your Postgres (Supabase) URL, NextAuth secret, Upstash Redis, Vercel Blob, and the public Supabase URL/anon key used for Realtime.
 4. Run database migrations:
    ```bash
-   npx prisma db push
+   npx prisma migrate dev
    ```
+   Then enable the `supabase_realtime` publication on the `SystemMeta` table in the Supabase dashboard so live updates work.
 5. Start the development server:
    ```bash
    npm run dev
@@ -110,7 +111,8 @@ To understand how the system is used in production, consider the following daily
 
 - **Concurrency & Data Integrity**: Implemented strict auditing footprints (`InventoryAdjustment` and `RefillLogs`) to prevent race conditions when multiple drivers interact with the same warehouse concurrently.
 - **Financial Accuracy**: Engineered a robust Weighted Average Cost (WAC) algorithm to dynamically calculate the COGS as purchase orders with fluctuating prices are checked in.
-- **Real-time UX**: Solved client-state synchronization issues by moving from standard polling to Server-Sent Events (SSE), significantly reducing server load while providing instant feedback to operations managers.
+- **Real-time UX**: Iterated from polling → Upstash Redis pings → Supabase Realtime WebSocket push. The final design carries zero idle traffic and ~50ms latency, with a single subscription mounted at the layout level so per-page components can't accidentally open duplicate sockets.
+- **Dispatchless Driver Stock**: Migrated the driver allocation surface from Dispatch/Route wrappers to direct `DriverStock` mutations behind a `USE_DISPATCHLESS` feature flag, with an ack/dispute workflow (`StockAssignment.PENDING_ACK → ACKNOWLEDGED | DISPUTED`) so drivers aren't blocked at issue time.
 - **Security Hardening**: Conducted security audits to implement Upstash Redis rate-limiting on sensitive endpoints and scrubbed git history of exposed secrets.
 
 ---

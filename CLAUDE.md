@@ -1,134 +1,114 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code working in this repo.
 
 ## Project
 
-NexGen Vending Management System (AII) — full-stack inventory/logistics platform for a Saudi vending operation. Goods flow `Supplier -> Warehouse -> Driver (Dispatch) -> Machine`, with reconciliation through verified Returns and Weighted Average Cost (WAC) accounting.
+NexGen Vending Management System (AII) — full-stack inventory/logistics for a Saudi vending operation. Flow: `Supplier → Warehouse → Driver → Machine`, reconciled through verified Returns and Weighted Average Cost (WAC).
 
 ## Commands
 
-- `npm run dev` — Next.js dev server.
-- `npm run build` — runs `prisma generate && next build --webpack`.
-- `npm run lint` — ESLint (Next core-web-vitals + TS preset; many rules relaxed in `eslint.config.mjs`).
-- `npm start` — production server (after build).
-- Schema changes: edit `prisma/schema.prisma` then `npx prisma migrate dev --name <change>`; run `npx prisma generate` after.
-- Seeding (mirror `:prod` variants exist — be deliberate about which env you target):
-  - `npm run db:seed:dev` — base seed (`scripts/seed-dev.ts`, also wired as `prisma.seed`).
-  - `npm run db:seed-csv:dev` — bulk import from CSV templates in `prisma/seed-data-templates/`.
-  - `npm run db:seed-stock:dev` — stock-level seeding.
-  - `npm run db:reset:dev` — destructive reset via `scripts/reset.ts`.
+- `npm run dev` / `npm run build` (runs `prisma generate` first) / `npm run lint` / `npm start`.
+- Schema: edit `prisma/schema.prisma` → `npx prisma migrate dev --name <change>` → `npx prisma generate`.
+- Seeding: `npm run db:seed:dev`, `db:seed-csv:dev`, `db:seed-stock:dev`. `db:reset:dev` is destructive. `:prod` variants exist — be deliberate.
+- No test suite.
 
-There is no test suite configured.
+## Stack
 
-## Architecture
+Next.js 16 App Router (Turbopack, React 19), strict TS, Tailwind v4, Framer Motion. Prisma → Postgres (Supabase) only — the legacy `prisma/dev.db` SQLite file is unused. NextAuth v5 beta with one `CredentialsProvider` branching on `credentials.type` (admin: email+bcrypt; driver: phone+bcrypt PIN). Session role: `super_admin | admin | driver`. Upstash Redis for rate limiting, `@vercel/blob` for uploads, Resend for email, Serwist PWA, Leaflet, Recharts, Zustand (`src/stores/useDriverStore.ts`).
 
-### Stack
-- **Next.js 16 App Router** (Turbopack, React 19), strict TypeScript, Tailwind CSS v4 + Framer Motion.
-- **Prisma ORM** against **PostgreSQL only** (Supabase). The datasource in `prisma/schema.prisma` is `postgresql`; the legacy `prisma/dev.db` SQLite file is unused. Local dev points at the same Postgres via `.env`.
-- **NextAuth v5 (beta)** with a single `CredentialsProvider` that branches on `credentials.type`: admins log in by email+password (bcrypt), drivers by phone+PIN (bcrypt). Session role is one of `super_admin | admin | driver`.
-- **Upstash Redis** for rate limiting (`src/lib/rate-limit.ts`), **`@vercel/blob`** for image uploads, **Resend** for email, **Serwist** for the PWA service worker (`src/app/sw.ts`, registered via `next.config.ts`), **Leaflet/react-leaflet** for maps, **Recharts** for analytics, **Zustand** for the small client store (`src/stores/useDriverStore.ts`).
+## Server Actions are the backend
 
-### Server Actions Are The Backend
-All mutations and most reads happen through Server Actions in `src/actions/*`, grouped by domain (`inventory`, `orders`, `returns`, `history`, `warehouses`, `predictions`, `settings`, `super`, `auth`). The only real REST routes are `src/app/api/auth/[...nextauth]` and `src/app/api/export-zatca` (the ZATCA route is intentionally stubbed to return 503 — feature not yet implemented; do not extend it without scoping the real ZATCA spec first). Every action follows this template:
+All mutations live in `src/actions/*` by domain. The only real REST routes are `src/app/api/auth/[...nextauth]` and `src/app/api/export-zatca` (intentionally stubbed 503 — do not extend without scoping the real ZATCA spec). Every action:
 
-1. RBAC guard from `src/lib/auth-utils.ts` (mandatory — see below).
-2. Prisma transaction(s) for any multi-write change.
-3. Audit footprint (`writeAuditLog`, `RefillLog`, or `InventoryAdjustment` depending on category).
-4. `notifyClients()` to bump the realtime version, then `revalidatePath()` where applicable.
+1. RBAC guard from `src/lib/auth-utils.ts` (mandatory).
+2. Prisma transaction for multi-write changes.
+3. Audit row (`writeAuditLog`, `RefillLog`, or `InventoryAdjustment`).
+4. `notifyClients()` then `revalidatePath()` where applicable.
 
-### Auth & Routing Guards
-`src/proxy.ts` is the NextAuth edge middleware. It enforces:
-- `/super` → `super_admin` only.
-- `/admin` → `admin` or `super_admin` (drivers redirect to `/driver`).
-- `/driver` → any logged-in role (admins can shadow the driver portal).
-- `/` and `/login` → if logged in, redirect by role; otherwise route `/` → `/login`.
+## Auth & routing
 
-Inside actions, the guards in `src/lib/auth-utils.ts` are the second line:
-- `requireAdmin()` — admin or super_admin.
-- `requireSuperAdmin()` — super_admin only.
-- `requireDriver()` — driver or above (admins allowed for supervisory edits).
-- `requireAdminOrDriverOwner(driverId)` — drivers may only mutate their own records; admins bypass.
+`src/proxy.ts` (NextAuth edge middleware) enforces: `/super` → super_admin only; `/admin` → admin/super_admin (drivers redirect to `/driver`); `/driver` → any logged-in role; `/` and `/login` redirect by role.
 
-Every server action MUST start with one of these. Driver-scoped writes use the ownership variant.
+Inside actions, use `src/lib/auth-utils.ts`:
+- `requireAdmin()`, `requireSuperAdmin()`, `requireDriver()`.
+- `requireAdminOrDriverOwner(driverId)` — drivers may only mutate their own rows; admins bypass.
 
-### Realtime: Push-based via Supabase Realtime, not SSE or polling
-Despite the README and the legacy `.sse/` directory name, the system does NOT use SSE. It also no longer polls.
+Every server action MUST start with one of these.
 
-`src/lib/notify.ts` upserts a single-row `SystemMeta` table (`key='realtime_version'`) and increments its `version` column on every `notifyClients()` call. Browser clients subscribe to row changes on that table over a Supabase Realtime WebSocket and call `router.refresh()` when an event arrives — push, not poll. Latency is ~50ms; idle background traffic is zero.
+## Realtime: Supabase Realtime push (not SSE, not polling)
 
-The subscription is mounted **once per page tree** via `<RealtimeRefresher />` in `src/app/admin/layout.tsx` and `src/app/super/layout.tsx`. Do NOT call `useRealtimeRefresh()` inside individual page/component bodies — that would open a second WebSocket per page. The driver portal is intentionally NOT subscribed (offline-first Zustand state would be clobbered by forced refreshes).
+Despite the legacy `.sse/` directory name, this is push-based.
 
-The subscription deliberately uses no `filter` clause (intercepts all events on `SystemMeta`) and `event: "*"` (covers both INSERT and UPDATE). Filtered postgres_changes subscriptions require `REPLICA IDENTITY FULL` on the table; we avoid that by relying on the table only ever holding the single version row.
+`src/lib/notify.ts` increments a single-row `SystemMeta` (`key='realtime_version'`). Browser clients subscribe to that row over Supabase Realtime WS and call `router.refresh()` on change. ~50ms latency, zero idle traffic.
 
-Always call `notifyClients(eventTag)` after mutating actions. It's fire-and-forget — DB errors are caught and logged, never propagated. The `eventTag` is currently informational (logged on failure) but is reserved in the signature for future per-event channels.
+Mounted **once per page tree** via `<RealtimeRefresher />` in `src/app/admin/layout.tsx` and `src/app/super/layout.tsx`. Do NOT call `useRealtimeRefresh()` inside individual pages — that opens a second WS. The driver portal is intentionally NOT subscribed (offline-first Zustand state would be clobbered).
 
-**Setup requirements** (already done; documented for future Claude sessions):
-1. `SystemMeta` table must exist in the target database (`prisma db push` or migration).
-2. Realtime publication must be enabled on `SystemMeta` in the Supabase dashboard (Database → Publications → `supabase_realtime` → toggle SystemMeta on). This step is per-environment — local Supabase and cloud Supabase are configured independently.
-3. Client env vars `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the new "publishable" key in CLI v2.84+) must be set. `NEXT_PUBLIC_*` vars are baked into the bundle at build time — restart the dev server (and hard-refresh the browser once) after changing them.
+Subscription uses no `filter` and `event: "*"` — filtered postgres_changes would require `REPLICA IDENTITY FULL`, which we avoid since the table holds only one row.
 
-### Audit Trail
-Two complementary mechanisms — use both where they apply:
-- **Inventory mutations** must produce a `RefillLog` (driver→machine flow) or `InventoryAdjustment` (manual stock change) row, capturing price/quantity at the moment of the event. Never re-derive prices from the live `Item` row — store `price_at_dispatch`, `price_at_refill`, `cost_at_refill` at write time.
-- **Administrative state changes** call `writeAuditLog(session, actionType, entityType, entityId, oldState, newState, message)` from `src/lib/audit-utils.ts`, which writes `SystemAuditLog`. The helper swallows errors so audit failures never block the user action.
+Always call `notifyClients(eventTag)` after mutating actions. Fire-and-forget; errors caught and logged.
 
-### Financial Logic (WAC)
-Weighted Average Cost is recomputed when Purchase Orders are received. Supplier shortages stack into `WarehouseStock.pending_deficit` rather than negative inventory. `Item.last_purchase_cost` records the latest unit cost; `Item.cost` is the running WAC.
+Setup (per-environment): `SystemMeta` table must exist; Realtime publication toggled on for it in Supabase dashboard; client envs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` set (restart dev server after changes — `NEXT_PUBLIC_*` is baked at build time).
 
-### Domain Model Highlights (`prisma/schema.prisma`)
-- `Item` carries three pricing tiers (`price_standard`, `price_hospital`, `price_hotel`) plus `cost` (WAC) and `last_purchase_cost`. `Machine.tier` selects which price applies at refill.
-- `Dispatch` has status `OPEN | CLOSED`; `DispatchItem` snapshots `price_at_dispatch`. `RefillLog` links back to the dispatch (legacy) AND carries a denormalized `driverId` (Phase B). `ReturnVerification` is the admin-approval queue (`PENDING | VERIFIED`, with reason `DAMAGED | EXPIRED | SURPLUS`); both `dispatchId` and `driverId` are nullable so legacy and dispatchless rows coexist.
-- `DriverStock` is the running per-driver bag — "in-vehicle" inventory. Post-refactor it is the primary allocation surface (admin pushes here, driver consumes from here).
-- `StockAssignment` is the audit row for an admin-to-driver push: snapshots `cost_at_assignment` (WAC at issue time) and tracks `status` (`PENDING_ACK` → `ACKNOWLEDGED` | `DISPUTED`). Drives the driver-side ack banner.
-- `PurchaseOrder` (status `PENDING | COMPLETED`) is the only path for new stock into a warehouse.
-- `Admin.role` stores `ADMIN` or `SUPER_ADMIN` (uppercase in DB; lowercase in session — see the mapping in `src/auth.ts`).
+## Audit trail
 
-### Dispatchless Driver Stock (Phase B, dual-run)
-The "Dispatch/Route" wrapper is being retired in favor of direct `DriverStock` mutations. Both code paths coexist behind `NEXT_PUBLIC_USE_DISPATCHLESS` (read centrally via `src/lib/feature-flags.ts → USE_DISPATCHLESS`):
-- `src/actions/driver-stock.ts` holds the new flow: `assignToDriver`, `acknowledgeAssignment`, `disputeAssignment`, `submitDriverReturn`, `getDriverBag`, `getDriversWithBagAndPending`.
-- `src/actions/inventory.ts` keeps `dispatchToDriver`/`returnDispatch` operational during cutover. `logBatchRefills` is **still dispatch-required** — flag-gated dispatchless refilling lands in B2b.
-- `Dispatch`/`DispatchItem` rows are NEVER deleted — they're frozen historical records. New flows write `dispatchId: null` on `RefillLog`/`ReturnVerification` and rely on `driverId` instead.
-- Acknowledgment model: stock lands in `DriverStock` immediately at assignment time so the driver isn't blocked. The `StockAssignment` row sits in `PENDING_ACK` until the driver clicks "Accept all" (status → `ACKNOWLEDGED`) or reports a discrepancy (status → `DISPUTED`, with an `InventoryAdjustment` row written using reason `ASSIGNMENT_DISCREPANCY`).
-- Driver returns are item-by-item, any time — `submitDriverReturn` creates one `ReturnVerification(status='PENDING', dispatchId=null)` per line and decrements `DriverStock` immediately. Existing `approveReturn` is unchanged and works on both legacy and dispatchless rows.
+Use both where applicable:
+- **Inventory mutations** → `RefillLog` (driver→machine) or `InventoryAdjustment` (manual). Snapshot prices/costs at write time (`price_at_dispatch`, `price_at_refill`, `cost_at_refill`). Never re-derive from the live `Item` row.
+- **Admin state changes** → `writeAuditLog(...)` from `src/lib/audit-utils.ts` writes `SystemAuditLog`. Errors are swallowed.
 
-**Phase B UI surfaces (Phase B2):**
-- `/admin/driver-stock` ([src/app/admin/driver-stock/page.tsx](src/app/admin/driver-stock/page.tsx)) — admin pushes items, sees per-driver bag totals + pending acks + disputed assignments. Built with `DriverStockManager` ([src/components/DriverStockManager.tsx](src/components/DriverStockManager.tsx)). Sidebar nav swaps `/admin/dispatches` → `/admin/driver-stock` when `USE_DISPATCHLESS` is on.
-- `AssignmentAckBanner` ([src/components/AssignmentAckBanner.tsx](src/components/AssignmentAckBanner.tsx)) — mounted on `/driver` whenever the logged-in driver has any `StockAssignment(status='PENDING_ACK')` rows. "Accept all" calls `acknowledgeAssignment` per row; "Report missing" switches to per-line input mode and calls `disputeAssignment` for the lines that diverge from the pushed quantity.
-- `DriverReturnSheet` + `DriverReturnTrigger` ([src/components/DriverReturnSheet.tsx](src/components/DriverReturnSheet.tsx), [src/components/DriverReturnTrigger.tsx](src/components/DriverReturnTrigger.tsx)) — floating "Return" button on the driver portal opens a sheet listing the bag with per-line reason picker (DAMAGED/EXPIRED/SURPLUS) and quantity input. Hidden when the bag is empty.
+## Financial logic (WAC)
 
-**Testable today (B2-on):** admin push → driver ack/dispute → driver return → admin verify. Refilling machines still goes through the legacy dispatch flow until B2b lands.
+WAC recomputes when POs are received. Supplier shortages stack into `WarehouseStock.pending_deficit` rather than negative inventory. `Item.last_purchase_cost` is the latest unit cost; `Item.cost` is the running WAC.
 
-### UI Conventions (Neo-Design System)
-- Glassmorphism + slate base. Use the project tokens (`accent-blue`, `accent-green`, `neo-bg`, etc.) — never raw Tailwind color names like `bg-blue-500`.
-- Reuse the existing modal/dropdown/card primitives in `src/components/`. Don't introduce parallel implementations.
-- Dark mode is the primary target via `next-themes`; provide light variants alongside.
-- All UI timestamps render in `Asia/Riyadh` via `formatSaudiDate` / `formatSaudiTime` from `src/lib/utils.ts` — do not call `toLocaleString()` directly.
+## Domain model highlights
 
-## Conventions Worth Knowing
+- `Item`: three price tiers (`price_standard`, `price_hospital`, `price_hotel`) plus WAC `cost`; `Machine.tier` selects which applies at refill.
+- `Dispatch` (`OPEN | CLOSED`) and `DispatchItem` are frozen historical records — never deleted. New flows write `dispatchId: null` and rely on denormalized `driverId` on `RefillLog`/`ReturnVerification`.
+- `DriverStock` is the running per-driver bag; primary allocation surface post-refactor.
+- `StockAssignment` is the audit row for an admin→driver push: snapshots `cost_at_assignment` and tracks `PENDING_ACK → ACKNOWLEDGED | DISPUTED`.
+- `ReturnVerification` (`PENDING | VERIFIED`; reasons `DAMAGED | EXPIRED | SURPLUS`) — both `dispatchId` and `driverId` nullable.
+- `PurchaseOrder` (`PENDING | COMPLETED`) is the only path for new stock.
+- `Admin.role`: `ADMIN`/`SUPER_ADMIN` in DB, lowercase in session (mapped in `src/auth.ts`).
 
-- **Vertical slices**: data-model changes are expected to land end-to-end in one PR — Prisma schema, affected actions, `src/types/index.ts`, and every UI surface (form, table, detail/edit modal).
-- **Shared types** live in `src/types/index.ts` and are mostly `Prisma.<Model>GetPayload<...>` aliases — extend here rather than redefining.
-- **JSDoc**: server actions use a boxed-comment header for groups and a single-line JSDoc per export. Match the surrounding style.
-- **Lint posture**: `@typescript-eslint/no-explicit-any` and `no-unused-vars` are off; the convention is still to type things — don't lean on `any` casually.
-- **Image uploads** go through `@vercel/blob` (`put`) inside server actions, not raw filesystem writes (the `writeFile`/`mkdir` imports in `inventory.ts` are legacy local-dev fallbacks).
-- **Server-side pagination for archive feeds**: large historical lists (refill logs, audit-style tables) MUST go through a paginated server action that returns `PaginatedResult<T>` from `src/types/index.ts`. The page does an initial fetch with default filters and the client component refetches via `useTransition` on filter change — never ship a full unbounded `findMany()` to the client. See `getRefillLogsPaginated` in `src/actions/history.ts` for the pattern.
-- **Mobile numeric input**: use `<input type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off">` for quantity fields, not `type="number"`. Keeps the iOS/Android numeric keypad while avoiding spinner buttons, scientific-notation parsing, and locale-specific quirks. Avoid `onFocus={e.target.select()}` on these — mobile keyboards re-fire focus between keystrokes and you'll lose all but the last digit.
+## Dispatchless driver stock (Phase B, dual-run)
 
-### Driver Portal Routes
-The driver portal is no longer a single screen — keep navigation light and mobile-first.
-- `/driver` — main refill workflow.
-- `/driver/settings` — self-service PIN change (driver role only; admins shadowing the portal are redirected away). Backed by `changeDriverPin` in `src/actions/auth.ts`, which is rate-limited per-driver via `pinChangeRateLimit` in `src/lib/rate-limit.ts` and writes a `CHANGE_DRIVER_PIN` audit row. Never log PIN values.
-- The driver portal is intentionally NOT subscribed to `<RealtimeRefresher />` — same offline-first reasoning as before. Any new driver page should follow that rule.
+Both code paths coexist behind `NEXT_PUBLIC_USE_DISPATCHLESS` (read via `src/lib/feature-flags.ts → USE_DISPATCHLESS`):
+- New: `src/actions/driver-stock.ts` — `assignToDriver`, `acknowledgeAssignment`, `disputeAssignment`, `submitDriverReturn`, `getDriverBag`, `getDriversWithBagAndPending`.
+- Legacy: `src/actions/inventory.ts` keeps `dispatchToDriver`/`returnDispatch`. `logBatchRefills` is **still dispatch-required** until B2b.
+- Stock lands in `DriverStock` immediately at assignment; `StockAssignment` sits `PENDING_ACK` until driver accepts or disputes (latter writes `InventoryAdjustment` reason `ASSIGNMENT_DISCREPANCY`).
+- Driver returns are item-by-item via `submitDriverReturn` → one `ReturnVerification` per line, decrements `DriverStock` immediately. `approveReturn` works on legacy and dispatchless rows.
 
-## Domain Skills
+Key Phase B UI: [src/app/admin/driver-stock/page.tsx](src/app/admin/driver-stock/page.tsx), [DriverStockManager](src/components/DriverStockManager.tsx), [AssignmentAckBanner](src/components/AssignmentAckBanner.tsx), [DriverReturnSheet](src/components/DriverReturnSheet.tsx). Sidebar swaps `/admin/dispatches` → `/admin/driver-stock` when the flag is on.
 
-`.agents/skills/` contains the long-form playbooks Gemini agents consult; they are equally useful for Claude when working in those areas:
+## UI conventions (Neo-Design System)
+
+- Glassmorphism + slate base. Use project tokens (`accent-blue`, `accent-green`, `neo-bg`) — never raw Tailwind colors like `bg-blue-500`.
+- Reuse modal/dropdown/card primitives in `src/components/`. No parallel implementations.
+- Dark mode primary via `next-themes`; provide light variants alongside.
+- Timestamps render in `Asia/Riyadh` via `formatSaudiDate`/`formatSaudiTime` from `src/lib/utils.ts` — never `toLocaleString()` directly.
+
+## Conventions
+
+- **Vertical slices**: schema changes land end-to-end in one PR (Prisma, actions, `src/types/index.ts`, all UI surfaces).
+- **Shared types**: extend `src/types/index.ts`; mostly `Prisma.<Model>GetPayload<...>` aliases.
+- **Lint posture**: `no-explicit-any`/`no-unused-vars` are off but still type things — don't lean on `any`.
+- **Image uploads**: `@vercel/blob` `put()` inside server actions. The `writeFile`/`mkdir` imports in `inventory.ts` are legacy local-dev fallbacks.
+- **Server-side pagination**: archive feeds MUST return `PaginatedResult<T>` (`src/types/index.ts`). Client refetches via `useTransition` on filter change. Pattern: `getRefillLogsPaginated` in `src/actions/history.ts`. Never ship unbounded `findMany()` to the client.
+- **Mobile numeric input**: `<input type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off">`. Avoid `type="number"` and `onFocus={e.target.select()}` (mobile re-fires focus between keystrokes).
+
+## Driver portal
+
+Mobile-first, light navigation.
+- `/driver` — refill workflow.
+- `/driver/settings` — self-service PIN change (driver role only; admins shadowing redirect away). Backed by `changeDriverPin` in `src/actions/auth.ts`, rate-limited via `pinChangeRateLimit` (`src/lib/rate-limit.ts`), writes a `CHANGE_DRIVER_PIN` audit row. Never log PIN values.
+- Driver portal is intentionally NOT subscribed to `<RealtimeRefresher />`. New driver pages must follow that rule.
+
+## Domain skills
+
+`.agents/skills/` has long-form playbooks — read the relevant `SKILL.md` before non-trivial changes:
 
 - `vms-accounting-wac` — WAC math, deficit handling, COGS.
-- `vms-audit-trail` — when to use `RefillLog` vs `InventoryAdjustment` vs `writeAuditLog`.
-- `vms-security-rbac` — guard-selection rules.
-- `vms-neo-design` — design tokens and component reuse rules.
-- `supabase-postgres-best-practices` — query/index hygiene against the production DB.
-
-Read the relevant `SKILL.md` before any non-trivial change in that domain.
+- `vms-audit-trail` — `RefillLog` vs `InventoryAdjustment` vs `writeAuditLog`.
+- `vms-security-rbac` — guard selection.
+- `vms-neo-design` — design tokens and reuse.
+- `supabase-postgres-best-practices` — query/index hygiene.
