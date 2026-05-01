@@ -3,7 +3,6 @@ import { getMachines } from "@/actions/inventory";
 import { getDriverBag, getDriversWithBagAndPending } from "@/actions/driver-stock";
 import { DriverRefillUI } from "@/components/DriverRefillUI";
 import { AssignmentAckBanner } from "@/components/AssignmentAckBanner";
-import { DriverReturnTrigger } from "@/components/DriverReturnTrigger";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 
@@ -84,7 +83,6 @@ export default async function DriverPortal() {
                     <AssignmentAckBanner pending={driverBag.pendingAssignments} />
                 )}
                 <DriverRefillUI machines={machines} activeDispatches={dispatches} userRole={role as 'admin' | 'super_admin' | 'driver'} />
-                {role === 'driver' && <DriverReturnTrigger bag={driverBag.bag} />}
             </div>
         </div>
     );

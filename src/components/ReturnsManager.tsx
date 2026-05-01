@@ -38,6 +38,7 @@ type ReturnVerificationType = {
 export function ReturnsManager({ pending, history }: { pending: ReturnVerificationType[], history: ReturnVerificationType[] }) {
     const [isPending, startTransition] = useTransition();
     const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
+    const [adminAction, setAdminAction] = useState<Record<number, 'RESTOCK' | 'LOSS'>>({});
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean;
         action: "APPROVE" | "REJECT" | null;
@@ -59,10 +60,16 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
         
         if (confirmModal.action === "APPROVE") {
             startTransition(async () => {
-                const res = await approveReturn(id, adminNotes[id]);
+                const actionType = adminAction[id] || (pending.find(p => p.id === id)?.reason === 'SURPLUS' ? 'RESTOCK' : 'LOSS');
+                const res = await approveReturn(id, actionType, adminNotes[id]);
                 if (res.success) {
                     toast.success("Return Approved", { description: "Item verified and inventory adjusted." });
                     setAdminNotes(prev => {
+                        const next = { ...prev };
+                        delete next[id];
+                        return next;
+                    });
+                    setAdminAction(prev => {
                         const next = { ...prev };
                         delete next[id];
                         return next;
@@ -143,6 +150,18 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                                 <span className="text-slate-600 dark:text-slate-400">Source</span>
                                                 <span className="font-mono text-slate-900 dark:text-white">{ret.dispatchId !== null ? `Dispatch #${ret.dispatchId.toString().padStart(4, '0')}` : 'Driver bag'}</span>
                                             </div>
+                                        </div>
+
+                                        <div className="mb-4">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2 px-1">Admin Action</label>
+                                            <select
+                                                value={adminAction[ret.id] || (ret.reason === 'SURPLUS' ? 'RESTOCK' : 'LOSS')}
+                                                onChange={(e) => setAdminAction(prev => ({ ...prev, [ret.id]: e.target.value as 'RESTOCK' | 'LOSS' }))}
+                                                className="w-full bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue/50 transition-all appearance-none cursor-pointer"
+                                            >
+                                                <option value="RESTOCK">Return to Stock (Resellable)</option>
+                                                <option value="LOSS">Write Off (Damaged/Expired)</option>
+                                            </select>
                                         </div>
 
                                         <div className="mb-6 group/note">

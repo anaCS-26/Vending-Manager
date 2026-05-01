@@ -56,7 +56,7 @@ export async function getProcessedReturns() {
  * Formally approves a driver-reported return. 
  * Creates a linked InventoryAdjustment to write off negative stock and update the financial ledger. 
  */
-export async function approveReturn(returnId: number, adminNotes?: string): Promise<ActionResult> {
+export async function approveReturn(returnId: number, actionType: 'RESTOCK' | 'LOSS', adminNotes?: string): Promise<ActionResult> {
     const session = await requireAdmin();
     try {
         await prisma.$transaction(async (tx) => {
@@ -75,15 +75,36 @@ export async function approveReturn(returnId: number, adminNotes?: string): Prom
                 data: { status: "APPROVED", verified_at: new Date(), notes: adminNotes || null }
             });
 
-            // Create an InventoryAdjustment to formally write off the item cost
-            await tx.inventoryAdjustment.create({
-                data: {
-                    itemId: ret.itemId,
-                    quantity: -ret.quantity, // Write off, so negative
-                    reason: adminNotes ? `Approved Driver Return: ${ret.reason} - ${adminNotes}` : `Approved Driver Return: ${ret.reason}`,
-                    priceAtAdjustment: ret.item.price_standard
-                }
-            });
+            if (actionType === 'RESTOCK') {
+                const defaultWarehouse = await tx.warehouse.findFirst();
+                if (!defaultWarehouse) throw new Error("No warehouse found to restock to.");
+                
+                await tx.warehouseStock.upsert({
+                    where: { warehouseId_itemId: { warehouseId: defaultWarehouse.id, itemId: ret.itemId } },
+                    update: { quantity_on_hand: { increment: ret.quantity } },
+                    create: { warehouseId: defaultWarehouse.id, itemId: ret.itemId, quantity_on_hand: ret.quantity }
+                });
+
+                // Create a positive InventoryAdjustment to formally log the restock
+                await tx.inventoryAdjustment.create({
+                    data: {
+                        itemId: ret.itemId,
+                        quantity: ret.quantity,
+                        reason: adminNotes ? `Restocked Surplus Return: ${adminNotes}` : `Restocked Surplus Return`,
+                        priceAtAdjustment: ret.item.price_standard
+                    }
+                });
+            } else {
+                // Create a negative InventoryAdjustment to formally write off the item cost
+                await tx.inventoryAdjustment.create({
+                    data: {
+                        itemId: ret.itemId,
+                        quantity: -ret.quantity, // Write off, so negative
+                        reason: adminNotes ? `Written-off Driver Return: ${ret.reason} - ${adminNotes}` : `Written-off Driver Return: ${ret.reason}`,
+                        priceAtAdjustment: ret.item.price_standard
+                    }
+                });
+            }
         });
 
         revalidatePath('/admin/returns');

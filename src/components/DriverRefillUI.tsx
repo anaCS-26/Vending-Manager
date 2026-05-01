@@ -634,8 +634,8 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                 {/* Returned Counter (Machine View Only) */}
                                                 {viewMode === "MACHINE" && (
                                                     <div className="flex flex-col flex-1 pl-1">
-                                                        <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Returned (From Machine)</span>
-                                                        <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
+                                                        <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1 text-center block">Returned (From Machine)</span>
+                                                        <div className="mx-auto flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
                                                             <button onClick={() => updateItem(row.itemId, 'returned', Math.max(0, row.returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
                                                             <input
                                                                 type="text"
@@ -663,8 +663,8 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                 {viewMode === "BAG" && (
                                                     <>
                                                         <div className="flex flex-col flex-1 pl-1 pr-2">
-                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1">Refilled (Machine)</span>
-                                                            <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
+                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1 text-center block">Refilled (Machine)</span>
+                                                            <div className="mx-auto flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
                                                                 <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
                                                                 <input
                                                                     type="text"
@@ -694,8 +694,8 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                         </div>
 
                                                         <div className="flex flex-col flex-1 pl-1">
-                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1 whitespace-nowrap">Return (Warehouse)</span>
-                                                            <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
+                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1 whitespace-nowrap text-center block">Return (Warehouse)</span>
+                                                            <div className="mx-auto flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
                                                                 <button onClick={() => updateItem(row.itemId, 'bag_returned', Math.max(0, row.bag_returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
                                                                 <input
                                                                     type="text"
