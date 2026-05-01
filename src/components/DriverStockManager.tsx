@@ -145,7 +145,7 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
                                     >
                                         <option value="" disabled>-- Select Driver --</option>
                                         {drivers.map(d => {
-                                            const issuesCount = d.StockAssignments.filter(a => a.status === "PENDING_ACK" || a.status === "DISPUTED").length;
+                                            const issuesCount = d.StockAssignments.filter(a => a.status === "DISPUTED").length;
                                             return (
                                                 <option key={d.id} value={d.id}>
                                                     {d.name} {issuesCount > 0 ? `(${issuesCount} Issue${issuesCount > 1 ? 's' : ''})` : ""}
@@ -359,7 +359,7 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
                     icon={<AlertTriangle className="w-3.5 h-3.5" />} 
                     label="Pending / Disputed" 
                     count={issuesCount}
-                    alert={issuesCount > 0}
+                    alert={disputed.length > 0}
                 />
                 <TabButton 
                     active={activeTab === "HISTORY"} 
