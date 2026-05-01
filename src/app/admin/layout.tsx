@@ -20,9 +20,8 @@ export default async function AdminLayout({
                         <h2 className="text-lg font-semibold text-slate-900 dark:text-white hidden md:block">System Overview</h2>
                     </div>
                     <div className="flex items-center gap-6">
-                        <div className="hidden md:flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                            <span className="w-2 h-2 rounded-full bg-accent-green"></span>
-                            <span>All services operational</span>
+                        <div className="hidden md:flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+                            <span>Welcome, {session?.user?.name || "Administrator"}</span>
                         </div>
                         <ThemeToggle />
                     </div>
