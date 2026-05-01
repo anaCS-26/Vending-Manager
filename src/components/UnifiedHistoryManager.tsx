@@ -183,7 +183,7 @@ export default function UnifiedHistoryManager({ initialEvents, drivers }: Unifie
                                     <tr className="border-b border-slate-200 dark:border-white/5 text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
                                         <th className="py-3 px-3 md:py-4 md:px-6 text-left">Timestamp</th>
                                         <th className="py-3 px-3 md:py-4 md:px-6 text-left">Personnel</th>
-                                        <th className="py-3 px-3 md:py-4 md:px-6 text-left">Machine Location</th>
+                                        <th className="py-3 px-3 md:py-4 md:px-6 text-left">Source</th>
                                         <th className="py-3 px-3 md:py-4 md:px-6 text-left">Product Asset</th>
                                         <th className="py-3 px-3 md:py-4 md:px-6 text-center">Inventory Action</th>
                                     </tr>
@@ -267,19 +267,22 @@ export default function UnifiedHistoryManager({ initialEvents, drivers }: Unifie
 // --- Sub-Components ---
 
 function EventRow({ log }: { log: any }) {
-    // Note: the logic below relies on log.dispatch which might be null in dispatchless
-    // ReturnVerifications also might not be attached to dispatch directly anymore.
-    // If log.dispatch is missing, we must handle it gracefully.
     const driverName = log.dispatch?.driver?.name || log.driver?.name || "System/Unknown";
     const driverInitials = driverName !== "System/Unknown" ? driverName.charAt(0) : "?";
     
-    // In dispatchless mode, return verifications are likely tracked differently 
-    // but we will keep this existing logic with optional chaining so it doesn't crash.
-    const allVerifs = (log.dispatch?.ReturnVerifications || []).filter((v: any) => v.itemId === log.itemId);
-    const approved = allVerifs.filter((v: any) => v.status === 'APPROVED');
-    const pending = allVerifs.filter((v: any) => v.status === 'PENDING');
-    const verifiedLoss = approved.reduce((s: number, v: any) => s + v.quantity, 0);
-    const pendingCount = pending.reduce((s: number, v: any) => s + v.quantity, 0);
+    let verifiedLoss = 0;
+    let pendingCount = 0;
+    
+    if (log.isSurplusReturn) {
+        verifiedLoss = log._customVerifiedCount || 0;
+        pendingCount = log._customPendingCount || 0;
+    } else {
+        const allVerifs = (log._customMachineReturnVerifs || log.dispatch?.ReturnVerifications || []).filter((v: any) => v.itemId === log.itemId);
+        const approved = allVerifs.filter((v: any) => v.status === 'APPROVED' || v.status === 'RESTOCK' || v.status === 'LOSS');
+        const pending = allVerifs.filter((v: any) => v.status === 'PENDING');
+        verifiedLoss = approved.reduce((s: number, v: any) => s + v.quantity, 0);
+        pendingCount = pending.reduce((s: number, v: any) => s + v.quantity, 0);
+    }
 
     return (
         <tr className="hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 border-l-[3px] border-l-transparent hover:border-l-brand-500 group flex-row">
@@ -297,16 +300,22 @@ function EventRow({ log }: { log: any }) {
                     <div className="flex flex-col">
                         <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white">{driverName}</span>
                         <span className="text-[9px] md:text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
-                            {log.dispatchId ? `Route #${formatID(log.dispatchId)}` : `Direct Refill`}
+                            {log.dispatchId ? `Route #${formatID(log.dispatchId)}` : `Direct Action`}
                         </span>
                     </div>
                 </div>
             </td>
             <td className="py-3 px-3 md:py-5 md:px-6">
                 <div className="flex flex-col">
-                    <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white">{log.machine.location_name}</span>
+                    <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white">
+                        {log.isSurplusReturn ? `${driverName}'s Stock` : (log.machine?.location_name || "Unknown")}
+                    </span>
                     <span className="text-[9px] md:text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-slate-400" /> M-{log.machine.id.toString().padStart(4, '0')}
+                        {log.isSurplusReturn ? (
+                            <><Package className="w-3 h-3 text-slate-400" /> Driver Bag Return</>
+                        ) : (
+                            <><MapPin className="w-3 h-3 text-slate-400" /> {log.machine ? `M-${log.machine.id.toString().padStart(4, '0')}` : "N/A"}</>
+                        )}
                     </span>
                 </div>
             </td>

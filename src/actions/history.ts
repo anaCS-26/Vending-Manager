@@ -56,28 +56,32 @@ const DEFAULT_PAGE_SIZE = 20;
  */
 export async function getRefillLogsPaginated(
     filters: RefillLogFilters = {}
-): Promise<PaginatedResult<RefillLogRow>> {
+): Promise<PaginatedResult<any>> { // Changed to any to support mixed types
     await requireAdmin();
 
     const page = Math.max(1, filters.page ?? 1);
     const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
 
     const where: Prisma.RefillLogWhereInput = {};
+    const returnWhere: Prisma.ReturnVerificationWhereInput = {};
 
     if (filters.driverId) {
         where.dispatch = { driverId: filters.driverId };
+        returnWhere.driverId = filters.driverId;
     }
 
     if (filters.dateFrom || filters.dateTo) {
         where.refilled_at = {};
+        returnWhere.reported_at = {};
         if (filters.dateFrom) {
             where.refilled_at.gte = new Date(filters.dateFrom);
+            returnWhere.reported_at.gte = new Date(filters.dateFrom);
         }
         if (filters.dateTo) {
-            // Inclusive end-of-day so "to: 2026-04-29" includes events from that calendar day.
             const to = new Date(filters.dateTo);
             to.setHours(23, 59, 59, 999);
             where.refilled_at.lte = to;
+            returnWhere.reported_at.lte = to;
         }
     }
 
@@ -88,9 +92,15 @@ export async function getRefillLogsPaginated(
             { item: { name: { contains: q, mode: 'insensitive' } } },
             { dispatch: { driver: { name: { contains: q, mode: 'insensitive' } } } },
         ];
+        returnWhere.OR = [
+            { item: { name: { contains: q, mode: 'insensitive' } } },
+            { driver: { name: { contains: q, mode: 'insensitive' } } },
+        ];
     }
 
-    const [rows, total] = await Promise.all([
+    const takeCount = page * pageSize;
+
+    const [refillRows, refillTotal, allReturns, surplusTotal] = await Promise.all([
         prisma.refillLog.findMany({
             where,
             orderBy: { refilled_at: 'desc' },
@@ -106,14 +116,71 @@ export async function getRefillLogsPaginated(
                     }
                 }
             },
-            skip: (page - 1) * pageSize,
-            take: pageSize,
+            take: takeCount,
         }),
-        prisma.refillLog.count({ where })
+        prisma.refillLog.count({ where }),
+        prisma.returnVerification.findMany({
+            where: returnWhere,
+            orderBy: { reported_at: 'desc' },
+            include: {
+                item: true,
+                driver: true,
+                dispatch: {
+                    include: {
+                        driver: true,
+                        warehouse: true
+                    }
+                }
+            },
+            take: takeCount * 2, // Fetch extra to ensure we find matches for refills
+        }),
+        prisma.returnVerification.count({ where: { ...returnWhere, reason: 'SURPLUS' } })
     ]);
 
+    const surplusReturns = allReturns.filter(r => r.reason === 'SURPLUS');
+    const machineReturns = allReturns.filter(r => r.reason !== 'SURPLUS');
+
+    // Inject machine returns into refill logs
+    refillRows.forEach((log: any) => {
+        const matchingReturns = machineReturns.filter(r => 
+            r.driverId === log.driverId && 
+            r.itemId === log.itemId && 
+            Math.abs(r.reported_at.getTime() - log.refilled_at.getTime()) < 60000 // 1 min window
+        );
+        log._customMachineReturnVerifs = matchingReturns;
+    });
+
+    const mappedReturns = surplusReturns.slice(0, takeCount).map(r => ({
+        id: `return_${r.id}`, // String ID distinguishes it
+        dispatchId: r.dispatchId,
+        driverId: r.driverId,
+        machineId: 0,
+        itemId: r.itemId,
+        quantity_refilled: 0,
+        items_sold_since_last_refill: 0,
+        sales_revenue: 0,
+        price_at_refill: 0,
+        cost_at_refill: 0,
+        damaged_quantity: 0,
+        expired_quantity: r.quantity, // Used by EditLogModal for Return visual
+        refilled_at: r.reported_at,
+        machine: null,
+        item: r.item,
+        driver: r.driver,
+        dispatch: r.dispatch,
+        isSurplusReturn: true,
+        _customVerifiedCount: r.status === 'VERIFIED' || r.status === 'RESTOCK' || r.status === 'LOSS' || r.status === 'APPROVED' ? r.quantity : 0,
+        _customPendingCount: r.status === 'PENDING' ? r.quantity : 0,
+    }));
+
+    const allEvents = [...refillRows, ...mappedReturns];
+    allEvents.sort((a, b) => b.refilled_at.getTime() - a.refilled_at.getTime());
+
+    const total = refillTotal + surplusTotal;
+    const paginatedData = allEvents.slice((page - 1) * pageSize, page * pageSize);
+
     return {
-        data: rows,
+        data: paginatedData,
         total,
         page,
         pageSize,
