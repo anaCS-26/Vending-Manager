@@ -298,6 +298,7 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
 
 function DriverDashboard({ driver }: { driver: DriverWithBag }) {
     const [activeTab, setActiveTab] = useState<"STOCK" | "REFILLS" | "PENDING">("STOCK");
+    const [stockSearchQuery, setStockSearchQuery] = useState("");
     
     const pending = driver.StockAssignments.filter((a) => a.status === "PENDING_ACK");
     const disputed = driver.StockAssignments.filter((a) => a.status === "DISPUTED");
@@ -330,7 +331,7 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex flex-wrap items-center gap-1 px-3 md:px-4 pt-3 border-b border-slate-200 dark:border-white/5 shrink-0">
+            <div className="flex flex-wrap items-center justify-center gap-1 px-3 md:px-4 pt-3 border-b border-slate-200 dark:border-white/5 shrink-0">
                 <TabButton 
                     active={activeTab === "STOCK"} 
                     onClick={() => setActiveTab("STOCK")} 
@@ -358,13 +359,38 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
             {/* Content Area */}
             <div className="flex-1 p-5 md:p-6 bg-slate-50/50 dark:bg-black/20 overflow-y-auto custom-scrollbar">
                 <AnimatePresence mode="wait">
-                    {activeTab === "STOCK" && (
-                        <motion.div key="stock" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                    {activeTab === "STOCK" && (() => {
+                        const q = stockSearchQuery.toLowerCase();
+                        const filteredStock = driver.DriverStock.filter(row => 
+                            q === "" || row.item.name.toLowerCase().includes(q) || row.item.sku.toLowerCase().includes(q)
+                        );
+                        
+                        return (
+                        <motion.div key="stock" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
+                            {driver.DriverStock.length > 0 && (
+                                <div className="relative group shrink-0">
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent-blue transition-colors">
+                                        <Search className="w-3.5 h-3.5" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        placeholder="Search driver stock..."
+                                        value={stockSearchQuery}
+                                        onChange={(e) => setStockSearchQuery(e.target.value)}
+                                        className="w-full bg-white dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-lg py-2 pl-9 pr-3 text-xs text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-accent-blue shadow-sm transition-all"
+                                    />
+                                </div>
+                            )}
+
                             {driver.DriverStock.length === 0 ? (
                                 <EmptyState icon={<Package className="w-8 h-8" />} title="Bag is Empty" message="Assign items from the warehouse to begin operations." />
+                            ) : filteredStock.length === 0 ? (
+                                <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-white/5 rounded-lg border border-dashed border-slate-200 dark:border-white/10">
+                                    No items matching "{stockSearchQuery}".
+                                </div>
                             ) : (
                                 <div className="grid grid-cols-2 sm:grid-cols-3 2xl:grid-cols-4 gap-3">
-                                    {driver.DriverStock.map((row) => (
+                                    {filteredStock.map((row) => (
                                         <div key={row.id} className="p-3 rounded-xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/10 flex flex-col justify-between hover:border-accent-blue/30 transition-colors shadow-sm">
                                             <div>
                                                 <div className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight">{row.item.name}</div>
@@ -379,7 +405,8 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
                                 </div>
                             )}
                         </motion.div>
-                    )}
+                        );
+                    })()}
 
                     {activeTab === "REFILLS" && (
                         <motion.div key="refills" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
