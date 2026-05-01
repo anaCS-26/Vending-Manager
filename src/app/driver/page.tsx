@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
-import { getMachines, getActiveDispatches } from "@/actions/inventory";
-import { getDriverBag } from "@/actions/driver-stock";
+import { getMachines } from "@/actions/inventory";
+import { getDriverBag, getDriversWithBagAndPending } from "@/actions/driver-stock";
 import { DriverRefillUI } from "@/components/DriverRefillUI";
 import { AssignmentAckBanner } from "@/components/AssignmentAckBanner";
 import { DriverReturnTrigger } from "@/components/DriverReturnTrigger";
@@ -47,38 +47,34 @@ export default async function DriverPortal() {
     // @ts-expect-error - session.user.phone is populated via session callback
     const phone = session.user.phone;
 
-    const [machines, allDispatches, driverBag] = await Promise.all([
+    const [machines, driverBag, allDrivers] = await Promise.all([
         getMachines(),
-        getActiveDispatches(),
-        // Pending assignments live regardless of feature flag — if any exist
-        // (e.g. seeded for QA, or after the cutover), surface them. Admin
-        // sessions get an empty result here since the action is driver-only.
         role === 'driver' ? getDriverBag() : Promise.resolve({ driverId: null, bag: [], pendingAssignments: [] }),
+        (role === 'admin' || role === 'super_admin') ? getDriversWithBagAndPending() : Promise.resolve([])
     ]);
 
-    let dispatches = allDispatches;
-    if (role === 'driver') {
-        dispatches = allDispatches.filter(d => d.driver.phone === phone);
-    }
+    let dispatches: any[] = [];
 
-    // Dispatchless synthesis: with the flag on, when a driver has no active
-    // dispatch but does have items in their bag, hand DriverRefillUI a synthetic
-    // route so they can refill machines from DriverStock directly.
-    if (
-        role === 'driver' &&
-        dispatches.length === 0 &&
-        driverBag.bag.length > 0 &&
-        driverBag.driverId !== null
-    ) {
-        const driverName = (session.user.name as string) || 'Driver';
-        dispatches = [
-            synthesizeDispatchlessRoute({
-                driverId: driverBag.driverId,
-                driverName,
-                driverPhone: phone || null,
-                bag: driverBag.bag,
-            }),
-        ];
+    if (role === 'driver') {
+        if (driverBag.driverId !== null) {
+            const driverName = (session.user.name as string) || 'Driver';
+            dispatches = [
+                synthesizeDispatchlessRoute({
+                    driverId: driverBag.driverId,
+                    driverName,
+                    driverPhone: phone || null,
+                    bag: driverBag.bag,
+                }),
+            ];
+        }
+    } else {
+        // Admins see a synthetic route for EVERY driver
+        dispatches = allDrivers.map(d => synthesizeDispatchlessRoute({
+            driverId: d.id,
+            driverName: d.name,
+            driverPhone: d.phone,
+            bag: d.DriverStock,
+        }));
     }
 
     return (
