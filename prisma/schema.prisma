@@ -84,6 +84,7 @@ model Machine {
   tier           String         @default("STANDARD") // Pricing tier: STANDARD, HOSPITAL, HOTEL
   Stock          MachineStock[]
   RefillLogs     RefillLog[]
+  ReturnVerifications ReturnVerification[]
   isActive       Boolean        @default(true)
 }
 
