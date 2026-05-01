@@ -11,7 +11,8 @@ import {
     Package,
     ChevronDown,
     Plus,
-    Minus
+    Minus,
+    Check
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -194,7 +195,7 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
                                     />
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2 min-h-[300px]">
+                                <div className="h-[400px] overflow-y-auto pr-2 custom-scrollbar space-y-2">
                                     {filteredInventory.length === 0 ? (
                                         <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400 bg-white dark:bg-white/5 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
                                             {searchQuery ? "No matching items." : "No available stock in this warehouse."}
