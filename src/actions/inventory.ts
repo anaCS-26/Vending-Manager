@@ -420,13 +420,13 @@ export async function logRefill(
             // 4. Record damaged/returned items for Admin verification
             if (damaged > 0) {
                 await tx.returnVerification.create({
-                    data: { dispatchId, itemId, quantity: damaged, reason: "DAMAGED", status: "PENDING" }
+                    data: { dispatchId, machineId, itemId, quantity: damaged, reason: "DAMAGED", status: "PENDING" }
                 });
             }
 
             if (returned > 0) {
                 await tx.returnVerification.create({
-                    data: { dispatchId, itemId, quantity: returned, reason: "RETURNED", status: "PENDING" }
+                    data: { dispatchId, machineId, itemId, quantity: returned, reason: "RETURNED", status: "PENDING" }
                 });
             }
         })
@@ -559,7 +559,7 @@ export async function logBatchRefills(
 
                 if (item.returned > 0) {
                     await tx.returnVerification.create({
-                        data: { dispatchId, itemId: item.itemId, quantity: item.returned, reason: "RETURNED", status: "PENDING" }
+                        data: { dispatchId, machineId, itemId: item.itemId, quantity: item.returned, reason: "RETURNED", status: "PENDING" }
                     });
                 }
             }
@@ -662,10 +662,14 @@ async function logBatchRefillsDispatchless(
 
                 // Decrement bag immediately for both refilled AND items returned to warehouse
                 if (item.refilled + bagReturned > 0) {
-                    await tx.driverStock.update({
-                        where: { driverId_itemId: { driverId, itemId: item.itemId } },
+                    const updatedStock = await tx.driverStock.updateMany({
+                        where: { driverId, itemId: item.itemId, quantity_on_hand: { gte: item.refilled + bagReturned } },
                         data: { quantity_on_hand: { decrement: item.refilled + bagReturned } },
                     });
+                    
+                    if (updatedStock.count === 0) {
+                        throw new Error(`Insufficient driver stock for item ${item.itemId} during refill or concurrent update detected.`);
+                    }
                 }
 
                 await tx.machineStock.upsert({
@@ -690,6 +694,7 @@ async function logBatchRefillsDispatchless(
                         data: {
                             dispatchId: null,
                             driverId,
+                            machineId,
                             itemId: item.itemId,
                             quantity: item.returned,
                             reason: "RETURNED",

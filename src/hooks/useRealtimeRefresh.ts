@@ -47,8 +47,14 @@ export function useRealtimeRefresh() {
             )
             .subscribe();
 
+        const handleOnline = () => {
+            router.refresh();
+        };
+        window.addEventListener("online", handleOnline);
+
         return () => {
             supabase.removeChannel(channel);
+            window.removeEventListener("online", handleOnline);
         };
     }, [router]);
 }

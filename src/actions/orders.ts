@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth-utils";
 import { writeAuditLog } from "@/lib/audit-utils";
+import { notifyClients } from "@/lib/notify";
 
 /**
  * ============================================================================
@@ -50,6 +51,7 @@ export async function createPurchaseOrder(data: {
         revalidatePath("/admin/suppliers");
         
         await writeAuditLog(session, 'CREATE_PURCHASE_ORDER', 'PurchaseOrder', order.id, null, data);
+        notifyClients('purchase-order');
 
         return { success: true, orderId: order.id };
     } catch (error: any) {
@@ -170,6 +172,7 @@ export async function completePurchaseOrder(
         revalidatePath("/admin/history");
         
         await writeAuditLog(session, 'COMPLETE_PURCHASE_ORDER', 'PurchaseOrder', orderId, null, { receivedData });
+        notifyClients('purchase-order');
         
         return { success: true };
     } catch (error: any) {
@@ -189,6 +192,7 @@ export async function cancelPurchaseOrder(orderId: number) {
         revalidatePath("/admin/suppliers");
         
         await writeAuditLog(session, 'CANCEL_PURCHASE_ORDER', 'PurchaseOrder', orderId, null, null);
+        notifyClients('purchase-order');
         
         return { success: true };
     } catch (error: any) {
@@ -221,6 +225,7 @@ export async function createQuickItem(data: { name: string; sku: string; categor
         });
         
         await writeAuditLog(session, 'CREATE_QUICK_ITEM', 'Item', item.id, null, data);
+        notifyClients('item');
         
         return { success: true, item: { ...item, WarehouseStock: [], _count: { DispatchItems: 0 } } };
     } catch (error: any) {

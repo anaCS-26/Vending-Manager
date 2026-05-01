@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Package, Check, AlertTriangle, X, Loader2, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { acknowledgeAssignment, disputeAssignment } from "@/actions/driver-stock";
+import { acknowledgeAssignment, denyAssignment } from "@/actions/driver-stock";
 import { formatSaudiTime } from "@/lib/utils";
 
 type PendingAssignment = {
@@ -20,18 +20,9 @@ type Props = {
     pending: PendingAssignment[];
 };
 
-/**
- * Renders as a full-screen notification modal when the driver has new stock assignments.
- * Automatically loads when they visit the page. They can simply click "Got it" to 
- * dismiss the notification (which acknowledges the stock), or report missing items if 
- * the physical count doesn't match the notification.
- */
 export function AssignmentAckBanner({ pending }: Props) {
     const [items, setItems] = useState(pending);
     const [disputeMode, setDisputeMode] = useState(false);
-    const [actuals, setActuals] = useState<Record<number, number>>(() =>
-        Object.fromEntries(pending.map((p) => [p.id, p.quantity]))
-    );
     const [isPending, startTransition] = useTransition();
 
     if (items.length === 0) return null;
@@ -60,30 +51,18 @@ export function AssignmentAckBanner({ pending }: Props) {
     const submitDisputes = () => {
         startTransition(async () => {
             const remaining: PendingAssignment[] = [];
-            let accepted = 0;
-            let disputed = 0;
+            let denied = 0;
             let failed = 0;
 
             for (const a of items) {
-                const actual = actuals[a.id] ?? a.quantity;
-                if (actual === a.quantity) {
-                    const r = await acknowledgeAssignment(a.id);
-                    if (r.success) accepted++;
-                    else { failed++; remaining.push(a); }
-                } else if (actual >= 0 && actual < a.quantity) {
-                    const r = await disputeAssignment(a.id, actual);
-                    if (r.success) disputed++;
-                    else { failed++; remaining.push(a); }
-                } else {
-                    // actual > quantity — invalid, skip
-                    failed++;
-                    remaining.push(a);
-                }
+                const r = await denyAssignment(a.id);
+                if (r.success) denied++;
+                else { failed++; remaining.push(a); }
             }
 
             if (failed === 0) {
-                toast.success("Discrepancy Reported", {
-                    description: `Admin has been notified. ${accepted} items added normally, ${disputed} items reported missing.`,
+                toast.success("Assignment Denied", {
+                    description: `Admin has been notified. ${denied} assignments were rejected and returned.`,
                 });
                 setItems([]);
                 setDisputeMode(false);
@@ -109,11 +88,11 @@ export function AssignmentAckBanner({ pending }: Props) {
                                 {disputeMode ? <AlertTriangle className="w-6 h-6" /> : <Package className="w-6 h-6" />}
                             </div>
                             <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                                {disputeMode ? "Report Missing Items" : "Stock Added to Bag"}
+                                {disputeMode ? "Deny Entire Assignment" : "Stock Added to Bag"}
                             </h2>
                             <p className="text-sm text-slate-500 mt-1">
                                 {disputeMode 
-                                    ? "Enter the actual amount you physically received. Admin will be notified." 
+                                    ? "Are you sure you want to completely reject this assignment? It will be sent back to the warehouse." 
                                     : "Admin has pushed new inventory into your digital bag."}
                             </p>
                         </div>
@@ -136,8 +115,8 @@ export function AssignmentAckBanner({ pending }: Props) {
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
                                 className={`bg-white dark:bg-white/[0.02] border rounded-2xl p-4 flex items-center gap-3 transition-colors shadow-sm ${
-                                    disputeMode && (actuals[a.id] ?? a.quantity) < a.quantity 
-                                        ? "border-amber-400/50 dark:border-amber-500/50 bg-amber-50 dark:bg-amber-500/5" 
+                                    disputeMode 
+                                        ? "border-amber-400/50 dark:border-amber-500/50 bg-amber-50 dark:bg-amber-500/5 opacity-50" 
                                         : "border-slate-200 dark:border-white/10"
                                 }`}
                             >
@@ -152,28 +131,8 @@ export function AssignmentAckBanner({ pending }: Props) {
                                 </div>
                                 <div className="text-right shrink-0">
                                     {disputeMode ? (
-                                        <div className="flex flex-col items-end gap-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Got</span>
-                                                <input
-                                                    type="text"
-                                                    inputMode="numeric"
-                                                    pattern="[0-9]*"
-                                                    autoComplete="off"
-                                                    value={String(actuals[a.id] ?? a.quantity)}
-                                                    onChange={(e) => {
-                                                        const raw = e.target.value.replace(/[^0-9]/g, "");
-                                                        const n = raw === "" ? 0 : parseInt(raw, 10);
-                                                        setActuals((prev) => ({ ...prev, [a.id]: Math.min(a.quantity, Math.max(0, n)) }));
-                                                    }}
-                                                    className={`w-16 text-center font-black text-lg bg-slate-100 dark:bg-black/40 border-2 rounded-xl py-1 focus:outline-none transition-colors ${
-                                                        (actuals[a.id] ?? a.quantity) < a.quantity
-                                                            ? "border-amber-400 text-amber-600 dark:text-amber-400"
-                                                            : "border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:border-accent-blue"
-                                                    }`}
-                                                />
-                                            </div>
-                                            <div className="text-[10px] text-slate-500 font-medium pr-1">out of {a.quantity} assigned</div>
+                                        <div className="text-amber-600 dark:text-amber-400 font-bold uppercase tracking-widest text-[10px]">
+                                            Rejecting
                                         </div>
                                     ) : (
                                         <div>
@@ -225,7 +184,7 @@ export function AssignmentAckBanner({ pending }: Props) {
                                 className="w-full sm:w-auto flex-[2] inline-flex items-center justify-center gap-1.5 bg-amber-500 text-white font-bold py-3.5 px-4 rounded-2xl shadow-lg shadow-amber-500/20 hover:bg-amber-600 transition-colors disabled:opacity-50"
                             >
                                 {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
-                                Submit Dispute
+                                Deny Assignment
                             </button>
                         </div>
                     )}

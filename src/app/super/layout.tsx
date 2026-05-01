@@ -1,6 +1,5 @@
 import { SuperSidebar } from "@/components/SuperSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { RealtimeRefresher } from "@/components/RealtimeRefresher";
 
 export default function SuperLayout({
     children,
@@ -9,7 +8,6 @@ export default function SuperLayout({
 }) {
     return (
         <div className="flex min-h-screen bg-slate-950 text-white transition-colors duration-300">
-            <RealtimeRefresher />
             <SuperSidebar />
             <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
                 <header className="h-16 bg-slate-900/50 backdrop-blur-md border-b border-slate-800 flex items-center justify-between px-8 sticky top-0 z-20 transition-colors">

@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/auth-utils'
 import { writeAuditLog } from '@/lib/audit-utils'
+import { notifyClients } from '@/lib/notify'
 
 /**
  * ============================================================================
@@ -43,6 +44,7 @@ export async function createWarehouse(data: { name: string; location?: string; a
         
         revalidatePath('/admin/warehouse/locations');
         revalidatePath('/admin/manage');
+        notifyClients('warehouse');
         return { success: true, data: wh };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -74,6 +76,7 @@ export async function updateWarehouse(id: number, data: { name: string; location
         
         revalidatePath('/admin/warehouse/locations');
         revalidatePath('/admin/manage');
+        notifyClients('warehouse');
         return { success: true, data: wh };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -96,6 +99,7 @@ export async function deleteWarehouse(id: number) {
         
         revalidatePath('/admin/warehouse/locations');
         revalidatePath('/admin/manage');
+        notifyClients('warehouse');
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };

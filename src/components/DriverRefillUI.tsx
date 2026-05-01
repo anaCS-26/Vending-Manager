@@ -193,9 +193,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
             const targetMachine = machines.find(m => m.id === targetMachineId);
             const machineStocks = (targetMachine as any)?.Stock || [];
 
-            const newState: Record<number, ItemFormState> = {};
-
-            // Helper to compile ALL available items for the driver (both newly assigned and kept from yesterday)
+            // Helper to compile ALL available items for the driver
             const driverItemIds = new Set<number>();
             currentDispatch.DispatchItems.forEach(di => driverItemIds.add(di.itemId));
             ((currentDispatch.driver as any)?.DriverStock || []).forEach((ds: any) => driverItemIds.add(ds.itemId));
@@ -206,41 +204,45 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                        ((currentDispatch.driver as any)?.DriverStock || []).find((ds: any) => ds.itemId === itemId)?.item;
             }
 
-            // 1. Pre-fill any items the machine explicitly holds (so driver sees SYS and capacity)
-            machineStocks.forEach((ms: any) => {
-                const isAvailableToDriver = driverItemIds.has(ms.itemId);
-                const bagRemaining = isAvailableToDriver ? getRemainingStock(ms.itemId) : 0;
-                const sysDelta = getOfflineSysDelta(ms.itemId);
+            setMachineItems(prevState => {
+                const newState: Record<number, ItemFormState> = {};
 
-                newState[ms.itemId] = {
-                    itemId: ms.itemId,
-                    item: ms.item,
-                    refilled: 0,
-                    returned: 0,
-                    bag_returned: 0,
-                    bagQuantity: bagRemaining,
-                    inBag: isAvailableToDriver,
-                    estimated_stock: Math.max(0, ms.estimated_stock + sysDelta)
-                };
-            });
+                // 1. Pre-fill any items the machine explicitly holds
+                machineStocks.forEach((ms: any) => {
+                    const isAvailableToDriver = driverItemIds.has(ms.itemId);
+                    const bagRemaining = isAvailableToDriver ? getRemainingStock(ms.itemId) : 0;
+                    const sysDelta = getOfflineSysDelta(ms.itemId);
 
-            // 2. Add anything else in the driver's bag that the machine doesn't structurally own yet
-            driverItemIds.forEach(itemId => {
-                if (!newState[itemId]) {
-                    newState[itemId] = {
-                        itemId: itemId,
-                        item: getItemMeta(itemId),
-                        refilled: 0,
-                        returned: 0,
-                        bag_returned: 0,
-                        bagQuantity: getRemainingStock(itemId),
-                        inBag: true,
-                        estimated_stock: Math.max(0, getOfflineSysDelta(itemId))
+                    newState[ms.itemId] = {
+                        itemId: ms.itemId,
+                        item: ms.item,
+                        refilled: prevState[ms.itemId]?.refilled || 0,
+                        returned: prevState[ms.itemId]?.returned || 0,
+                        bag_returned: prevState[ms.itemId]?.bag_returned || 0,
+                        bagQuantity: bagRemaining,
+                        inBag: isAvailableToDriver,
+                        estimated_stock: Math.max(0, ms.estimated_stock + sysDelta)
                     };
-                }
-            });
+                });
 
-            setMachineItems(newState);
+                // 2. Add anything else in the driver's bag
+                driverItemIds.forEach(itemId => {
+                    if (!newState[itemId]) {
+                        newState[itemId] = {
+                            itemId: itemId,
+                            item: getItemMeta(itemId),
+                            refilled: prevState[itemId]?.refilled || 0,
+                            returned: prevState[itemId]?.returned || 0,
+                            bag_returned: prevState[itemId]?.bag_returned || 0,
+                            bagQuantity: getRemainingStock(itemId),
+                            inBag: true,
+                            estimated_stock: Math.max(0, getOfflineSysDelta(itemId))
+                        };
+                    }
+                });
+
+                return newState;
+            });
             setIsLoadingMachineStock(false);
         } else {
             setMachineItems({});

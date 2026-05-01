@@ -5,7 +5,7 @@ import { Toaster } from "sonner";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
-
+import { RealtimeRefresher } from "@/components/RealtimeRefresher";
 const outfit = Outfit({
   variable: "--font-outfit",
   subsets: ["latin"],
@@ -31,6 +31,7 @@ export default function RootLayout({
     <html lang="en" className={`${outfit.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className="antialiased font-sans transition-colors duration-300" suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <RealtimeRefresher />
           {children}
           <SpeedInsights />
           <Analytics />

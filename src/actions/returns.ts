@@ -124,12 +124,37 @@ export async function approveReturn(returnId: number, actionType: 'RESTOCK' | 'L
 export async function rejectReturn(returnId: number): Promise<ActionResult> {
     const session = await requireAdmin();
     try {
-        await prisma.returnVerification.update({
-            where: { id: returnId },
-            data: { status: "REJECTED", verified_at: new Date() }
+        await prisma.$transaction(async (tx) => {
+            const ret = await tx.returnVerification.findUnique({
+                where: { id: returnId },
+                include: { dispatch: true }
+            });
+
+            if (!ret || ret.status !== "PENDING") {
+                throw new Error("Return is not pending or not found.");
+            }
+
+            await tx.returnVerification.update({
+                where: { id: returnId },
+                data: { status: "REJECTED", verified_at: new Date() }
+            });
+
+            // If the admin rejects a driver's return, the inventory was not accepted
+            // back into the warehouse. Therefore, the driver is still in possession of it
+            // (or is liable for it). We must put it back into their DriverStock.
+            const targetDriverId = ret.driverId || ret.dispatch?.driverId;
+            
+            if (targetDriverId) {
+                await tx.driverStock.upsert({
+                    where: { driverId_itemId: { driverId: targetDriverId, itemId: ret.itemId } },
+                    update: { quantity_on_hand: { increment: ret.quantity } },
+                    create: { driverId: targetDriverId, itemId: ret.itemId, quantity_on_hand: ret.quantity }
+                });
+            }
         });
 
         revalidatePath('/admin/returns');
+        revalidatePath('/admin/driver-stock');
         notifyClients('returns');
         
         await writeAuditLog(session, 'REJECT_RETURN', 'ReturnVerification', returnId, null, null);

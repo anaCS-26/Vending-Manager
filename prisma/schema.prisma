@@ -201,6 +201,7 @@ model ReturnVerification {
   id          Int       @id @default(autoincrement())
   dispatchId  Int?
   driverId    Int?
+  machineId   Int?
   itemId      Int
   quantity    Int
   reason      String // DAMAGED, EXPIRED, SURPLUS
@@ -210,11 +211,13 @@ model ReturnVerification {
   notes       String?
   dispatch    Dispatch? @relation(fields: [dispatchId], references: [id])
   driver      Driver?   @relation(fields: [driverId], references: [id])
+  machine     Machine?  @relation(fields: [machineId], references: [id])
   item        Item      @relation(fields: [itemId], references: [id])
 
   @@index([itemId])
   @@index([dispatchId])
   @@index([driverId])
+  @@index([machineId])
   @@index([status])
 }
 

@@ -144,9 +144,14 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
                                         className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white appearance-none focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all cursor-pointer shadow-sm"
                                     >
                                         <option value="" disabled>-- Select Driver --</option>
-                                        {drivers.map(d => (
-                                            <option key={d.id} value={d.id}>{d.name}</option>
-                                        ))}
+                                        {drivers.map(d => {
+                                            const issuesCount = d.StockAssignments.filter(a => a.status === "PENDING_ACK" || a.status === "DISPUTED").length;
+                                            return (
+                                                <option key={d.id} value={d.id}>
+                                                    {d.name} {issuesCount > 0 ? `(${issuesCount} Issue${issuesCount > 1 ? 's' : ''})` : ""}
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                     <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                                         <ChevronDown className="w-4 h-4" />
@@ -522,31 +527,53 @@ function EmptyState({ icon, title, message }: { icon: React.ReactNode; title: st
     );
 }
 
+import { X } from "lucide-react";
+import { dismissAssignment } from "@/actions/driver-stock";
+
 function AssignmentCard({ assignment, isDisputed }: { assignment: StockAssignmentLite; isDisputed: boolean }) {
+    const [isPending, startTransition] = useTransition();
+
+    const handleDismiss = () => {
+        startTransition(async () => {
+            const result = await dismissAssignment(assignment.id);
+            if (result.success) {
+                toast.success("Assignment dismissed", { description: "The disputed assignment has been cleared." });
+            } else {
+                toast.error("Failed to dismiss", { description: result.error });
+            }
+        });
+    };
+
     return (
-        <div className={`p-3.5 rounded-xl border ${isDisputed ? 'bg-accent-pink/5 border-accent-pink/20' : assignment.status === 'ACKNOWLEDGED' ? 'bg-accent-green/5 border-accent-green/20' : 'bg-white dark:bg-neo-bg border-slate-200 dark:border-white/10 shadow-sm'}`}>
-            <div className="flex items-start justify-between">
-                <div>
+        <div className={`p-3.5 rounded-xl border ${isDisputed ? 'bg-accent-pink/5 border-accent-pink/20' : assignment.status === 'ACKNOWLEDGED' ? 'bg-accent-green/5 border-accent-green/20' : 'bg-white dark:bg-neo-bg border-slate-200 dark:border-white/10 shadow-sm'} relative group`}>
+            <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
                     <h5 className="font-bold text-xs text-slate-900 dark:text-white mb-1 line-clamp-1">{assignment.item.name}</h5>
                     <div className="text-[9px] font-mono text-slate-500">
                         {assignment.status === 'ACKNOWLEDGED' ? 'Ack\'d: ' : 'Assigned: '}
                         {formatSaudiDate(assignment.status === 'ACKNOWLEDGED' && assignment.acknowledged_at ? assignment.acknowledged_at : assignment.assigned_at)} {formatSaudiTime(assignment.status === 'ACKNOWLEDGED' && assignment.acknowledged_at ? assignment.acknowledged_at : assignment.assigned_at, { hour: "2-digit", minute: "2-digit" })}
                     </div>
-                    {isDisputed && assignment.acknowledged_qty !== null && (
-                        <div className="mt-2 text-[10px] text-accent-pink font-medium flex items-center gap-1 bg-accent-pink/10 px-1.5 py-1 rounded inline-flex">
-                            <AlertTriangle className="w-3 h-3" />
-                            Claims: {assignment.acknowledged_qty}
-                        </div>
-                    )}
                     {assignment.notes && (
                         <div className="mt-2 text-[10px] italic text-slate-600 dark:text-slate-400 border-l-2 border-slate-300 dark:border-slate-600 pl-2 py-0.5">
                             "{assignment.notes}"
                         </div>
                     )}
                 </div>
-                <div className="text-right shrink-0">
-                    <div className="text-lg font-black text-slate-900 dark:text-white leading-none">{assignment.quantity}</div>
-                    <div className="text-[8px] uppercase font-bold tracking-widest text-slate-400 mt-1">Pushed</div>
+                <div className="text-right shrink-0 flex flex-col items-end gap-2">
+                    {isDisputed && (
+                        <button 
+                            onClick={handleDismiss}
+                            disabled={isPending}
+                            className="p-1 rounded-md bg-accent-pink/10 text-accent-pink hover:bg-accent-pink hover:text-white transition-colors disabled:opacity-50 opacity-0 group-hover:opacity-100 focus:opacity-100 flex items-center justify-center -mr-1 -mt-1"
+                            title="Dismiss Dispute"
+                        >
+                            {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                        </button>
+                    )}
+                    <div>
+                        <div className="text-lg font-black text-slate-900 dark:text-white leading-none">{assignment.quantity}</div>
+                        <div className="text-[8px] uppercase font-bold tracking-widest text-slate-400 mt-1">Pushed</div>
+                    </div>
                 </div>
             </div>
         </div>

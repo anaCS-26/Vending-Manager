@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import type { ActionResult } from "@/types"
 import bcrypt from "bcryptjs"
 import { auth } from "@/auth"
+import { notifyClients } from "@/lib/notify"
 
 /**
  * ============================================================================
@@ -46,6 +47,7 @@ export async function createAdmin(email: string, password?: string, name?: strin
             }
         })
         revalidatePath('/super')
+        notifyClients('admin')
         return { success: true, data: undefined }
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to create admin" }
@@ -67,6 +69,7 @@ export async function updateAdmin(id: number, email: string, password?: string, 
             data: updateData
         })
         revalidatePath('/super')
+        notifyClients('admin')
         return { success: true, data: undefined }
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to update admin" }
@@ -83,6 +86,7 @@ export async function deleteAdmin(id: number): Promise<ActionResult> {
 
         await prisma.admin.delete({ where: { id } })
         revalidatePath('/super')
+        notifyClients('admin')
         return { success: true, data: undefined }
     } catch (error) {
         return { success: false, error: "Cannot delete admin account" }

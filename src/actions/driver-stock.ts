@@ -179,88 +179,112 @@ export async function acknowledgeAssignment(assignmentId: number): Promise<Actio
 }
 
 /**
- * Driver reports they received fewer items than the admin pushed. Corrects
- * the optimistic DriverStock credit by `delta = quantity - actualQty` and
- * writes an InventoryAdjustment with reason ASSIGNMENT_DISCREPANCY so the
- * shrinkage is visible in admin financials.
+ * Driver completely denies an assignment claim. Reverts the optimistic DriverStock 
+ * credit and returns the items back to the originating Warehouse.
  */
-export async function disputeAssignment(
+export async function denyAssignment(
     assignmentId: number,
-    actualQty: number,
     notes?: string | null
 ): Promise<ActionResult> {
     const session = await auth()
     if (!session?.user) return { success: false, error: "Sign-in required." }
     const role = (session.user as any).role
-    if (role !== "driver") return { success: false, error: "Only drivers can dispute assignments." }
+    if (role !== "driver") return { success: false, error: "Only drivers can deny assignments." }
     const driverId = parseInt((session.user as any).id, 10)
     if (!Number.isFinite(driverId)) return { success: false, error: "Invalid session." }
 
     try {
-        assertWholeNonNegative(actualQty, "Actual quantity received")
-
         const assignment = await prisma.stockAssignment.findUnique({ where: { id: assignmentId } })
         if (!assignment) return { success: false, error: "Assignment not found." }
         if (assignment.driverId !== driverId) return { success: false, error: "Not your assignment." }
         if (assignment.status !== "PENDING_ACK") {
             return { success: false, error: `Assignment is already ${assignment.status.toLowerCase()}.` }
         }
-        if (actualQty >= assignment.quantity) {
-            return {
-                success: false,
-                error: "Actual must be less than the pushed quantity. Use acknowledge if you received the full amount.",
-            }
-        }
-
-        const delta = assignment.quantity - actualQty // missing items
 
         await prisma.$transaction(async (tx) => {
-            // Correct the optimistic credit. updateMany guards against running negative
-            // (driver could have refilled some of it already; in that case we'd let it
-            // go negative — admin will resolve via /admin/adjustments).
-            await tx.driverStock.updateMany({
-                where: { driverId, itemId: assignment.itemId },
-                data: { quantity_on_hand: { decrement: delta } },
+            // Correct the optimistic credit. Ensure they haven't already spent it.
+            const updated = await tx.driverStock.updateMany({
+                where: { 
+                    driverId, 
+                    itemId: assignment.itemId,
+                    quantity_on_hand: { gte: assignment.quantity }
+                },
+                data: { quantity_on_hand: { decrement: assignment.quantity } },
             })
 
-            await tx.inventoryAdjustment.create({
-                data: {
-                    itemId: assignment.itemId,
-                    quantity: -delta,
-                    reason: "ASSIGNMENT_DISCREPANCY",
-                    locationName: `Driver #${driverId} (assignment ${assignmentId})`,
-                    priceAtAdjustment: assignment.cost_at_assignment,
-                },
-            })
+            if (updated.count === 0) {
+                throw new Error("Cannot deny assignment: stock has already been consumed.")
+            }
+
+            // Return items back to the warehouse if it originated from one
+            if (assignment.warehouseId) {
+                await tx.warehouseStock.updateMany({
+                    where: { warehouseId: assignment.warehouseId, itemId: assignment.itemId },
+                    data: { quantity_on_hand: { increment: assignment.quantity } }
+                })
+            }
 
             await tx.stockAssignment.update({
                 where: { id: assignmentId },
                 data: {
                     status: "DISPUTED",
                     acknowledged_at: new Date(),
-                    acknowledged_qty: actualQty,
-                    notes: notes ?? assignment.notes,
+                    acknowledged_qty: 0,
+                    notes: notes ?? "Driver completely denied receiving these items.",
                 },
             })
         })
 
         await writeAuditLog(
             session,
-            "DISPUTE_ASSIGNMENT",
+            "DENY_ASSIGNMENT",
             "StockAssignment",
             assignmentId,
             { quantity: assignment.quantity },
-            { actualQty, delta, notes: notes ?? null },
-            "Driver reported discrepancy on stock assignment"
+            { notes: notes ?? null },
+            "Driver denied the assignment, stock reverted to warehouse."
         )
 
         notifyClients("assignment-dispute")
         revalidatePath("/driver")
         revalidatePath("/admin/driver-stock")
-        revalidatePath("/admin/adjustments")
+        revalidatePath("/admin/warehouse")
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to dispute assignment" }
+        return { success: false, error: error instanceof Error ? error.message : "Failed to deny assignment" }
+    }
+}
+
+/**
+ * Admin action to dismiss a completely denied/disputed assignment from the
+ * driver's pending history, hiding the notification.
+ */
+export async function dismissAssignment(assignmentId: number): Promise<ActionResult> {
+    const session = await requireAdmin()
+    try {
+        const assignment = await prisma.stockAssignment.findUnique({ where: { id: assignmentId } })
+        if (!assignment) return { success: false, error: "Assignment not found." }
+
+        // We can just delete it, or mark it as "DISMISSED"
+        // Since there is no "DISMISSED" status explicitly used anywhere else except to hide it,
+        // deleting it keeps the database clean since the items have already been reverted.
+        await prisma.stockAssignment.delete({ where: { id: assignmentId } })
+
+        await writeAuditLog(
+            session,
+            "DISMISS_ASSIGNMENT",
+            "StockAssignment",
+            assignmentId,
+            { status: assignment.status },
+            { status: "DELETED" },
+            "Admin dismissed the denied/disputed assignment notification."
+        )
+
+        notifyClients("assignment-dismissed")
+        revalidatePath("/admin/driver-stock")
+        return { success: true, data: undefined }
+    } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Failed to dismiss assignment" }
     }
 }
 
@@ -336,10 +360,14 @@ export async function submitDriverReturn(
             }
             // Decrement bag totals once per item (could be multiple reasons per item).
             for (const [itemId, total] of totalsPerItem) {
-                await tx.driverStock.updateMany({
-                    where: { driverId, itemId },
+                const updated = await tx.driverStock.updateMany({
+                    where: { driverId, itemId, quantity_on_hand: { gte: total } },
                     data: { quantity_on_hand: { decrement: total } },
-                })
+                });
+                
+                if (updated.count === 0) {
+                    throw new Error(`Insufficient stock for item ${itemId} or concurrent update detected.`);
+                }
             }
         })
 

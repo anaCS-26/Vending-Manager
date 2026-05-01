@@ -31,7 +31,7 @@ const adminNav = [
 ];
 
 
-export function Sidebar({ user }: { user?: any }) {
+export function Sidebar({ user, notifications }: { user?: any; notifications?: { driverStock: number; returns: number } }) {
     const pathname = usePathname();
     const [isPending, startTransition] = useTransition();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -103,6 +103,8 @@ export function Sidebar({ user }: { user?: any }) {
                     )}
                     {mainNav.map((item) => {
                         const isActive = pathname === item.href;
+                        const badgeCount = item.href === '/admin/driver-stock' && !isActive ? notifications?.driverStock || 0 : 0;
+                        
                         return (
                             <Link
                                 key={item.name}
@@ -120,7 +122,21 @@ export function Sidebar({ user }: { user?: any }) {
                                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-accent-blue rounded-r-md"></div>
                                 )}
                                 <item.icon className={cn("w-4 h-4 relative z-10 transition-colors shrink-0", isActive ? "text-accent-blue" : "group-hover:text-slate-500 dark:text-slate-400 dark:text-slate-300")} />
-                                {!collapsed && <span className="relative z-10 truncate">{item.name}</span>}
+                                {!collapsed && (
+                                    <div className="relative z-10 flex-1 flex items-center justify-between min-w-0">
+                                        <span className="truncate">{item.name}</span>
+                                        {badgeCount > 0 && (
+                                            <span className="flex items-center justify-center bg-red-500 text-white text-[10px] font-bold px-1.5 h-4 rounded-full shrink-0 leading-none pt-[1px]">
+                                                {badgeCount}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                                {collapsed && badgeCount > 0 && (
+                                    <span className="absolute top-1.5 right-1.5 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold w-3.5 h-3.5 rounded-full leading-none pt-[1px]">
+                                        {badgeCount}
+                                    </span>
+                                )}
                             </Link>
                         );
                     })}
@@ -134,6 +150,8 @@ export function Sidebar({ user }: { user?: any }) {
                     )}
                     {inventoryNav.map((item) => {
                         const isActive = pathname === item.href;
+                        const badgeCount = item.href === '/admin/returns' && !isActive ? notifications?.returns || 0 : 0;
+                        
                         return (
                             <Link
                                 key={item.name}
@@ -151,7 +169,21 @@ export function Sidebar({ user }: { user?: any }) {
                                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-accent-purple rounded-r-md"></div>
                                 )}
                                 <item.icon className={cn("w-4 h-4 relative z-10 transition-colors shrink-0", isActive ? "text-accent-purple" : "group-hover:text-slate-500 dark:text-slate-400 dark:text-slate-300")} />
-                                {!collapsed && <span className="relative z-10 truncate">{item.name}</span>}
+                                {!collapsed && (
+                                    <div className="relative z-10 flex-1 flex items-center justify-between min-w-0">
+                                        <span className="truncate">{item.name}</span>
+                                        {badgeCount > 0 && (
+                                            <span className="flex items-center justify-center bg-red-500 text-white text-[10px] font-bold px-1.5 h-4 rounded-full shrink-0 leading-none pt-[1px]">
+                                                {badgeCount}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                                {collapsed && badgeCount > 0 && (
+                                    <span className="absolute top-1.5 right-1.5 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold w-3.5 h-3.5 rounded-full leading-none pt-[1px]">
+                                        {badgeCount}
+                                    </span>
+                                )}
                             </Link>
                         );
                     })}
