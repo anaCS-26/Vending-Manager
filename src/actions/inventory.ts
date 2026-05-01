@@ -640,22 +640,25 @@ async function logBatchRefillsDispatchless(
                 const historicPrice = previousLog ? previousLog.price_at_refill : priceToUse;
                 const sales_revenue = sales * historicPrice;
 
-                await tx.refillLog.create({
-                    data: {
-                        dispatchId: null,
-                        driverId,
-                        machineId,
-                        itemId: item.itemId,
-                        quantity_refilled: item.refilled,
-                        items_sold_since_last_refill: sales,
-                        sales_revenue,
-                        price_at_refill: priceToUse,
-                        cost_at_refill: itemData?.cost || 0,
-                        damaged_quantity: 0,
-                        // Reuse expired_quantity as route-returned for compat with legacy reports.
-                        expired_quantity: item.returned,
-                    } as any,
-                });
+                // Only create a RefillLog if there was actual machine interaction
+                if (item.refilled > 0 || item.returned > 0) {
+                    await tx.refillLog.create({
+                        data: {
+                            dispatchId: null,
+                            driverId,
+                            machineId,
+                            itemId: item.itemId,
+                            quantity_refilled: item.refilled,
+                            items_sold_since_last_refill: sales,
+                            sales_revenue,
+                            price_at_refill: priceToUse,
+                            cost_at_refill: itemData?.cost || 0,
+                            damaged_quantity: 0,
+                            // Reuse expired_quantity as route-returned for compat with legacy reports.
+                            expired_quantity: item.returned,
+                        } as any,
+                    });
+                }
 
                 // Decrement bag immediately for both refilled AND items returned to warehouse
                 if (item.refilled + bagReturned > 0) {

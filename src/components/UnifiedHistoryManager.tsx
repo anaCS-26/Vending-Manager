@@ -270,7 +270,7 @@ function EventRow({ log }: { log: any }) {
     // Note: the logic below relies on log.dispatch which might be null in dispatchless
     // ReturnVerifications also might not be attached to dispatch directly anymore.
     // If log.dispatch is missing, we must handle it gracefully.
-    const driverName = log.dispatch?.driver?.name || "System/Unknown";
+    const driverName = log.dispatch?.driver?.name || log.driver?.name || "System/Unknown";
     const driverInitials = driverName !== "System/Unknown" ? driverName.charAt(0) : "?";
     
     // In dispatchless mode, return verifications are likely tracked differently 

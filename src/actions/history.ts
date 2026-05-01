@@ -37,6 +37,7 @@ export type RefillLogRow = Prisma.RefillLogGetPayload<{
     include: {
         machine: true;
         item: true;
+        driver: true;
         dispatch: {
             include: {
                 driver: true;
@@ -96,6 +97,7 @@ export async function getRefillLogsPaginated(
             include: {
                 machine: true,
                 item: true,
+                driver: true,
                 dispatch: {
                     include: {
                         driver: true,
