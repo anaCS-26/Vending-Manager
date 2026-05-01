@@ -70,7 +70,6 @@ export default async function DriverPortal() {
         driverBag.bag.length > 0 &&
         driverBag.driverId !== null
     ) {
-        // @ts-expect-error - session.user.name is set in our credentials provider
         const driverName = (session.user.name as string) || 'Driver';
         dispatches = [
             synthesizeDispatchlessRoute({
