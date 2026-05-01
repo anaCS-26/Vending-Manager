@@ -96,7 +96,10 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                     refilled: p.refilled || 0,
                     returned: p.returned ?? p.expired ?? 0
                 }));
-                const result = await logBatchRefills(log.dispatchId, log.machineId, normalizedPayload);
+                // dispatchId=0 is the dispatchless sentinel — translate to null at the
+                // server-action boundary so logBatchRefills routes to the bag-based path.
+                const wireDispatchId = log.dispatchId === 0 ? null : log.dispatchId;
+                const result = await logBatchRefills(wireDispatchId, log.machineId, normalizedPayload);
                 if (result.success) {
                     successCount++;
                     successTimestamps.push(log.timestamp);
@@ -307,7 +310,10 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
             }
 
             try {
-                const result = await logBatchRefills(currentDispatch.id, parseInt(selectedMachine), payload);
+                // dispatchId=0 is the dispatchless sentinel — translate to null at the
+                // server-action boundary so logBatchRefills routes to the bag-based path.
+                const wireDispatchId = currentDispatch.id === 0 ? null : currentDispatch.id;
+                const result = await logBatchRefills(wireDispatchId, parseInt(selectedMachine), payload);
                 if (result.success) {
                     setIsSuccess(true)
                     toast.success("Inventory Logs Saved", {

@@ -450,11 +450,18 @@ export async function logRefill(
  * Optimized for low-latency mobile updates in the driver-portal interface.
  */
 export async function logBatchRefills(
-    dispatchId: number,
+    dispatchId: number | null,
     machineId: number,
     items: { itemId: number, refilled: number, returned: number }[]
 ): Promise<ActionResult> {
     try {
+        // Dispatchless path: no Dispatch wrapper, source bag from DriverStock,
+        // decrement directly on each refill. Driver-only — admins shadowing the
+        // portal still go through the dispatch flow above.
+        if (dispatchId === null) {
+            return await logBatchRefillsDispatchless(machineId, items);
+        }
+
         const dispatchAuthCheck = await prisma.dispatch.findUnique({ where: { id: dispatchId }, select: { driverId: true } });
         if (!dispatchAuthCheck) return { success: false, error: "Dispatch not found" };
         const session = await requireAdminOrDriverOwner(dispatchAuthCheck.driverId);
@@ -562,11 +569,142 @@ export async function logBatchRefills(
         notifyClients('refill')
         
         await writeAuditLog(session, 'LOG_BATCH_REFILL', 'Dispatch', dispatchId, null, { machineId, items });
-        
+
         return { success: true, data: undefined }
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to log batch refill"
         return { success: false, error: message }
+    }
+}
+
+/**
+ * Dispatchless variant of logBatchRefills. Same machine-side effects as the
+ * legacy path (RefillLog + MachineStock + ReturnVerification), but the driver's
+ * bag is sourced from DriverStock and decremented directly on each refill —
+ * since there's no dispatch close to reconcile through.
+ *
+ * Always called via logBatchRefills(null, ...) so the client doesn't have to
+ * know which transport it's using.
+ */
+async function logBatchRefillsDispatchless(
+    machineId: number,
+    items: { itemId: number, refilled: number, returned: number }[]
+): Promise<ActionResult> {
+    const session = await requireDriver();
+    const role = (session.user as any).role;
+    if (role !== 'driver') {
+        return { success: false, error: "Dispatchless refills are driver-only. Admins should use the dispatch flow." };
+    }
+    const driverId = parseInt((session.user as any).id, 10);
+    if (!Number.isFinite(driverId)) return { success: false, error: "Invalid session." };
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            const machineData = await tx.machine.findUnique({ where: { id: machineId } });
+
+            for (const item of items) {
+                assertWholeNonNegative(item.refilled, `Refilled quantity for item ${item.itemId}`);
+                assertWholeNonNegative(item.returned, `Returned quantity for item ${item.itemId}`);
+                if (item.refilled === 0 && item.returned === 0) continue;
+
+                // Source bag inventory from DriverStock alone — no DispatchItem wrapper.
+                const driverStock = await tx.driverStock.findUnique({
+                    where: { driverId_itemId: { driverId, itemId: item.itemId } },
+                });
+                const onHand = driverStock?.quantity_on_hand || 0;
+
+                if (item.refilled > onHand) {
+                    throw new Error(
+                        `Not enough in driver bag for item ${item.itemId}. On hand: ${onHand}, attempted: ${item.refilled}`
+                    );
+                }
+
+                const itemData = await tx.item.findUnique({ where: { id: item.itemId } });
+                let priceToUse = itemData?.price_standard || 0;
+                if (machineData?.tier === 'HOSPITAL') priceToUse = itemData?.price_hospital || 0;
+                else if (machineData?.tier === 'HOTEL') priceToUse = itemData?.price_hotel || 0;
+
+                const sales = item.refilled;
+
+                // PREVIOUS RESTOCK LOCK-IN — same convention as the legacy path so
+                // sales_revenue stays comparable across both flows.
+                const previousLog = await tx.refillLog.findFirst({
+                    where: { machineId, itemId: item.itemId },
+                    orderBy: { refilled_at: 'desc' },
+                    select: { price_at_refill: true },
+                });
+                const historicPrice = previousLog ? previousLog.price_at_refill : priceToUse;
+                const sales_revenue = sales * historicPrice;
+
+                await tx.refillLog.create({
+                    data: {
+                        dispatchId: null,
+                        driverId,
+                        machineId,
+                        itemId: item.itemId,
+                        quantity_refilled: item.refilled,
+                        items_sold_since_last_refill: sales,
+                        sales_revenue,
+                        price_at_refill: priceToUse,
+                        cost_at_refill: itemData?.cost || 0,
+                        damaged_quantity: 0,
+                        // Reuse expired_quantity as route-returned for compat with legacy reports.
+                        expired_quantity: item.returned,
+                    } as any,
+                });
+
+                // Decrement bag immediately — DriverStock is the running counter
+                // in this flow (no dispatch close to reconcile through).
+                if (item.refilled > 0) {
+                    await tx.driverStock.update({
+                        where: { driverId_itemId: { driverId, itemId: item.itemId } },
+                        data: { quantity_on_hand: { decrement: item.refilled } },
+                    });
+                }
+
+                await tx.machineStock.upsert({
+                    where: { machineId_itemId: { machineId, itemId: item.itemId } },
+                    update: {
+                        estimated_stock: { increment: item.refilled - item.returned },
+                        last_refilled_at: new Date(),
+                    },
+                    create: {
+                        machineId,
+                        itemId: item.itemId,
+                        estimated_stock: Math.max(0, item.refilled - item.returned),
+                        last_refilled_at: new Date(),
+                    },
+                });
+
+                if (item.returned > 0) {
+                    // Returned items came out of the machine, not the bag — they go
+                    // straight into the verification queue with driverId so admins
+                    // can track who pulled them.
+                    await tx.returnVerification.create({
+                        data: {
+                            dispatchId: null,
+                            driverId,
+                            itemId: item.itemId,
+                            quantity: item.returned,
+                            reason: "RETURNED",
+                            status: "PENDING",
+                        },
+                    });
+                }
+            }
+        });
+
+        revalidatePath('/driver');
+        revalidatePath('/admin');
+        revalidatePath('/admin/machine-stock');
+        notifyClients('refill');
+
+        await writeAuditLog(session, 'LOG_BATCH_REFILL', 'Driver', driverId, null, { machineId, items, dispatchless: true });
+
+        return { success: true, data: undefined };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to log batch refill";
+        return { success: false, error: message };
     }
 }
 
@@ -597,7 +735,7 @@ export async function returnDispatch(
             if (!dispatch) throw new Error("Dispatch not found")
             if (dispatch.status !== "OPEN") throw new Error("Dispatch is already closed")
 
-            for (const ret of returns) {
+            await Promise.all(returns.map(async (ret) => {
                 if (ret.quantity_returned < 0 || ret.quantity_damaged < 0) {
                     throw new Error("Quantities cannot be negative")
                 }
@@ -632,7 +770,7 @@ export async function returnDispatch(
                     } as any
                 })
 
-                if (!dispatch || !dispatch.warehouseId) continue;
+                if (!dispatch || !dispatch.warehouseId) return;
 
                 const warehouseStock = await tx.warehouseStock.findFirst({
                     where: { itemId: dispatchItem.itemId, warehouseId: dispatch.warehouseId }
@@ -644,10 +782,10 @@ export async function returnDispatch(
                         data: { quantity_on_hand: { increment: ret.quantity_returned } }
                     })
                 }
-            }
+            }));
 
             // Closing Flow: Unaccounted items are 'injected' into DriverStock for their next shift.
-            for (const dispatchItem of dispatch.DispatchItems) {
+            await Promise.all(dispatch.DispatchItems.map(async (dispatchItem) => {
                 const retParams = returns.find(r => r.dispatchItemId === dispatchItem.id);
                 const finalReturned = retParams?.quantity_returned || 0;
                 const finalDamaged = retParams?.quantity_damaged || 0;
@@ -683,12 +821,15 @@ export async function returnDispatch(
                         }
                     });
                 }
-            }
+            }));
 
             await tx.dispatch.update({
                 where: { id: dispatchId },
                 data: { status: "CLOSED" }
             })
+        }, {
+            maxWait: 5000,
+            timeout: 15000
         })
 
         revalidatePath('/admin')

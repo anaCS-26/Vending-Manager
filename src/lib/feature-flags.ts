@@ -13,5 +13,4 @@
  * Phase B dual-run: the legacy dispatch flow still works; this just controls
  * which surface is visible. Cutover happens in Phase B3.
  */
-export const USE_DISPATCHLESS =
-    process.env.NEXT_PUBLIC_USE_DISPATCHLESS === "true";
+export const USE_DISPATCHLESS = true;

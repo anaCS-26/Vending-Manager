@@ -7,16 +7,13 @@ import { LayoutDashboard, Truck, Package, Activity, LogOut, AlertTriangle, Refre
 import { useState, useTransition, useEffect } from "react";
 import { AdminSettingsModal } from "@/components/AdminSettingsModal";
 import { signOut } from "next-auth/react";
-import { USE_DISPATCHLESS } from "@/lib/feature-flags";
 
 // In dispatchless mode the "Dispatches" page is replaced by "Driver Stock".
 // Both entries exist in code; only one is rendered based on the flag so the
 // nav doesn't grow during the cutover window.
 const mainNav = [
     { name: 'Overview', href: '/admin', icon: LayoutDashboard },
-    USE_DISPATCHLESS
-        ? { name: 'Driver Stock', href: '/admin/driver-stock', icon: Backpack }
-        : { name: 'Dispatches', href: '/admin/dispatches', icon: Truck },
+    { name: 'Driver Stock', href: '/admin/driver-stock', icon: Backpack },
     { name: 'Financials', href: '/admin/financials', icon: PieChart },
     { name: 'Analytics', href: '/admin/analytics', icon: Activity },
 ];
