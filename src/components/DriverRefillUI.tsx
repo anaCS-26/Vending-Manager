@@ -362,20 +362,6 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
         }));
     };
 
-
-    const totalGiven = currentDispatch.DispatchItems.reduce((sum: number, item: DispatchItemWithItem) => sum + item.quantity_given, 0);
-    const totalConsumed = (currentDispatch.RefillLogs as RefillLogWithMachine[])
-        .reduce((sum: number, log: any) => sum + log.quantity_refilled + (log.expired_quantity || 0) + (log.damaged_quantity || 0), 0);
-    
-    // Account for offline progress too
-    const pendingConsumed = offlineLogs
-        .filter(log => log.dispatchId === currentDispatch.id)
-        .flatMap(log => log.payload)
-        .reduce((sum, payload) => sum + payload.refilled + payload.returned, 0);
-
-    const progressPercent = totalGiven > 0 ? Math.min(100, ((totalConsumed + pendingConsumed) / totalGiven) * 100) : 0;
-    const isComplete = progressPercent === 100;
-
     const activeMachineDetails = machines.find(m => m.id.toString() === selectedMachine);
 
     return (
@@ -413,7 +399,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
 
                 <p className="text-accent-blue text-xs font-semibold mb-2 flex items-center gap-2 uppercase tracking-wider">
                     <Zap className="w-3 h-3 text-accent-blue" />
-                    Route {isComplete ? 'Complete' : 'Active'}
+                    Shift Active
                 </p>
 
                 {(userRole === 'admin' || userRole === 'super_admin') && activeDispatches.length > 1 ? (
@@ -431,16 +417,6 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 ) : (
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight leading-none mb-4">{currentDispatch.driver.name}</h1>
                 )}
-
-                {/* Animated Progress Bar */}
-                <div className="h-1.5 bg-slate-200 dark:bg-white/10 w-full rounded-full overflow-hidden relative mt-4">
-                    <motion.div
-                        className={`absolute top-0 left-0 h-full rounded-full ${isComplete ? 'bg-accent-blue' : 'bg-accent-green'}`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progressPercent}%` }}
-                        transition={{ type: "spring", bounce: 0, duration: 1.5 }}
-                    />
-                </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-6 relative z-10 custom-scrollbar">
