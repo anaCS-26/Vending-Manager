@@ -423,8 +423,8 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                         onChange={(e) => setSelectedDispatchIndex(Number(e.target.value))}
                     >
                         {activeDispatches.map((d, index) => (
-                            <option key={d.id} value={index} className="text-sm font-medium text-slate-900 dark:text-white bg-slate-100 dark:bg-[#121214]">
-                                {d.driver.name} (Dispatch #{d.id})
+                            <option key={d.id === 0 ? `synthetic-${d.driver.id}` : d.id} value={index} className="text-sm font-medium text-slate-900 dark:text-white bg-slate-100 dark:bg-[#121214]">
+                                {d.driver.name}
                             </option>
                         ))}
                     </select>
