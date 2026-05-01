@@ -452,7 +452,7 @@ export async function logRefill(
 export async function logBatchRefills(
     dispatchId: number | null,
     machineId: number,
-    items: { itemId: number, refilled: number, returned: number }[]
+    items: { itemId: number, refilled: number, returned: number, bag_returned?: number }[]
 ): Promise<ActionResult> {
     try {
         // Dispatchless path: no Dispatch wrapper, source bag from DriverStock,
@@ -479,8 +479,10 @@ export async function logBatchRefills(
             for (const item of items) {
                 assertWholeNonNegative(item.refilled, `Refilled quantity for item ${item.itemId}`)
                 assertWholeNonNegative(item.returned, `Returned quantity for item ${item.itemId}`)
+                const bagReturned = item.bag_returned || 0;
+                assertWholeNonNegative(bagReturned, `Bag Returned quantity for item ${item.itemId}`)
 
-                if (item.refilled === 0 && item.returned === 0) continue;
+                if (item.refilled === 0 && item.returned === 0 && bagReturned === 0) continue;
 
                 const dispatchItem = dispatch.DispatchItems.find(di => di.itemId === item.itemId)
                 const driverStock = await tx.driverStock.findUnique({
@@ -588,7 +590,7 @@ export async function logBatchRefills(
  */
 async function logBatchRefillsDispatchless(
     machineId: number,
-    items: { itemId: number, refilled: number, returned: number }[]
+    items: { itemId: number, refilled: number, returned: number, bag_returned?: number }[]
 ): Promise<ActionResult> {
     const session = await requireDriver();
     const role = (session.user as any).role;
@@ -605,7 +607,9 @@ async function logBatchRefillsDispatchless(
             for (const item of items) {
                 assertWholeNonNegative(item.refilled, `Refilled quantity for item ${item.itemId}`);
                 assertWholeNonNegative(item.returned, `Returned quantity for item ${item.itemId}`);
-                if (item.refilled === 0 && item.returned === 0) continue;
+                const bagReturned = item.bag_returned || 0;
+                assertWholeNonNegative(bagReturned, `Bag Returned quantity for item ${item.itemId}`);
+                if (item.refilled === 0 && item.returned === 0 && bagReturned === 0) continue;
 
                 // Source bag inventory from DriverStock alone — no DispatchItem wrapper.
                 const driverStock = await tx.driverStock.findUnique({
@@ -613,9 +617,9 @@ async function logBatchRefillsDispatchless(
                 });
                 const onHand = driverStock?.quantity_on_hand || 0;
 
-                if (item.refilled > onHand) {
+                if (item.refilled + bagReturned > onHand) {
                     throw new Error(
-                        `Not enough in driver bag for item ${item.itemId}. On hand: ${onHand}, attempted: ${item.refilled}`
+                        `Not enough in driver bag for item ${item.itemId}. On hand: ${onHand}, attempted refill+return: ${item.refilled + bagReturned}`
                     );
                 }
 
@@ -653,12 +657,11 @@ async function logBatchRefillsDispatchless(
                     } as any,
                 });
 
-                // Decrement bag immediately — DriverStock is the running counter
-                // in this flow (no dispatch close to reconcile through).
-                if (item.refilled > 0) {
+                // Decrement bag immediately for both refilled AND items returned to warehouse
+                if (item.refilled + bagReturned > 0) {
                     await tx.driverStock.update({
                         where: { driverId_itemId: { driverId, itemId: item.itemId } },
-                        data: { quantity_on_hand: { decrement: item.refilled } },
+                        data: { quantity_on_hand: { decrement: item.refilled + bagReturned } },
                     });
                 }
 
@@ -687,6 +690,19 @@ async function logBatchRefillsDispatchless(
                             itemId: item.itemId,
                             quantity: item.returned,
                             reason: "RETURNED",
+                            status: "PENDING",
+                        },
+                    });
+                }
+                
+                if (bagReturned > 0) {
+                    await tx.returnVerification.create({
+                        data: {
+                            dispatchId: null,
+                            driverId,
+                            itemId: item.itemId,
+                            quantity: bagReturned,
+                            reason: "SURPLUS",
                             status: "PENDING",
                         },
                     });

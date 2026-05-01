@@ -24,6 +24,7 @@ type ItemFormState = {
     item: any;
     refilled: number;
     returned: number;
+    bag_returned: number;
     bagQuantity: number;
     inBag: boolean;
     estimated_stock: number;
@@ -94,7 +95,8 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 const normalizedPayload = (log.payload || []).map((p: any) => ({
                     itemId: p.itemId,
                     refilled: p.refilled || 0,
-                    returned: p.returned ?? p.expired ?? 0
+                    returned: p.returned ?? p.expired ?? 0,
+                    bag_returned: p.bag_returned || 0
                 }));
                 // dispatchId=0 is the dispatchless sentinel — translate to null at the
                 // server-action boundary so logBatchRefills routes to the bag-based path.
@@ -215,6 +217,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                     item: ms.item,
                     refilled: 0,
                     returned: 0,
+                    bag_returned: 0,
                     bagQuantity: bagRemaining,
                     inBag: isAvailableToDriver,
                     estimated_stock: Math.max(0, ms.estimated_stock + sysDelta)
@@ -229,6 +232,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                         item: getItemMeta(itemId),
                         refilled: 0,
                         returned: 0,
+                        bag_returned: 0,
                         bagQuantity: getRemainingStock(itemId),
                         inBag: true,
                         estimated_stock: Math.max(0, getOfflineSysDelta(itemId))
@@ -275,7 +279,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
         if (!selectedMachine) return;
 
         // Find items that were modified (refilled or returned > 0)
-        const modifiedItems = Object.values(machineItems).filter(item => item.refilled > 0 || item.returned > 0);
+        const modifiedItems = Object.values(machineItems).filter(item => item.refilled > 0 || item.returned > 0 || item.bag_returned > 0);
 
         if (modifiedItems.length === 0) {
             toast.error("No changes made", { description: "You haven't added or returned any stock." });
@@ -286,7 +290,8 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
             const payload = modifiedItems.map(m => ({
                 itemId: m.itemId,
                 refilled: m.refilled,
-                returned: m.returned
+                returned: m.returned,
+                bag_returned: m.bag_returned
             }));
 
             if (isOffline || !navigator.onLine) {
@@ -624,13 +629,12 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-white/5 w-full">
+                                            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-white/5 w-full">
 
                                                 {/* Returned Counter (Machine View Only) */}
                                                 {viewMode === "MACHINE" && (
                                                     <div className="flex flex-col flex-1 pl-1">
-                                                        <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Returned (Warehouse)</span>
+                                                        <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1">Returned (From Machine)</span>
                                                         <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
                                                             <button onClick={() => updateItem(row.itemId, 'returned', Math.max(0, row.returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
                                                             <input
@@ -655,40 +659,71 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                     </div>
                                                 )}
 
-                                                {/* Refilled Counter (Bag View Only) */}
+                                                {/* Refilled & Bag Returned Counters (Bag View Only) */}
                                                 {viewMode === "BAG" && (
-                                                    <div className="flex flex-col flex-1 pl-4">
-                                                        <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1">Refilled (Machine)</span>
-                                                        <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                            <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                            <input
-                                                                type="text"
-                                                                inputMode="numeric"
-                                                                pattern="[0-9]*"
-                                                                autoComplete="off"
-                                                                value={String(row.refilled)}
-                                                                onChange={(e) => {
-                                                                    const raw = e.target.value.replace(/[^0-9]/g, "");
-                                                                    const n = raw === "" ? 0 : parseInt(raw, 10);
-                                                                    // Let the driver type freely; bag-capacity is enforced on commit
-                                                                    // (the "+" button still clamps for tap-to-increment UX).
-                                                                    updateItem(row.itemId, 'refilled', Math.max(0, n));
-                                                                }}
-                                                                onBlur={() => {
-                                                                    if (row.refilled > row.bagQuantity) {
-                                                                        updateItem(row.itemId, 'refilled', row.bagQuantity);
-                                                                        toast.warning(`Capped to bag size (${row.bagQuantity}).`);
-                                                                    }
-                                                                }}
-                                                                aria-label="Refilled quantity"
-                                                                className={`flex-1 min-w-0 text-center font-bold bg-transparent border-none outline-none ${row.refilled > row.bagQuantity ? 'text-accent-pink' : 'text-slate-900 dark:text-white'}`}
-                                                            />
-                                                            <button onClick={() => {
-                                                                const newVal = Math.min(row.bagQuantity, row.refilled + 1); // Can only refill up to what is in the bag
-                                                                updateItem(row.itemId, 'refilled', newVal);
-                                                            }} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
+                                                    <>
+                                                        <div className="flex flex-col flex-1 pl-1 pr-2">
+                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1">Refilled (Machine)</span>
+                                                            <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
+                                                                <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
+                                                                <input
+                                                                    type="text"
+                                                                    inputMode="numeric"
+                                                                    pattern="[0-9]*"
+                                                                    autoComplete="off"
+                                                                    value={String(row.refilled)}
+                                                                    onChange={(e) => {
+                                                                        const raw = e.target.value.replace(/[^0-9]/g, "");
+                                                                        const n = raw === "" ? 0 : parseInt(raw, 10);
+                                                                        updateItem(row.itemId, 'refilled', Math.max(0, n));
+                                                                    }}
+                                                                    onBlur={() => {
+                                                                        if (row.refilled + row.bag_returned > row.bagQuantity) {
+                                                                            updateItem(row.itemId, 'refilled', Math.max(0, row.bagQuantity - row.bag_returned));
+                                                                            toast.warning(`Capped to bag size (${row.bagQuantity}).`);
+                                                                        }
+                                                                    }}
+                                                                    aria-label="Refilled quantity"
+                                                                    className={`flex-1 min-w-0 text-center font-bold bg-transparent border-none outline-none ${row.refilled + row.bag_returned > row.bagQuantity ? 'text-accent-pink' : 'text-slate-900 dark:text-white'}`}
+                                                                />
+                                                                <button onClick={() => {
+                                                                    const newVal = Math.min(row.bagQuantity - row.bag_returned, row.refilled + 1);
+                                                                    updateItem(row.itemId, 'refilled', newVal);
+                                                                }} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
+                                                            </div>
                                                         </div>
-                                                    </div>
+
+                                                        <div className="flex flex-col flex-1 pl-1">
+                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1 whitespace-nowrap">Return (Warehouse)</span>
+                                                            <div className="flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
+                                                                <button onClick={() => updateItem(row.itemId, 'bag_returned', Math.max(0, row.bag_returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
+                                                                <input
+                                                                    type="text"
+                                                                    inputMode="numeric"
+                                                                    pattern="[0-9]*"
+                                                                    autoComplete="off"
+                                                                    value={String(row.bag_returned)}
+                                                                    onChange={(e) => {
+                                                                        const raw = e.target.value.replace(/[^0-9]/g, "");
+                                                                        const n = raw === "" ? 0 : parseInt(raw, 10);
+                                                                        updateItem(row.itemId, 'bag_returned', Math.max(0, n));
+                                                                    }}
+                                                                    onBlur={() => {
+                                                                        if (row.refilled + row.bag_returned > row.bagQuantity) {
+                                                                            updateItem(row.itemId, 'bag_returned', Math.max(0, row.bagQuantity - row.refilled));
+                                                                            toast.warning(`Capped to bag size (${row.bagQuantity}).`);
+                                                                        }
+                                                                    }}
+                                                                    aria-label="Bag returned quantity"
+                                                                    className={`flex-1 min-w-0 text-center font-bold bg-transparent border-none outline-none ${row.refilled + row.bag_returned > row.bagQuantity ? 'text-accent-pink' : 'text-slate-900 dark:text-white'}`}
+                                                                />
+                                                                <button onClick={() => {
+                                                                    const newVal = Math.min(row.bagQuantity - row.refilled, row.bag_returned + 1);
+                                                                    updateItem(row.itemId, 'bag_returned', newVal);
+                                                                }} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
+                                                            </div>
+                                                        </div>
+                                                    </>
                                                 )}
 
                                             </div>
