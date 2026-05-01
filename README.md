@@ -44,29 +44,36 @@ The following diagram illustrates the lifecycle of inventory as it moves through
 ```mermaid
 flowchart TD
     subgraph Procurement
-        S[Supplier] -- Purchase Orders --> W[Warehouse]
+        S[Supplier] -- Purchase Order received<br/>(WAC recomputed) --> W[Warehouse Stock]
+    end
+
+    subgraph Allocation
+        W -- assignToDriver --> A{{StockAssignment<br/>PENDING_ACK}}
+        A -- Accept all --> B[Driver Bag<br/>DriverStock]
+        A -- Report missing --> X[InventoryAdjustment<br/>ASSIGNMENT_DISCREPANCY]
+        X --> B
     end
 
     subgraph Operations
-        W -- Dispatch & Assign --> D[Driver]
-        D -- Route Execution --> M[Vending Machine]
+        B -- logBatchRefills<br/>(RefillLog) --> M[Vending Machine]
+        B -- submitDriverReturn<br/>per-line --> RV{{ReturnVerification<br/>PENDING}}
     end
 
     subgraph Reconciliation
-        D -- Remaining Stock --> R{End of Shift}
-        R -- Back-Stock --> D
-        R -- Returns / Claims --> V[Admin Verification]
-        V -- Approved Returns --> W
-        V -- Damaged/Expired --> C[Shrinkage / Write-off]
+        RV -- approveReturn<br/>SURPLUS --> W
+        RV -- approveReturn<br/>DAMAGED / EXPIRED --> C[Shrinkage / Write-off]
     end
 
     classDef default fill:#1e293b,stroke:#475569,stroke-width:2px,color:#f8fafc;
     classDef highlight fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef pending fill:#7c2d12,stroke:#f97316,stroke-width:2px,color:#fff7ed;
 
     S:::default
     W:::highlight
-    D:::highlight
+    B:::highlight
     M:::default
+    A:::pending
+    RV:::pending
 ```
 
 ## 📋 Example Use Case: The Daily Dispatch Cycle
