@@ -157,25 +157,7 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
                         </div>
                     </div>
 
-                    {/* Inline bag preview for selected driver — same vibe as the legacy "Currently in Driver's Bag" panel. */}
-                    {selectedDriver && selectedDriver.DriverStock.length > 0 && (
-                        <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl p-4 relative z-50">
-                            <div className="flex items-center gap-2 mb-2">
-                                <PackageOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                                <span className="text-sm font-bold text-amber-800 dark:text-amber-300">Currently in Driver's Bag</span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                {selectedDriver.DriverStock.map((stock) => (
-                                    <span
-                                        key={stock.id}
-                                        className="text-xs bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-2 py-1 rounded font-medium"
-                                    >
-                                        {stock.item.name}: {stock.quantity_on_hand}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+
 
                     <div className="flex flex-col gap-3">
                         <label className="block text-sm font-medium text-slate-500 dark:text-slate-400">
