@@ -297,7 +297,7 @@ function ViewOption({ active, label, value, icon, currentRange }: { active: bool
     return (
         <Link
             href={`/admin/financials?view=${value}&range=${currentRange}`}
-            className={`relative px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${active ? 'text-slate-900 dark:text-white bg-white dark:bg-white/10 shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
+            className={`relative px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${active ? 'text-slate-900 dark:text-white bg-white dark:bg-white/10 shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
         >
             {icon}
             <span className="capitalize hidden sm:inline">{label}</span>
@@ -309,7 +309,7 @@ function TimelineOption({ active, label, value, currentView }: { active: boolean
     return (
         <Link
             href={`/admin/financials?view=${currentView}&range=${value}`}
-            className={`relative px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${active ? 'text-slate-900 dark:text-white bg-white dark:bg-white/10 shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
+            className={`relative px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${active ? 'text-slate-900 dark:text-white bg-white dark:bg-white/10 shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
         >
             {label}
         </Link>

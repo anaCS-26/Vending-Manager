@@ -40,7 +40,7 @@ export function ConfirmModal({
                         className="relative w-full max-w-md bg-neo-surface border border-slate-200 dark:border-white/10 rounded-3xl p-6 shadow-2xl overflow-hidden glass-panel"
                     >
                         <div className="absolute top-0 right-0 p-4">
-                            <button onClick={onCancel} className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white transition-colors">
+                            <button onClick={onCancel} className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>

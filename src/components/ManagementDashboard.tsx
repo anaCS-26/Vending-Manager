@@ -238,7 +238,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                         <button
                             key={tab}
                             onClick={() => handleTabChange(tab)}
-                            className={`relative flex-1 sm:flex-none px-2 sm:px-6 py-2 sm:py-2.5 rounded-xl text-sm font-bold transition-colors flex justify-center items-center ${activeTab === tab ? "text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white"
+                            className={`relative flex-1 sm:flex-none px-2 sm:px-6 py-2 sm:py-2.5 rounded-xl text-sm font-bold transition-colors flex justify-center items-center ${activeTab === tab ? "text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                                 }`}
                         >
                             {activeTab === tab && (
@@ -393,7 +393,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
-                                                        <button onClick={() => { setEditingId(item.id); setItemForm({ name: item.name, sku: item.sku, category: item.category, price_standard: item.price_standard || 0, price_hospital: item.price_hospital || 0, price_hotel: item.price_hotel || 0, bulk_format: (item as any).bulk_format || "", warehouseId: undefined, initialStock: 0 }); }} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-md transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                        <button onClick={() => { setEditingId(item.id); setItemForm({ name: item.name, sku: item.sku, category: item.category, price_standard: item.price_standard || 0, price_hospital: item.price_hospital || 0, price_hotel: item.price_hotel || 0, bulk_format: (item as any).bulk_format || "", warehouseId: undefined, initialStock: 0 }); }} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-md transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
                                                         <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-accent-pink bg-slate-100 dark:bg-white/5 hover:bg-accent-pink/20 rounded-md transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                                     </div>
                                                 </div>
@@ -561,7 +561,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => { setEditingId(machine.id); setMachineForm({ location_name: machine.location_name, district: machine.district, address: machine.address || "", notes: machine.notes || "", terminalId: machine.terminalId || "", latitude: undefined, longitude: undefined, operating_cost: machine.operating_cost || 0, rental_cost: machine.rental_cost || 0, tier: machine.tier || "STANDARD" }) }} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-all"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                        <button onClick={() => { setEditingId(machine.id); setMachineForm({ location_name: machine.location_name, district: machine.district, address: machine.address || "", notes: machine.notes || "", terminalId: machine.terminalId || "", latitude: undefined, longitude: undefined, operating_cost: machine.operating_cost || 0, rental_cost: machine.rental_cost || 0, tier: machine.tier || "STANDARD" }) }} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-all"><Edit2 className="w-3.5 h-3.5" /></button>
                                                         <button onClick={() => handleDeleteMachine(machine.id)} className="p-2 text-slate-600 dark:text-slate-400 hover:text-accent-pink bg-slate-100 dark:bg-white/5 hover:bg-accent-pink/20 rounded-xl transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
                                                     </div>
                                                 </div>
@@ -711,7 +711,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => { setEditingId(driver.id); setDriverForm({ name: driver.name, phone: driver.phone || "", email: driver.email || "", pin: "" }) }} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-all"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                        <button onClick={() => { setEditingId(driver.id); setDriverForm({ name: driver.name, phone: driver.phone || "", email: driver.email || "", pin: "" }) }} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-all"><Edit2 className="w-3.5 h-3.5" /></button>
                                                         <button onClick={() => handleDeleteDriver(driver.id)} className="p-2 text-slate-600 dark:text-slate-400 hover:text-accent-pink bg-slate-100 dark:bg-white/5 hover:bg-accent-pink/20 rounded-xl transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
                                                     </div>
                                                 </div>
@@ -842,7 +842,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => { setEditingId(warehouse.id); setWarehouseForm({ name: warehouse.name, location: warehouse.location || "", address: warehouse.address || "", latitude: warehouse.latitude || undefined, longitude: warehouse.longitude || undefined, operating_cost: warehouse.operating_cost || 0, rental_cost: warehouse.rental_cost || 0 }) }} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-all"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                        <button onClick={() => { setEditingId(warehouse.id); setWarehouseForm({ name: warehouse.name, location: warehouse.location || "", address: warehouse.address || "", latitude: warehouse.latitude || undefined, longitude: warehouse.longitude || undefined, operating_cost: warehouse.operating_cost || 0, rental_cost: warehouse.rental_cost || 0 }) }} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-all"><Edit2 className="w-3.5 h-3.5" /></button>
                                                         <button onClick={() => handleDeleteWarehouse(warehouse.id)} className="p-2 text-slate-600 dark:text-slate-400 hover:text-accent-pink bg-slate-100 dark:bg-white/5 hover:bg-accent-pink/20 rounded-xl transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
                                                     </div>
                                                 </div>

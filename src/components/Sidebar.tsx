@@ -241,7 +241,7 @@ export function Sidebar({ user, notifications }: { user?: any; notifications?: {
                 <Link
                     href="/driver"
                     title="Enter Driver Portal"
-                    className={cn("flex items-center text-accent-blue hover:text-slate-900 dark:text-white hover:bg-accent-blue/20 bg-accent-blue/10 border border-accent-blue/30 rounded-xl transition-all font-bold group", collapsed ? "justify-center w-12 h-12" : "px-4 py-3 w-full gap-3 text-sm mb-2")}
+                    className={cn("flex items-center text-accent-blue hover:text-slate-900 dark:hover:text-white hover:bg-accent-blue/20 bg-accent-blue/10 border border-accent-blue/30 rounded-xl transition-all font-bold group", collapsed ? "justify-center w-12 h-12" : "px-4 py-3 w-full gap-3 text-sm mb-2")}
                 >
                     <Truck className="w-4 h-4 group-hover:scale-110 transition-transform shrink-0" />
                     {!collapsed && <span className="truncate">Enter Driver Portal</span>}
@@ -250,7 +250,7 @@ export function Sidebar({ user, notifications }: { user?: any; notifications?: {
                 <button 
                     onClick={() => signOut({ callbackUrl: '/login' })} 
                     title="Sign Out"
-                    className={cn("flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white hover:bg-slate-100 dark:bg-white/5 rounded-xl transition-all font-medium group", collapsed ? "justify-center w-12 h-12" : "px-4 py-3 w-full gap-3 text-sm")}
+                    className={cn("flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 dark:bg-white/5 rounded-xl transition-all font-medium group", collapsed ? "justify-center w-12 h-12" : "px-4 py-3 w-full gap-3 text-sm")}
                 >
                     <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform shrink-0" />
                     {!collapsed && <span className="truncate">Sign Out</span>}

@@ -139,7 +139,7 @@ export default function AddressAutocomplete({ value, onChange, placeholder = "Se
                 ) : query ? (
                     <button
                         onClick={handleClear}
-                        className="absolute right-3 p-1 rounded-full text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white hover:bg-white/10 transition-colors"
+                        className="absolute right-3 p-1 rounded-full text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/10 transition-colors"
                         type="button"
                     >
                         <X className="w-3 h-3" />

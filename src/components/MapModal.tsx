@@ -88,7 +88,7 @@ export default function MapModal({ onClose, onConfirm }: Props) {
                         </h3>
                         <p className="text-sm text-slate-600 dark:text-slate-400">Click anywhere on the map to pinpoint the exact location.</p>
                     </div>
-                    <button onClick={onClose} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
+                    <button onClick={onClose} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>

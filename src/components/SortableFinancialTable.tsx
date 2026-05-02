@@ -235,7 +235,7 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
                 <button
                     onClick={() => setCurrentPage(1)}
                     disabled={safePage === 1}
-                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
                     title="First Page"
                 >
                     <ChevronsLeft className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -243,7 +243,7 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
                 <button
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={safePage === 1}
-                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
                     title="Previous Page"
                 >
                     <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -269,7 +269,7 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
                 <button
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={safePage === totalPages}
-                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
                     title="Next Page"
                 >
                     <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -277,7 +277,7 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
                 <button
                     onClick={() => setCurrentPage(totalPages)}
                     disabled={safePage === totalPages}
-                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
                     title="Last Page"
                 >
                     <ChevronsRight className="w-4 h-4 sm:w-5 sm:h-5" />

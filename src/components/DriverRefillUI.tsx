@@ -502,13 +502,13 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                         <div className="flex bg-slate-100 dark:bg-black/40 p-1 rounded-xl border border-slate-200 dark:border-white/10 w-full mb-4">
                             <button
                                 onClick={() => setViewMode("BAG")}
-                                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${viewMode === "BAG" ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
+                                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${viewMode === "BAG" ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
                             >
                                 Bag Inventory
                             </button>
                             <button
                                 onClick={() => setViewMode("MACHINE")}
-                                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${viewMode === "MACHINE" ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
+                                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${viewMode === "MACHINE" ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
                             >
                                 Machine Stock
                             </button>

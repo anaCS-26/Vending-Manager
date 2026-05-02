@@ -2,7 +2,9 @@ export const revalidate = 30; // 30 second background revalidation
 import { getWarehouseInventory, getActiveDispatches } from "@/actions/inventory";
 import { getWarehouses } from "@/actions/warehouses";
 import { getPredictedDepletion } from "@/actions/predictions";
-import { PackageOpen, Truck, AlertCircle, Activity, MapPin, Clock, ShieldCheck, CheckCircle2, TrendingUp, Package, Zap } from "lucide-react";
+import { getRefillLogsPaginated } from "@/actions/history";
+import { PackageOpen, Truck, AlertCircle, Activity, MapPin, Clock, ShieldCheck, CheckCircle2, TrendingUp, Package, Zap, ArrowDownRight, Wrench } from "lucide-react";
+import Link from "next/link";
 import prisma from "@/lib/prisma";
 import MapVisualWrapper from "@/components/MapVisualWrapper";
 import { formatSaudiTime } from "@/lib/utils";
@@ -21,7 +23,8 @@ export default async function AdminDashboard() {
         pendingReturnsCount,
         machines,
         warehousesWithStats,
-        recentActivity,
+        recentActivityPaginated,
+        systemAuditLogs,
         predictions,
         recentLogsForSales
     ] = await Promise.all([
@@ -55,14 +58,10 @@ export default async function AdminDashboard() {
             },
             orderBy: { id: 'asc' }
         }),
-        prisma.refillLog.findMany({
-            orderBy: { refilled_at: 'desc' },
-            take: 5,
-            include: {
-                machine: true,
-                item: true,
-                dispatch: { include: { driver: true } }
-            }
+        getRefillLogsPaginated({ page: 1, pageSize: 6 }),
+        prisma.systemAuditLog.findMany({
+            orderBy: { timestamp: 'desc' },
+            take: 6
         }),
         getPredictedDepletion(),
         prisma.refillLog.findMany({
@@ -109,6 +108,89 @@ export default async function AdminDashboard() {
     const topSellingItems = Object.values(itemSales)
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 4);
+
+    type TimelineEvent = {
+        id: string;
+        type: 'REFILL' | 'RETURN' | 'ADMIN_ACTION';
+        title: string;
+        timestamp: Date;
+        description: React.ReactNode;
+        icon: React.ReactNode;
+        colorClass: string;
+    };
+
+    const timelineEvents: TimelineEvent[] = [];
+
+    // 1. Process operational history (Refills & Returns)
+    recentActivityPaginated.data.forEach((log: any) => {
+        if (log.isSurplusReturn) {
+            timelineEvents.push({
+                id: `ret_${log.id}`,
+                type: 'RETURN',
+                title: 'Driver Return',
+                timestamp: log.refilled_at, // mapped from reported_at
+                colorClass: 'text-accent-orange',
+                icon: <ArrowDownRight className="w-3 h-3 text-accent-orange" />,
+                description: (
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                        <span className="text-accent-blue font-bold">{log.driver?.name || "Driver"}</span> returned 
+                        <span className="text-slate-900 dark:text-white mx-1 font-mono">{log.expired_quantity} units</span>
+                        to warehouse.
+                    </p>
+                )
+            });
+        } else {
+            timelineEvents.push({
+                id: `ref_${log.id}`,
+                type: 'REFILL',
+                title: 'Machine Restocked',
+                timestamp: log.refilled_at,
+                colorClass: 'text-accent-purple',
+                icon: <CheckCircle2 className="w-3 h-3 text-accent-purple" />,
+                description: (
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                        <span className="text-accent-blue font-bold">{log.driver?.name || "System"}</span> refilled 
+                        <span className="text-slate-900 dark:text-white mx-1 font-mono">{log.quantity_refilled} units</span>
+                        at {log.machine?.location_name || "Unknown"}.
+                    </p>
+                )
+            });
+        }
+    });
+
+    // 2. Process admin audit logs
+    systemAuditLogs.forEach((audit) => {
+        let title = "System Action";
+        let desc = "An administrative action was performed.";
+        
+        switch (audit.actionType) {
+            case "CREATE_DISPATCH": title = "Dispatch Created"; desc = "A new dispatch was issued to a driver."; break;
+            case "UPDATE_ITEM": title = "Item Updated"; desc = "Catalog item details were modified."; break;
+            case "APPROVE_RETURN": title = "Return Verified"; desc = "An inventory return was successfully verified."; break;
+            case "LOG_BATCH_REFILL": title = "Admin Logged Refill"; desc = "Admin manually logged an inventory refill."; break;
+            case "UPDATE_MACHINE": title = "Machine Updated"; desc = "Machine configuration was modified."; break;
+            case "UPDATE_WAREHOUSE": title = "Warehouse Updated"; desc = "Warehouse configuration was modified."; break;
+            default: title = audit.actionType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()); break;
+        }
+
+        timelineEvents.push({
+            id: `aud_${audit.id}`,
+            type: 'ADMIN_ACTION',
+            title: title,
+            timestamp: audit.timestamp,
+            colorClass: 'text-slate-400',
+            icon: <Wrench className="w-3 h-3 text-slate-400" />,
+            description: (
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                    <span className="text-slate-900 dark:text-white font-bold">{audit.actorRole === 'super_admin' ? 'Admin' : 'System'}</span>: {desc}
+                </p>
+            )
+        });
+    });
+
+    // Sort and limit
+    timelineEvents.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    const recentTimeline = timelineEvents.slice(0, 6);
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
@@ -295,32 +377,28 @@ export default async function AdminDashboard() {
                             <div className="absolute left-[11px] top-2 bottom-2 w-px bg-slate-200 dark:bg-white/10"></div>
 
                             <div className="space-y-6 relative z-10">
-                                {recentActivity.slice(0, 4).map((log, index) => (
-                                    <div key={log.id} className="flex gap-4 group/timeline">
+                                {recentTimeline.map((event) => (
+                                    <div key={event.id} className="flex gap-4 group/timeline">
                                         <div className="mt-1 flex-shrink-0">
-                                            <div className="w-6 h-6 rounded-full bg-white dark:bg-black border-2 border-accent-purple/50 flex flex-col items-center justify-center group-hover/timeline:border-accent-purple group-hover/timeline:shadow-[0_0_10px_rgba(168,85,247,0.5)] transition-all">
-                                                <CheckCircle2 className="w-3 h-3 text-accent-purple" />
+                                            <div className={`w-6 h-6 rounded-full bg-white dark:bg-black border-2 border-slate-200 dark:border-white/10 flex flex-col items-center justify-center group-hover/timeline:border-current group-hover/timeline:shadow-[0_0_10px_currentColor] transition-all ${event.colorClass}`}>
+                                                {event.icon}
                                             </div>
                                         </div>
                                         <div className="flex-1 -mt-1">
                                             <div className="flex justify-between items-start mb-1">
-                                                <p className="text-sm font-semibold text-slate-900 dark:text-white group-hover/timeline:text-accent-purple transition-colors">
-                                                    {log.dispatch ? "Refill Synchronized" : "Audit Reconciled"}
+                                                <p className={`text-sm font-semibold text-slate-900 dark:text-white group-hover/timeline:text-current transition-colors ${event.colorClass}`}>
+                                                    {event.title}
                                                 </p>
                                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                                                    {formatSaudiTime(log.refilled_at, { timeStyle: 'short' })}
+                                                    {formatSaudiTime(event.timestamp, { timeStyle: 'short' })}
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                                                <span className="text-accent-blue font-bold">{log.dispatch?.driver?.name || "System Auditor"}</span> verified
-                                                <span className="text-slate-900 dark:text-white mx-1 font-mono">{log.quantity_refilled || log.items_sold_since_last_refill} units</span>
-                                                at {log.machine.location_name}.
-                                            </p>
+                                            {event.description}
                                         </div>
                                     </div>
                                 ))}
 
-                                {recentActivity.length === 0 && (
+                                {recentTimeline.length === 0 && (
                                     <div className="text-center text-slate-500 dark:text-slate-400 font-mono text-xs py-8 border border-slate-200 dark:border-white/5 rounded-2xl border-dashed">
                                         SYSTEM IDLE. AWAITING FEED.
                                     </div>
@@ -328,9 +406,11 @@ export default async function AdminDashboard() {
                             </div>
                         </div>
 
-                        <button className="mt-8 w-full py-3 bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest transition-all border border-slate-200 dark:border-white/5">
-                            View Full Audit Log
-                        </button>
+                        <Link href="/admin/history" className="mt-8 w-full block">
+                            <button className="w-full py-3 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-xl text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest transition-all border border-slate-200 dark:border-white/5">
+                                View Full Audit Log
+                            </button>
+                        </Link>
                     </div>
 
                 </div>

@@ -212,7 +212,7 @@ export default function UnifiedHistoryManager({ initialEvents, drivers }: Unifie
                     <button
                         onClick={() => goToPage(1)}
                         disabled={safePage === 1}
-                        className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                        className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
                         title="First Page"
                     >
                         <ChevronsLeft className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -220,7 +220,7 @@ export default function UnifiedHistoryManager({ initialEvents, drivers }: Unifie
                     <button
                         onClick={() => goToPage(Math.max(1, safePage - 1))}
                         disabled={safePage === 1}
-                        className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                        className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
                         title="Previous Page"
                     >
                         <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -246,7 +246,7 @@ export default function UnifiedHistoryManager({ initialEvents, drivers }: Unifie
                     <button
                         onClick={() => goToPage(Math.min(totalPages, safePage + 1))}
                         disabled={safePage === totalPages}
-                        className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                        className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
                         title="Next Page"
                     >
                         <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -254,7 +254,7 @@ export default function UnifiedHistoryManager({ initialEvents, drivers }: Unifie
                     <button
                         onClick={() => goToPage(totalPages)}
                         disabled={safePage === totalPages}
-                        className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all shadow-sm"
+                        className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
                         title="Last Page"
                     >
                         <ChevronsRight className="w-4 h-4 sm:w-5 sm:h-5" />

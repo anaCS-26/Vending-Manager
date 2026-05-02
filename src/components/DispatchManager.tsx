@@ -667,7 +667,7 @@ function WarehouseSelect({ warehouses, selected, onChange }: { warehouses: Wareh
                             <button
                                 type="button"
                                 onClick={() => { onChange(""); setIsOpen(false); }}
-                                className="w-full text-left px-5 py-3 hover:bg-slate-100 dark:bg-white/5 transition-colors text-slate-500 dark:text-slate-400 text-sm italic"
+                                className="w-full text-left px-5 py-3 hover:bg-slate-100 dark:hover:bg-white/10 dark:bg-white/5 transition-colors text-slate-500 dark:text-slate-400 text-sm italic"
                             >
                                 -- Clear Selection --
                             </button>

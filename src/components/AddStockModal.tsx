@@ -136,7 +136,7 @@ export default function AddStockModal({ isOpen, onClose, warehouses, existingIte
                                 <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Receive Stock</h2>
                                 <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Register new items or top-up existing inventory</p>
                             </div>
-                            <button onClick={onClose} className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-white/5 hover:text-slate-900 dark:text-white rounded-xl transition-colors">
+                            <button onClick={onClose} className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 dark:bg-white/5 hover:text-slate-900 dark:hover:text-white rounded-xl transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
@@ -263,7 +263,7 @@ export default function AddStockModal({ isOpen, onClose, warehouses, existingIte
                                                         </p>
                                                     )}
                                                 </div>
-                                                <button onClick={() => setSelectedItemId(null)} className="text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white underline ml-4">Change</button>
+                                                <button onClick={() => setSelectedItemId(null)} className="text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white underline ml-4">Change</button>
                                             </div>
                                         )}
 
@@ -357,7 +357,7 @@ export default function AddStockModal({ isOpen, onClose, warehouses, existingIte
                         <div className="p-6 border-t border-slate-200 dark:border-white/5 flex justify-end gap-3 bg-white/[0.02] shrink-0">
                             <button
                                 onClick={onClose}
-                                className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-500 dark:text-slate-400 dark:text-slate-300 hover:text-slate-900 dark:text-white hover:bg-slate-100 dark:bg-white/5 transition-colors"
+                                className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-500 dark:text-slate-400 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 dark:bg-white/5 transition-colors"
                             >
                                 Cancel
                             </button>
