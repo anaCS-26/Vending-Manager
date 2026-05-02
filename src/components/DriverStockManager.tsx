@@ -99,6 +99,16 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
         }
     };
 
+    // First "+" click on an unselected row jumps to the item's configured
+    // default (e.g., a 30-can pack for 7UP). Subsequent +/- behave normally.
+    const handleIncrement = (itemId: number, currentQty: number, defaultQty: number, max: number) => {
+        if (currentQty === 0 && defaultQty > 0) {
+            handleQtyChange(itemId, String(defaultQty), max);
+        } else {
+            handleQtyChange(itemId, String(currentQty + 1), max);
+        }
+    };
+
     const handlePush = () => {
         if (!selectedDriverId || !selectedWarehouseId) return;
         const driverId = parseInt(selectedDriverId);
@@ -225,6 +235,12 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
                                                             {inv.item.sku}
                                                             <span className="text-slate-300 dark:text-slate-600">|</span>
                                                             Max: {inv.quantity_on_hand}
+                                                            {inv.item.default_assignment_qty > 0 && (
+                                                                <>
+                                                                    <span className="text-slate-300 dark:text-slate-600">|</span>
+                                                                    <span className="text-accent-blue/80">Default: {inv.item.default_assignment_qty}</span>
+                                                                </>
+                                                            )}
                                                         </span>
                                                     </div>
                                                     
@@ -244,8 +260,8 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
                                                             onChange={(e) => handleQtyChange(inv.itemId, e.target.value, inv.quantity_on_hand)}
                                                             className="w-8 bg-transparent text-center text-xs font-black text-slate-900 dark:text-white focus:outline-none"
                                                         />
-                                                        <button 
-                                                            onClick={() => handleQtyChange(inv.itemId, String(qty + 1), inv.quantity_on_hand)}
+                                                        <button
+                                                            onClick={() => handleIncrement(inv.itemId, qty, inv.item.default_assignment_qty, inv.quantity_on_hand)}
                                                             disabled={qty >= inv.quantity_on_hand}
                                                             className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/10 rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                                                         >

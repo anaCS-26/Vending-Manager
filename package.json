@@ -14,6 +14,8 @@
     "db:seed-csv:prod": "tsx scripts/seed-csv.ts --env=prod",
     "db:seed-stock:dev": "tsx scripts/seed-stock.ts --env=dev",
     "db:seed-stock:prod": "tsx scripts/seed-stock.ts --env=prod",
+    "db:seed-default-qty:dev": "tsx scripts/seed-default-assignment-qty.ts --env=dev",
+    "db:seed-default-qty:prod": "tsx scripts/seed-default-assignment-qty.ts --env=prod",
     "test": "vitest",
     "test:coverage": "vitest run --coverage"
   },

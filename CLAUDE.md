@@ -9,8 +9,8 @@ NexGen Vending Management System (AII) — full-stack inventory/logistics for a 
 ## Commands
 
 - `npm run dev` / `npm run build` (runs `prisma generate` first) / `npm run lint` / `npm start`.
-- Schema: edit `prisma/schema.prisma` → `npx prisma migrate dev --name <change>` → `npx prisma generate`.
-- Seeding: `npm run db:seed:dev`, `db:seed-csv:dev`, `db:seed-stock:dev`. `db:reset:dev` is destructive. `:prod` variants exist — be deliberate.
+- Schema: edit `prisma/schema.prisma` → `npx prisma db push` → `npx prisma generate`. (No `prisma/migrations/` folder — this project uses `db push`, not migrations.)
+- Seeding: `npm run db:seed:dev`, `db:seed-csv:dev`, `db:seed-stock:dev`, `db:seed-default-qty:dev`. `db:reset:dev` is destructive. `:prod` variants exist — be deliberate.
 - Tests: `npm run test` (Vitest). See [TESTING.md](TESTING.md) for layout and conventions — tests live under `tests/` mirroring `src/`, with Prisma/NextAuth/Upstash globally mocked in `vitest.setup.ts`.
 
 ## Stack
@@ -62,7 +62,7 @@ WAC recomputes when POs are received. Supplier shortages stack into `WarehouseSt
 
 ## Domain model highlights
 
-- `Item`: three price tiers (`price_standard`, `price_hospital`, `price_hotel`) plus WAC `cost`; `Machine.tier` selects which applies at refill.
+- `Item`: three price tiers (`price_standard`, `price_hospital`, `price_hotel`) plus WAC `cost`; `Machine.tier` selects which applies at refill. `default_assignment_qty` is the case-pack count prefilled in `DriverStockManager` when an admin first clicks `+` on an item (0 = no default, admin types manually). Seeded from `prisma/seed-data-templates/Item_Default_Assignment_Qty.csv` via `db:seed-default-qty`.
 - `Dispatch` (`OPEN | CLOSED`) and `DispatchItem` are frozen historical records — never deleted. New flows write `dispatchId: null` and rely on denormalized `driverId` on `RefillLog`/`ReturnVerification`.
 - `DriverStock` is the running per-driver bag; primary allocation surface post-refactor.
 - `StockAssignment` is the audit row for an admin→driver push: snapshots `cost_at_assignment` and tracks `PENDING_ACK → ACKNOWLEDGED | DISPUTED`.
