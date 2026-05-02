@@ -21,6 +21,10 @@ model Item {
   price_hotel          Float                 @default(0.0)
   cost                 Float                 @default(0.0)
   last_purchase_cost   Float                 @default(0.0)
+  // Default quantity prefilled when an admin clicks "+" to add this item to a
+  // driver's bag. 0 = no default (admin types manually). Sourced from the
+  // client's case-pack list; see scripts/seed-default-assignment-qty.ts.
+  default_assignment_qty Int                 @default(0)
   imageUrl             String?
   // Relations
   DispatchItems        DispatchItem[]
