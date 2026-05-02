@@ -18,7 +18,6 @@ export default function LoginForm() {
                     <MapPin className="w-10 h-10 text-emerald-400" />
                 </div>
                 <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter mb-2">Vending Core</h1>
-                <p className="text-slate-500 dark:text-slate-400 font-mono text-[10px] tracking-[0.2em] uppercase font-bold">Secure Access Gateway</p>
             </div>
 
             <div className="glass-panel border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 relative overflow-hidden shadow-2xl bg-gradient-to-b from-white/5 to-transparent backdrop-blur-xl">
@@ -74,7 +73,7 @@ export default function LoginForm() {
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1 mb-2 block">4-Digit PIN</label>
+                                        <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Password</label>
                                         <div className="relative">
                                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                                                 <KeySquare className="w-5 h-5" />
@@ -83,10 +82,9 @@ export default function LoginForm() {
                                                 type={showPassword ? "text" : "password"}
                                                 inputMode="numeric"
                                                 pattern="[0-9]*"
-                                                maxLength={4}
                                                 name="pin"
                                                 required
-                                                placeholder="••••"
+                                                placeholder="••••••••"
                                                 className="w-full pl-12 pr-12 py-4 rounded-xl bg-slate-100 dark:bg-black/60 border border-slate-200 dark:border-white/10 focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue outline-none transition-all text-slate-900 dark:text-white font-mono placeholder:text-slate-400 dark:placeholder:text-slate-600 tracking-widest text-lg"
                                             />
                                             <button
@@ -167,10 +165,6 @@ export default function LoginForm() {
                         )}
                     </button>
                 </form>
-            </div>
-
-            <div className="mt-8 text-center text-[10px] font-mono text-slate-400 dark:text-slate-600 uppercase tracking-widest opacity-50">
-                System Core v2.0 • Restricted Area
             </div>
         </div>
     )

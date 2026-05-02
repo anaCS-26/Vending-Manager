@@ -79,3 +79,7 @@ prisma/seed-data-templates/*.xlsx
 
 # Scripts and sensitive data tools
 scripts/
+
+# Demo files
+DEMO_SCRIPT.md
+prisma/seed-demo.ts

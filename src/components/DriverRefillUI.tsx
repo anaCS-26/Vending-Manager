@@ -38,7 +38,8 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
         setServerData, 
         offlineLogs, 
         addOfflineLog, 
-        removeOfflineLogs 
+        removeOfflineLogs,
+        clearOfflineLogs
     } = useDriverStore();
 
     const [hydrated, setHydrated] = useState(false);
@@ -170,7 +171,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
             .filter(log => log.dispatchId === currentDispatch.id)
             .flatMap(log => log.payload)
             .filter(payload => payload.itemId === itemId)
-            .reduce((sum, payload) => sum + payload.refilled, 0);
+            .reduce((sum, payload) => sum + payload.refilled + (payload.bag_returned || 0), 0);
 
         return Math.max(0, given - serverConsumed - offlineConsumed);
     }
@@ -404,10 +405,6 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                     )}
                 </AnimatePresence>
 
-                <p className="text-accent-blue text-xs font-semibold mb-2 flex items-center gap-2 uppercase tracking-wider">
-                    <Zap className="w-3 h-3 text-accent-blue" />
-                    Shift Active
-                </p>
 
                 {(userRole === 'admin' || userRole === 'super_admin') && activeDispatches.length > 1 ? (
                     <select

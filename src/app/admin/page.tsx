@@ -122,12 +122,6 @@ export default async function AdminDashboard() {
                         Real-time fleet intelligence and revenue performance matrix.
                     </p>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="glass-panel px-4 py-2 rounded-xl flex items-center gap-2 border border-slate-200 dark:border-white/5 bg-emerald-500/5">
-                        <span className="w-2 h-2 rounded-full bg-accent-green animate-pulse"></span>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">Live Network Active</span>
-                    </div>
-                </div>
             </div>
 
             {/* Cybernetic Metric Cards */}
@@ -178,11 +172,6 @@ export default async function AdminDashboard() {
                             <MapPin className="w-5 h-5 text-accent-blue" />
                             Live Fleet Map & Dispatch Matrix
                         </h2>
-                        <div className="flex gap-2">
-                            <div className="px-3 py-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-full text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tighter">
-                                Center: Riyadh Metropolitan
-                            </div>
-                        </div>
                     </div>
                     <MapVisualWrapper machines={machines} predictions={predictions} warehouses={warehousesWithStats} />
 
