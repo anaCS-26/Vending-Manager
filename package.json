@@ -13,7 +13,9 @@
     "db:seed-csv:dev": "tsx scripts/seed-csv.ts --env=dev",
     "db:seed-csv:prod": "tsx scripts/seed-csv.ts --env=prod",
     "db:seed-stock:dev": "tsx scripts/seed-stock.ts --env=dev",
-    "db:seed-stock:prod": "tsx scripts/seed-stock.ts --env=prod"
+    "db:seed-stock:prod": "tsx scripts/seed-stock.ts --env=prod",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
@@ -53,19 +55,29 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/leaflet.markercluster": "^1.5.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.5",
     "dotenv": "^17.3.1",
     "eslint": "^9",
     "eslint-config-next": "^16.2.0",
+    "jsdom": "^28.1.0",
     "prisma": "^6.19.2",
     "supabase": "^2.84.4",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.5",
+    "vitest-mock-extended": "^4.0.0"
   },
   "prisma": {
     "seed": "tsx scripts/seed-dev.ts"

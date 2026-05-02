@@ -11,7 +11,7 @@ NexGen Vending Management System (AII) — full-stack inventory/logistics for a 
 - `npm run dev` / `npm run build` (runs `prisma generate` first) / `npm run lint` / `npm start`.
 - Schema: edit `prisma/schema.prisma` → `npx prisma migrate dev --name <change>` → `npx prisma generate`.
 - Seeding: `npm run db:seed:dev`, `db:seed-csv:dev`, `db:seed-stock:dev`. `db:reset:dev` is destructive. `:prod` variants exist — be deliberate.
-- No test suite.
+- Tests: `npm run test` (Vitest). See [TESTING.md](TESTING.md) for layout and conventions — tests live under `tests/` mirroring `src/`, with Prisma/NextAuth/Upstash globally mocked in `vitest.setup.ts`.
 
 ## Stack
 

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth-utils";
 import { writeAuditLog } from "@/lib/audit-utils";
 import { notifyClients } from "@/lib/notify";
+import { computeWeightedCost } from "@/lib/wac-math";
 
 /**
  * ============================================================================
@@ -103,12 +104,13 @@ export async function completePurchaseOrder(
                 const totalCurrentQty = (wStock._sum.quantity_on_hand || 0) + (mStock._sum.estimated_stock || 0) + (dStock._sum.quantity_on_hand || 0);
                 const itemData = await tx.item.findUnique({ where: { id: orderItem.itemId }, select: { cost: true } });
                 const currentCost = itemData?.cost || 0;
-                
-                const previousValue = totalCurrentQty * currentCost;
-                const incomingValue = item.quantityReceived * item.costPerUnit;
-                const newTotalQty = totalCurrentQty + item.quantityReceived;
-                
-                const newWeightedCost = newTotalQty > 0 ? (previousValue + incomingValue) / newTotalQty : item.costPerUnit;
+
+                const newWeightedCost = computeWeightedCost(
+                    totalCurrentQty,
+                    currentCost,
+                    item.quantityReceived,
+                    item.costPerUnit,
+                );
 
                 // Upsert to warehouse stock
                 if (item.quantityReceived > 0 || deficitChange !== 0) {
