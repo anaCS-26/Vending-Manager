@@ -13,7 +13,8 @@ import {
     Plus,
     Minus,
     Check,
-    ClipboardList
+    ClipboardList,
+    X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -245,27 +246,42 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
                                                     </div>
                                                     
                                                     {/* Inline Quantity Controls */}
-                                                    <div className="flex items-center bg-slate-100 dark:bg-black/40 rounded-md p-0.5 border border-slate-200 dark:border-white/5 shrink-0">
-                                                        <button 
-                                                            onClick={() => handleQtyChange(inv.itemId, String(qty - 1), inv.quantity_on_hand)}
-                                                            className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/10 rounded transition-all"
-                                                        >
-                                                            <Minus className="w-3 h-3" />
-                                                        </button>
-                                                        <input 
-                                                            type="text"
-                                                            inputMode="numeric"
-                                                            value={qty || ""}
-                                                            placeholder="0"
-                                                            onChange={(e) => handleQtyChange(inv.itemId, e.target.value, inv.quantity_on_hand)}
-                                                            className="w-8 bg-transparent text-center text-xs font-black text-slate-900 dark:text-white focus:outline-none"
-                                                        />
+                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                        <div className="flex items-center bg-slate-100 dark:bg-black/40 rounded-md p-0.5 border border-slate-200 dark:border-white/5">
+                                                            <button
+                                                                onClick={() => handleQtyChange(inv.itemId, String(qty - 1), inv.quantity_on_hand)}
+                                                                className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/10 rounded transition-all"
+                                                            >
+                                                                <Minus className="w-3 h-3" />
+                                                            </button>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="numeric"
+                                                                value={qty || ""}
+                                                                placeholder="0"
+                                                                onChange={(e) => handleQtyChange(inv.itemId, e.target.value, inv.quantity_on_hand)}
+                                                                className="w-8 bg-transparent text-center text-xs font-black text-slate-900 dark:text-white focus:outline-none"
+                                                            />
+                                                            <button
+                                                                onClick={() => handleIncrement(inv.itemId, qty, inv.item.default_assignment_qty, inv.quantity_on_hand)}
+                                                                disabled={qty >= inv.quantity_on_hand}
+                                                                className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/10 rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            >
+                                                                <Plus className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
                                                         <button
-                                                            onClick={() => handleIncrement(inv.itemId, qty, inv.item.default_assignment_qty, inv.quantity_on_hand)}
-                                                            disabled={qty >= inv.quantity_on_hand}
-                                                            className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/10 rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            onClick={() => handleQtyChange(inv.itemId, "0", inv.quantity_on_hand)}
+                                                            aria-label="Remove from assignment"
+                                                            title="Remove from assignment"
+                                                            className={`p-1 rounded-md border transition-all ${
+                                                                isSelected
+                                                                    ? "text-accent-pink border-accent-pink/30 bg-accent-pink/5 hover:bg-accent-pink/10 hover:border-accent-pink/50"
+                                                                    : "text-slate-300 dark:text-slate-700 border-transparent cursor-not-allowed opacity-40"
+                                                            }`}
+                                                            disabled={!isSelected}
                                                         >
-                                                            <Plus className="w-3 h-3" />
+                                                            <X className="w-3.5 h-3.5" />
                                                         </button>
                                                     </div>
                                                 </div>
@@ -543,7 +559,6 @@ function EmptyState({ icon, title, message }: { icon: React.ReactNode; title: st
     );
 }
 
-import { X } from "lucide-react";
 import { dismissAssignment } from "@/actions/driver-stock";
 
 function AssignmentCard({ assignment, isDisputed }: { assignment: StockAssignmentLite; isDisputed: boolean }) {
