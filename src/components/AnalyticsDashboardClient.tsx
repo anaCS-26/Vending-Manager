@@ -151,7 +151,7 @@ export default function AnalyticsDashboardClient({ machinesData, allRefillsData 
                 </div>
 
                 {/* Dynamic Right Panel (Category or Machine Top Items) */}
-                <div className="glass-panel border border-slate-200 dark:border-white/5 rounded-3xl overflow-hidden shadow-2xl p-6 flex flex-col">
+                <div className="glass-panel border border-slate-200 dark:border-white/5 rounded-3xl overflow-hidden shadow-2xl p-6">
                     <h3 className="font-semibold text-slate-900 dark:text-white tracking-tight text-lg flex items-center gap-2 mb-6">
                         {selectedMachineId === "all" ? (
                             <><Package className="w-5 h-5 text-accent-purple" /> Category Breakdown</>
@@ -160,7 +160,7 @@ export default function AnalyticsDashboardClient({ machinesData, allRefillsData 
                         )}
                     </h3>
 
-                    <div className="flex-1 w-full relative min-h-[200px]">
+                    <div className="h-[300px] w-full relative">
                         {!isMounted ? (
                             <div className="w-full h-full flex items-center justify-center text-slate-500 animate-pulse bg-slate-100 dark:bg-white/5 rounded-xl mt-4">Loading chart...</div>
                         ) : selectedMachineId === "all" ? (

@@ -23,6 +23,7 @@ type ReturnVerificationType = {
     verified_at: Date | null;
     item: {
         name: string;
+        sku: string;
         price_standard: number;
     };
     dispatch: {
@@ -136,7 +137,14 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                             </span>
                                         </div>
 
-                                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{ret.item.name}</h3>
+                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{ret.item.name}</h3>
+                                            {ret.item.sku && (
+                                                <span className="text-[10px] font-mono text-slate-700 dark:text-white/60 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded">
+                                                    {ret.item.sku}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="text-2xl font-black text-slate-900 dark:text-white/90 mb-4 tracking-tight">
                                             {ret.quantity} <span className="text-sm font-medium text-slate-600 dark:text-slate-400 uppercase tracking-widest ml-1">Units</span>
                                         </div>
@@ -231,7 +239,14 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                                 <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">{his.dispatchId !== null ? `Route #${his.dispatchId.toString().padStart(4, '0')}` : 'Driver bag'}</div>
                                             </td>
                                             <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm text-slate-500 dark:text-slate-400 dark:text-slate-300">
-                                                {his.item.name}
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="text-slate-900 dark:text-white font-medium">{his.item.name}</span>
+                                                    {his.item.sku && (
+                                                        <span className="text-[10px] font-mono text-slate-700 dark:text-white/60 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded">
+                                                            {his.item.sku}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm text-slate-900 dark:text-white">
                                                 {his.quantity}
