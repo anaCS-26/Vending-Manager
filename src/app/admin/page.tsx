@@ -50,6 +50,8 @@ export default async function AdminDashboard() {
         systemAuditLogs,
         predictions,
         recentLogsForSales,
+        admins,
+        drivers,
     ] = await Promise.all([
         auth(),
         getOverviewSnapshot(),
@@ -71,18 +73,39 @@ export default async function AdminDashboard() {
             },
             orderBy: { id: "asc" },
         }),
-        getRefillLogsPaginated({ page: 1, pageSize: 8, dateFrom: startOfDayISO }),
+        // Pull a wider window so the per-machine grouping below has enough
+        // rows to collapse — a single refill session emits one row per item.
+        getRefillLogsPaginated({ page: 1, pageSize: 50, dateFrom: startOfDayISO }),
         prisma.systemAuditLog.findMany({
             where: { timestamp: { gte: startOfDay } },
             orderBy: { timestamp: "desc" },
-            take: 8,
+            take: 12,
         }),
         getPredictedDepletion(),
         prisma.refillLog.findMany({
             where: { refilled_at: { gte: sevenDaysAgo } },
             include: { item: true },
         }),
+        prisma.admin.findMany({ select: { id: true, name: true, email: true } }),
+        prisma.driver.findMany({ select: { id: true, name: true } }),
     ]);
+
+    const adminNames = new Map(admins.map((a) => [a.id, a.name?.split(" ")[0] || a.email.split("@")[0]] as const));
+    const driverNames = new Map(drivers.map((d) => [d.id, d.name.split(" ")[0]] as const));
+
+    // Resolve driver context for StockAssignment-targeted audit rows so we can
+    // say "Sarah's assignment" instead of "an assignment".
+    const assignmentIds = systemAuditLogs
+        .filter((a) => a.entityType === "StockAssignment" && a.entityId != null)
+        .map((a) => a.entityId as number);
+    const assignmentDriverMap = new Map<number, number>();
+    if (assignmentIds.length > 0) {
+        const rows = await prisma.stockAssignment.findMany({
+            where: { id: { in: assignmentIds } },
+            select: { id: true, driverId: true },
+        });
+        rows.forEach((r) => assignmentDriverMap.set(r.id, r.driverId));
+    }
 
     const {
         revenueToday,
@@ -121,8 +144,27 @@ export default async function AdminDashboard() {
         description: React.ReactNode;
         icon: React.ReactNode;
         colorClass: string;
+        // Used to merge consecutive identical events into a single row with a count.
+        groupKey?: string;
+        count?: number;
+        // Re-render the line when count > 1. Receives the merged count.
+        pluralBody?: (count: number) => string;
     };
     const timelineEvents: TimelineEvent[] = [];
+
+    // Bucket refill rows by (driver, machine, 10-min window). One physical
+    // refill session emits N rows (one per item slot); the admin perceives it
+    // as a single event, so collapse before rendering.
+    type RefillBucket = {
+        driverName: string;
+        machineName: string;
+        machineId: number;
+        totalUnits: number;
+        itemCount: number;
+        latest: Date;
+    };
+    const REFILL_BUCKET_MS = 10 * 60 * 1000;
+    const refillBuckets = new Map<string, RefillBucket>();
 
     recentActivityPaginated.data.forEach((log: any) => {
         if (log.isSurplusReturn) {
@@ -143,81 +185,297 @@ export default async function AdminDashboard() {
                     </p>
                 ),
             });
+            return;
+        }
+
+        const ts = new Date(log.refilled_at);
+        const bucketIdx = Math.floor(ts.getTime() / REFILL_BUCKET_MS);
+        const key = `${log.driverId ?? "sys"}:${log.machineId}:${bucketIdx}`;
+        const existing = refillBuckets.get(key);
+        if (existing) {
+            existing.totalUnits += log.quantity_refilled || 0;
+            existing.itemCount += 1;
+            if (ts > existing.latest) existing.latest = ts;
         } else {
-            timelineEvents.push({
-                id: `ref_${log.id}`,
-                title: "Machine Restocked",
-                timestamp: log.refilled_at,
-                colorClass: "text-accent-purple",
-                icon: <CheckCircle2 className="w-3 h-3 text-accent-purple" />,
-                description: (
-                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                        <span className="text-accent-blue font-bold">{log.driver?.name || "System"}</span>{" "}
-                        refilled
-                        <span className="text-slate-900 dark:text-white mx-1 font-mono">
-                            {log.quantity_refilled} units
-                        </span>
-                        at {log.machine?.location_name || "Unknown"}.
-                    </p>
-                ),
+            refillBuckets.set(key, {
+                driverName: log.driver?.name || "System",
+                machineName: log.machine?.location_name || "Unknown",
+                machineId: log.machineId,
+                totalUnits: log.quantity_refilled || 0,
+                itemCount: 1,
+                latest: ts,
             });
         }
     });
 
-    systemAuditLogs.forEach((audit) => {
-        let title = "System Action";
-        let desc = "An administrative action was performed.";
-        switch (audit.actionType) {
-            case "CREATE_DISPATCH":
-                title = "Dispatch Created";
-                desc = "A new dispatch was issued to a driver.";
-                break;
-            case "UPDATE_ITEM":
-                title = "Item Updated";
-                desc = "Catalog item details were modified.";
-                break;
-            case "APPROVE_RETURN":
-                title = "Return Verified";
-                desc = "An inventory return was successfully verified.";
-                break;
-            case "LOG_BATCH_REFILL":
-                title = "Admin Logged Refill";
-                desc = "Admin manually logged an inventory refill.";
-                break;
-            case "UPDATE_MACHINE":
-                title = "Machine Updated";
-                desc = "Machine configuration was modified.";
-                break;
-            case "UPDATE_WAREHOUSE":
-                title = "Warehouse Updated";
-                desc = "Warehouse configuration was modified.";
-                break;
-            default:
-                title = audit.actionType
-                    .replace(/_/g, " ")
-                    .toLowerCase()
-                    .replace(/\b\w/g, (l) => l.toUpperCase());
-                break;
-        }
+    refillBuckets.forEach((b, key) => {
         timelineEvents.push({
-            id: `aud_${audit.id}`,
-            title,
-            timestamp: audit.timestamp,
-            colorClass: "text-slate-400",
-            icon: <Wrench className="w-3 h-3 text-slate-400" />,
+            id: `refgrp_${key}`,
+            title: "Machine Restocked",
+            timestamp: b.latest,
+            colorClass: "text-accent-purple",
+            icon: <CheckCircle2 className="w-3 h-3 text-accent-purple" />,
             description: (
                 <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                    <span className="text-slate-900 dark:text-white font-bold">
-                        {audit.actorRole === "super_admin" ? "Admin" : "System"}
+                    <span className="text-accent-blue font-bold">{b.driverName}</span>{" "}
+                    refilled
+                    <span className="text-slate-900 dark:text-white mx-1 font-mono">
+                        {b.totalUnits} units
                     </span>
-                    : {desc}
+                    {b.itemCount > 1 && (
+                        <span className="text-slate-500 dark:text-slate-400">
+                            across {b.itemCount} items{" "}
+                        </span>
+                    )}
+                    at {b.machineName}{" "}
+                    <span className="font-mono text-slate-500 dark:text-slate-400">
+                        #{b.machineId}
+                    </span>
+                    .
                 </p>
             ),
         });
     });
 
+    // Audit rows that just shadow what the refill/return feed already shows.
+    // Hiding them here keeps the overview a glance card; the full audit log
+    // page still surfaces them.
+    const REDUNDANT_AUDIT_TYPES = new Set([
+        "LOG_BATCH_REFILL",
+        "LOG_REFILL",
+        "SUBMIT_UNVERIFIED_RETURN",
+        "EDIT_UNVERIFIED_RETURN",
+    ]);
+
+    systemAuditLogs.forEach((audit) => {
+        if (REDUNDANT_AUDIT_TYPES.has(audit.actionType)) return;
+        const actorRole = (audit.actorRole || "").toLowerCase();
+        const isDriverActor = actorRole === "driver";
+        const isAdminActor = actorRole === "admin" || actorRole === "super_admin";
+        const actorName =
+            (isDriverActor && audit.actorId != null && driverNames.get(audit.actorId)) ||
+            (isAdminActor && audit.actorId != null && adminNames.get(audit.actorId)) ||
+            (isAdminActor ? "An admin" : isDriverActor ? "A driver" : "System");
+
+        // Try to surface the relevant driver name when the entity is driver-scoped.
+        let targetDriver: string | undefined;
+        if (audit.entityType === "Driver" && audit.entityId != null) {
+            targetDriver = driverNames.get(audit.entityId);
+        } else if (audit.entityType === "StockAssignment" && audit.entityId != null) {
+            const did = assignmentDriverMap.get(audit.entityId);
+            if (did != null) targetDriver = driverNames.get(did);
+        }
+
+        const newState = (audit.newState as any) || {};
+        const oldState = (audit.oldState as any) || {};
+
+        // entityName: a short label for things like items, machines, warehouses
+        const entityName: string | undefined =
+            newState?.name ||
+            newState?.location_name ||
+            oldState?.name ||
+            oldState?.location_name;
+
+        let title = "System Action";
+        let body = "";
+        let pluralBody: ((n: number) => string) | undefined;
+        let icon = <Wrench className="w-3 h-3 text-slate-400" />;
+        let colorClass = "text-slate-400";
+        // Group key collapses repeats from the same actor performing the same
+        // action against the same target. Anything sharing a key within
+        // ~30min becomes one row with a count.
+        const targetKey = audit.entityType === "StockAssignment"
+            ? `drv:${assignmentDriverMap.get(audit.entityId ?? -1) ?? "?"}`
+            : audit.entityType === "Driver"
+            ? `drv:${audit.entityId ?? "?"}`
+            : `${audit.entityType}:${audit.entityId ?? "?"}`;
+        let groupKey: string | undefined = `${audit.actionType}:${audit.actorId ?? "?"}:${targetKey}`;
+
+        switch (audit.actionType) {
+            case "ASSIGN_STOCK": {
+                title = "Stock Assigned";
+                colorClass = "text-accent-blue";
+                icon = <UserCheck className="w-3 h-3 text-accent-blue" />;
+                const items = Array.isArray(newState?.items) ? newState.items : [];
+                const totalQty = items.reduce((s: number, i: any) => s + (Number(i?.quantity) || 0), 0);
+                const lines = items.length;
+                body = `${actorName} assigned ${totalQty || lines} ${totalQty ? "unit" : "item"}${
+                    (totalQty || lines) === 1 ? "" : "s"
+                } to ${targetDriver || "a driver"}.`;
+                break;
+            }
+            case "ACK_ASSIGNMENT":
+                title = "Driver Acknowledged";
+                colorClass = "text-accent-green";
+                icon = <CheckCircle2 className="w-3 h-3 text-accent-green" />;
+                body = `${actorName} acknowledged 1 assignment.`;
+                pluralBody = (n) => `${actorName} acknowledged ${n} assignments.`;
+                break;
+            case "DENY_ASSIGNMENT":
+                title = "Driver Denied";
+                colorClass = "text-accent-pink";
+                icon = <AlertCircle className="w-3 h-3 text-accent-pink" />;
+                body = `${actorName} denied 1 assignment.`;
+                pluralBody = (n) => `${actorName} denied ${n} assignments.`;
+                break;
+            case "DISMISS_ASSIGNMENT":
+                title = "Assignment Dismissed";
+                body = `${actorName} dismissed ${targetDriver ? `${targetDriver}'s` : "a"} denied assignment.`;
+                pluralBody = (n) =>
+                    `${actorName} dismissed ${n} ${targetDriver ? `${targetDriver}'s` : ""} denied assignments.`;
+                break;
+            case "DRIVER_RETURN_SUBMIT":
+                title = "Driver Submitted Return";
+                colorClass = "text-accent-orange";
+                icon = <ArrowDownRight className="w-3 h-3 text-accent-orange" />;
+                body = `${actorName} submitted a return.`;
+                pluralBody = (n) => `${actorName} submitted ${n} returns.`;
+                break;
+            case "APPROVE_RETURN":
+                title = "Return Approved";
+                colorClass = "text-accent-green";
+                icon = <ShieldCheck className="w-3 h-3 text-accent-green" />;
+                body = `${actorName} approved a return.`;
+                pluralBody = (n) => `${actorName} approved ${n} returns.`;
+                break;
+            case "REJECT_RETURN":
+                title = "Return Rejected";
+                colorClass = "text-accent-pink";
+                icon = <ShieldCheck className="w-3 h-3 text-accent-pink" />;
+                body = `${actorName} rejected a return.`;
+                pluralBody = (n) => `${actorName} rejected ${n} returns.`;
+                break;
+            case "LOG_BATCH_REFILL":
+                title = "Refill Logged";
+                colorClass = "text-accent-purple";
+                icon = <CheckCircle2 className="w-3 h-3 text-accent-purple" />;
+                body = `${actorName} logged a refill${targetDriver ? ` for ${targetDriver}` : ""}.`;
+                pluralBody = (n) =>
+                    `${actorName} logged ${n} refills${targetDriver ? ` for ${targetDriver}` : ""}.`;
+                break;
+            case "LOG_REFILL":
+                title = "Refill Logged";
+                colorClass = "text-accent-purple";
+                icon = <CheckCircle2 className="w-3 h-3 text-accent-purple" />;
+                body = `${actorName} logged a machine refill.`;
+                pluralBody = (n) => `${actorName} logged ${n} machine refills.`;
+                break;
+            case "CREATE_DISPATCH":
+                title = "Dispatch Created";
+                body = `${actorName} dispatched stock${targetDriver ? ` to ${targetDriver}` : ""}.`;
+                break;
+            case "SUBMIT_UNVERIFIED_RETURN":
+                title = "Return Submitted";
+                body = `${actorName} submitted an unverified return.`;
+                break;
+            case "EDIT_UNVERIFIED_RETURN":
+                title = "Return Edited";
+                body = `${actorName} edited a pending return.`;
+                break;
+            case "UPDATE_ITEM":
+                title = "Item Updated";
+                body = `${actorName} updated item${entityName ? ` ${entityName}` : ""}.`;
+                break;
+            case "CREATE_QUICK_ITEM":
+                title = "Item Added";
+                body = `${actorName} added item${entityName ? ` ${entityName}` : ""}.`;
+                break;
+            case "UPDATE_MACHINE":
+                title = "Machine Updated";
+                body = `${actorName} updated machine${entityName ? ` ${entityName}` : ""}.`;
+                break;
+            case "DELETE_MACHINE":
+                title = "Machine Deleted";
+                body = `${actorName} deleted machine${entityName ? ` ${entityName}` : ""}.`;
+                break;
+            case "CREATE_WAREHOUSE":
+                title = "Warehouse Added";
+                body = `${actorName} added warehouse${entityName ? ` ${entityName}` : ""}.`;
+                break;
+            case "UPDATE_WAREHOUSE":
+                title = "Warehouse Updated";
+                body = `${actorName} updated warehouse${entityName ? ` ${entityName}` : ""}.`;
+                break;
+            case "DELETE_WAREHOUSE":
+                title = "Warehouse Deleted";
+                body = `${actorName} deleted warehouse${entityName ? ` ${entityName}` : ""}.`;
+                break;
+            case "CREATE_PURCHASE_ORDER":
+                title = "PO Created";
+                body = `${actorName} created a purchase order.`;
+                break;
+            case "COMPLETE_PURCHASE_ORDER":
+                title = "PO Received";
+                colorClass = "text-accent-green";
+                icon = <CheckCircle2 className="w-3 h-3 text-accent-green" />;
+                body = `${actorName} marked a purchase order received.`;
+                break;
+            case "CANCEL_PURCHASE_ORDER":
+                title = "PO Cancelled";
+                body = `${actorName} cancelled a purchase order.`;
+                break;
+            case "CHANGE_DRIVER_PIN":
+                title = "Driver PIN Changed";
+                body = `${actorName} changed ${targetDriver ? `${targetDriver}'s` : "a driver"} PIN.`;
+                break;
+            default: {
+                const pretty = audit.actionType
+                    .replace(/_/g, " ")
+                    .toLowerCase()
+                    .replace(/\b\w/g, (l) => l.toUpperCase());
+                title = pretty;
+                body = `${actorName} performed ${pretty.toLowerCase()}.`;
+                groupKey = undefined;
+                break;
+            }
+        }
+
+        timelineEvents.push({
+            id: `aud_${audit.id}`,
+            title,
+            timestamp: audit.timestamp,
+            colorClass,
+            icon,
+            count: 1,
+            groupKey,
+            pluralBody,
+            description: (
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{body}</p>
+            ),
+        });
+    });
+
     timelineEvents.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-    const recentTimeline = timelineEvents.slice(0, 8);
+
+    // Collapse runs of consecutive same-key events (e.g. "Chito acknowledged"
+    // 20 times in a row) into a single row with a count. The 30-min window
+    // keeps unrelated bursts from merging if a key happens to repeat hours
+    // later.
+    const mergedTimeline: TimelineEvent[] = [];
+    const COLLAPSE_WINDOW_MS = 30 * 60 * 1000;
+    for (const ev of timelineEvents) {
+        const last = mergedTimeline[mergedTimeline.length - 1];
+        if (
+            last &&
+            ev.groupKey &&
+            last.groupKey === ev.groupKey &&
+            last.timestamp.getTime() - ev.timestamp.getTime() <= COLLAPSE_WINDOW_MS
+        ) {
+            last.count = (last.count ?? 1) + 1;
+            if (last.pluralBody) {
+                const merged = last.pluralBody(last.count);
+                last.description = (
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                        {merged}
+                    </p>
+                );
+            }
+            continue;
+        }
+        mergedTimeline.push({ ...ev });
+    }
+
+    const recentTimeline = mergedTimeline.slice(0, 8);
 
     const today = formatSaudiDate(new Date(), {
         weekday: "long",
@@ -389,7 +647,7 @@ export default async function AdminDashboard() {
                         <div className="flex-1 relative">
                             <div className="absolute left-[11px] top-2 bottom-2 w-px bg-slate-200 dark:bg-white/10"></div>
 
-                            <div className="space-y-6 relative z-10">
+                            <div className="space-y-4 relative z-10">
                                 {recentTimeline.map((event) => (
                                     <div key={event.id} className="flex gap-4 group/timeline">
                                         <div className="mt-1 flex-shrink-0">
@@ -402,12 +660,19 @@ export default async function AdminDashboard() {
                                         <div className="flex-1 -mt-1">
                                             <div className="flex justify-between items-start mb-1">
                                                 <p
-                                                    className={`text-sm font-semibold text-slate-900 dark:text-white group-hover/timeline:text-current transition-colors ${event.colorClass}`}
+                                                    className={`text-sm font-semibold text-slate-900 dark:text-white group-hover/timeline:text-current transition-colors ${event.colorClass} flex items-center gap-2`}
                                                 >
                                                     {event.title}
+                                                    {(event.count ?? 1) > 1 && (
+                                                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300">
+                                                            ×{event.count}
+                                                        </span>
+                                                    )}
                                                 </p>
-                                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                                                    {formatSaudiTime(event.timestamp, { timeStyle: "short" })}
+                                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap">
+                                                    {Date.now() - event.timestamp.getTime() < 60 * 60 * 1000
+                                                        ? relativeAge(event.timestamp)
+                                                        : formatSaudiTime(event.timestamp, { timeStyle: "short" })}
                                                 </span>
                                             </div>
                                             {event.description}

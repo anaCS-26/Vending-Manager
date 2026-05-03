@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Package, MapPin, Search, Plus, AlertCircle, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Package, MapPin, Search, Plus, AlertCircle, ArrowUp, ArrowDown } from "lucide-react";
+import Pagination from "@/components/Pagination";
 import type { WarehouseWithItem, WarehouseType } from "@/types";
 import type { Item } from "@prisma/client";
 import { formatCurrency } from "@/lib/utils";
@@ -340,69 +341,11 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                         <div className="text-xs font-medium text-slate-500 dark:text-slate-400 text-center sm:text-left">
                             Showing <span className="text-slate-900 dark:text-white font-bold">{(currentPage - 1) * PAGE_SIZE + 1}</span> to <span className="text-slate-900 dark:text-white font-bold">{Math.min(currentPage * PAGE_SIZE, sortedInventory.length)}</span> of <span className="text-slate-900 dark:text-white font-bold">{sortedInventory.length}</span> items
                         </div>
-                        <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-2 sm:pb-0 custom-scrollbar">
-                            <button
-                                onClick={() => handlePageChange(1)}
-                                disabled={currentPage === 1}
-                                className="w-8 h-8 flex shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                            >
-                                <ChevronsLeft className="w-4 h-4" />
-                            </button>
-                            <button
-                                onClick={() => handlePageChange(currentPage - 1)}
-                                disabled={currentPage === 1}
-                                className="w-8 h-8 flex shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                            </button>
-
-                            <div className="flex items-center px-2 gap-1">
-                                {Array.from({ length: totalPages }).map((_, i) => {
-                                    const page = i + 1;
-                                    // Show first, last, current, and +/- 1 from current
-                                    if (
-                                        page === 1 ||
-                                        page === totalPages ||
-                                        (page >= currentPage - 1 && page <= currentPage + 1)
-                                    ) {
-                                        return (
-                                            <button
-                                                key={page}
-                                                onClick={() => handlePageChange(page)}
-                                                className={`w-8 h-8 flex shrink-0 items-center justify-center rounded-lg text-sm font-bold transition-all ${
-                                                    currentPage === page
-                                                        ? 'bg-brand-500 text-white shadow-md shadow-brand-500/20 border-transparent'
-                                                        : 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'
-                                                }`}
-                                            >
-                                                {page}
-                                            </button>
-                                        );
-                                    } else if (
-                                        page === currentPage - 2 ||
-                                        page === currentPage + 2
-                                    ) {
-                                        return <span key={page} className="text-slate-400 dark:text-slate-500 px-1">...</span>;
-                                    }
-                                    return null;
-                                })}
-                            </div>
-
-                            <button
-                                onClick={() => handlePageChange(currentPage + 1)}
-                                disabled={currentPage === totalPages}
-                                className="w-8 h-8 flex shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                            </button>
-                            <button
-                                onClick={() => handlePageChange(totalPages)}
-                                disabled={currentPage === totalPages}
-                                className="w-8 h-8 flex shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                            >
-                                <ChevronsRight className="w-4 h-4" />
-                            </button>
-                        </div>
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={handlePageChange}
+                        />
                     </div>
                 )}
             </div>

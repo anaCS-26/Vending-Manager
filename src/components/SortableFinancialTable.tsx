@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { formatCurrency } from "@/lib/utils";
-import { ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ArrowUp, ArrowDown, Search } from "lucide-react";
+import Pagination from "@/components/Pagination";
 
 export type FinancialRowData = {
     id: string | number;
@@ -229,61 +230,12 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
         </div>
         </div>
         
-        {/* Pagination Controls */}
-        {totalPages > 1 && (
-            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 pt-2">
-                <button
-                    onClick={() => setCurrentPage(1)}
-                    disabled={safePage === 1}
-                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
-                    title="First Page"
-                >
-                    <ChevronsLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-                <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={safePage === 1}
-                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
-                    title="Previous Page"
-                >
-                    <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-                
-                {Array.from(new Set([1, safePage - 10, safePage - 5, safePage - 1, safePage, safePage + 1, safePage + 5, safePage + 10, totalPages]))
-                    .filter(p => p >= 1 && p <= totalPages)
-                    .sort((a, b) => a - b)
-                    .map((p, index, array) => (
-                        <div key={p} className="flex items-center">
-                            {index > 0 && p - array[index - 1] > 1 && (
-                                <span className="text-slate-400 dark:text-slate-500 px-1 font-bold">...</span>
-                            )}
-                            <button
-                                onClick={() => setCurrentPage(p)}
-                                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl text-xs font-bold transition-all shadow-sm ${p === safePage ? 'bg-brand-500 text-white dark:text-white border border-brand-500 shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-400 dark:hover:border-white/20'}`}
-                            >
-                                {p}
-                            </button>
-                        </div>
-                    ))}
-
-                <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={safePage === totalPages}
-                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
-                    title="Next Page"
-                >
-                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-                <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={safePage === totalPages}
-                    className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-black/20 border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
-                    title="Last Page"
-                >
-                    <ChevronsRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-            </div>
-        )}
+        <Pagination
+            currentPage={safePage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            className="pt-2"
+        />
         </div>
     );
 }
