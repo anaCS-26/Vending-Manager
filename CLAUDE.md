@@ -86,6 +86,7 @@ Key Phase B UI: [src/app/admin/driver-stock/page.tsx](src/app/admin/driver-stock
 - Reuse modal/dropdown/card primitives in `src/components/`. No parallel implementations.
 - Dark mode primary via `next-themes`; provide light variants alongside.
 - Timestamps render in `Asia/Riyadh` via `formatSaudiDate`/`formatSaudiTime` from `src/lib/utils.ts` — never `toLocaleString()` directly.
+- **Day/year boundaries**: anchor to Riyadh, not the server's local timezone. Use `startOfRiyadhDay()`, `endOfRiyadhDay()`, `startOfRiyadhYear()` from `src/lib/utils.ts` — never `setHours(0,0,0,0)` or `new Date(y, 0, 1)`. Saudi has no DST so the helpers just emit `+03:00` ISO strings. Rolling-window math (`now - 7*24*60*60*1000`) is timezone-agnostic and is fine.
 
 ## Conventions
 

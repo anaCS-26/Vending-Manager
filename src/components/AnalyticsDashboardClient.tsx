@@ -122,7 +122,7 @@ export default function AnalyticsDashboardClient({ machinesData, allRefillsData 
                                         axisLine={false} 
                                         tickFormatter={(val) => {
                                             const d = new Date(val);
-                                            return isNaN(d.getTime()) ? val : d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+                                            return isNaN(d.getTime()) ? val : d.toLocaleDateString('en-US', { timeZone: 'Asia/Riyadh', weekday: 'short', month: 'numeric', day: 'numeric' });
                                         }}
                                     />
                                     <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
@@ -131,7 +131,7 @@ export default function AnalyticsDashboardClient({ machinesData, allRefillsData 
                                         itemStyle={{ color: '#fff' }}
                                         labelFormatter={(val) => {
                                             const d = new Date(val);
-                                            return isNaN(d.getTime()) ? val : d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                                            return isNaN(d.getTime()) ? val : d.toLocaleDateString('en-US', { timeZone: 'Asia/Riyadh', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
                                         }}
                                     />
                                     <Line 

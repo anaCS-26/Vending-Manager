@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { notifyClients } from "@/lib/notify";
 import type { ActionResult, PaginatedResult } from "@/types";
 import { requireAdmin } from "@/lib/auth-utils";
+import { startOfRiyadhDay, endOfRiyadhDay } from "@/lib/utils";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -74,12 +75,14 @@ export async function getRefillLogsPaginated(
         where.refilled_at = {};
         returnWhere.reported_at = {};
         if (filters.dateFrom) {
-            where.refilled_at.gte = new Date(filters.dateFrom);
-            returnWhere.reported_at.gte = new Date(filters.dateFrom);
+            // "YYYY-MM-DD" → 00:00 Riyadh on that calendar day
+            const from = startOfRiyadhDay(filters.dateFrom);
+            where.refilled_at.gte = from;
+            returnWhere.reported_at.gte = from;
         }
         if (filters.dateTo) {
-            const to = new Date(filters.dateTo);
-            to.setHours(23, 59, 59, 999);
+            // "YYYY-MM-DD" → 23:59:59.999 Riyadh on that calendar day
+            const to = endOfRiyadhDay(filters.dateTo);
             where.refilled_at.lte = to;
             returnWhere.reported_at.lte = to;
         }

@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma"
 import type { DepletionPrediction } from "@/types"
 import { requireAdmin } from "@/lib/auth-utils"
+import { startOfRiyadhDay } from "@/lib/utils"
 
 /**
  * Predictive Restocking Prototype
@@ -17,9 +18,10 @@ import { requireAdmin } from "@/lib/auth-utils"
  */
 export async function getPredictedDepletion(): Promise<DepletionPrediction[]> {
     await requireAdmin();
-    // Get today's date range
+    // Get today's date range — anchored to the Riyadh operational day, not the
+    // server's local timezone (the dashboard's "today" is always Riyadh).
     const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const todayStart = startOfRiyadhDay(now)
     const hoursElapsed = Math.max(1, (now.getTime() - todayStart.getTime()) / (1000 * 60 * 60))
 
     // Fetch today's refill logs grouped by machine and item
