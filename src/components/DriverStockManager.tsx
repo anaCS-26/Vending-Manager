@@ -222,29 +222,23 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
                                             return (
                                                 <div
                                                     key={inv.id}
-                                                    className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+                                                    className={`flex flex-col sm:flex-row sm:items-center sm:justify-between p-2.5 rounded-xl border transition-all gap-2 sm:gap-3 ${
                                                         isSelected
                                                             ? "border-accent-blue bg-accent-blue/5 shadow-[0_0_10px_rgba(0,180,255,0.05)]"
                                                             : "border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 hover:border-slate-300 dark:hover:border-white/20"
                                                     }`}
                                                 >
-                                                    <div className="flex flex-col min-w-0 pr-3">
+                                                    <div className="flex flex-col min-w-0 sm:pr-3">
                                                         <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{inv.item.name}</span>
                                                         <span className="text-[9px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
                                                             {inv.item.sku}
                                                             <span className="text-slate-300 dark:text-slate-600">|</span>
                                                             Max: {inv.quantity_on_hand}
-                                                            {inv.item.default_assignment_qty > 0 && (
-                                                                <>
-                                                                    <span className="text-slate-300 dark:text-slate-600">|</span>
-                                                                    <span className="text-accent-blue/80">Default: {inv.item.default_assignment_qty}</span>
-                                                                </>
-                                                            )}
                                                         </span>
                                                     </div>
-                                                    
+
                                                     {/* Inline Quantity Controls */}
-                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                    <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
                                                         <div className="flex items-center bg-slate-100 dark:bg-black/40 rounded-md p-0.5 border border-slate-200 dark:border-white/5">
                                                             <button
                                                                 onClick={() => handleQtyChange(inv.itemId, String(qty - 1), inv.quantity_on_hand)}
