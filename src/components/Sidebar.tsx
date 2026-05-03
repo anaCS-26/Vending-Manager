@@ -103,7 +103,7 @@ export function Sidebar({ user, notifications }: { user?: any; notifications?: {
                     )}
                     {mainNav.map((item) => {
                         const isActive = pathname === item.href;
-                        const badgeCount = item.href === '/admin/driver-stock' && !isActive ? notifications?.driverStock || 0 : 0;
+                        const badgeCount = item.href === '/admin/driver-stock' ? notifications?.driverStock || 0 : 0;
                         
                         return (
                             <Link
@@ -150,7 +150,7 @@ export function Sidebar({ user, notifications }: { user?: any; notifications?: {
                     )}
                     {inventoryNav.map((item) => {
                         const isActive = pathname === item.href;
-                        const badgeCount = item.href === '/admin/returns' && !isActive ? notifications?.returns || 0 : 0;
+                        const badgeCount = item.href === '/admin/returns' ? notifications?.returns || 0 : 0;
                         
                         return (
                             <Link
