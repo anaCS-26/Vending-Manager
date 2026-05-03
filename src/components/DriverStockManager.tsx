@@ -100,14 +100,12 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
         }
     };
 
-    // First "+" click on an unselected row jumps to the item's configured
-    // default (e.g., a 30-can pack for 7UP). Subsequent +/- behave normally.
-    const handleIncrement = (itemId: number, currentQty: number, defaultQty: number, max: number) => {
-        if (currentQty === 0 && defaultQty > 0) {
-            handleQtyChange(itemId, String(defaultQty), max);
-        } else {
-            handleQtyChange(itemId, String(currentQty + 1), max);
-        }
+    const handleIncrement = (itemId: number, currentQty: number, max: number) => {
+        handleQtyChange(itemId, String(currentQty + 1), max);
+    };
+
+    const handleAddBatch = (itemId: number, currentQty: number, batchQty: number, max: number) => {
+        handleQtyChange(itemId, String(currentQty + batchQty), max);
     };
 
     const handlePush = () => {
@@ -263,13 +261,26 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
                                                                 className="w-8 bg-transparent text-center text-xs font-black text-slate-900 dark:text-white focus:outline-none"
                                                             />
                                                             <button
-                                                                onClick={() => handleIncrement(inv.itemId, qty, inv.item.default_assignment_qty, inv.quantity_on_hand)}
+                                                                onClick={() => handleIncrement(inv.itemId, qty, inv.quantity_on_hand)}
                                                                 disabled={qty >= inv.quantity_on_hand}
+                                                                aria-label="Add one"
+                                                                title="Add one"
                                                                 className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/10 rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                                                             >
                                                                 <Plus className="w-3 h-3" />
                                                             </button>
                                                         </div>
+                                                        {inv.item.default_assignment_qty > 0 && (
+                                                            <button
+                                                                onClick={() => handleAddBatch(inv.itemId, qty, inv.item.default_assignment_qty, inv.quantity_on_hand)}
+                                                                disabled={qty + inv.item.default_assignment_qty > inv.quantity_on_hand}
+                                                                aria-label={`Add a batch of ${inv.item.default_assignment_qty}`}
+                                                                title={`Add a batch of ${inv.item.default_assignment_qty}`}
+                                                                className="px-2 py-1 rounded-md border border-accent-blue/30 bg-accent-blue/5 text-[10px] font-mono font-bold text-accent-blue hover:bg-accent-blue/10 hover:border-accent-blue/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-accent-blue/5 disabled:hover:border-accent-blue/30"
+                                                            >
+                                                                +{inv.item.default_assignment_qty}
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={() => handleQtyChange(inv.itemId, "0", inv.quantity_on_hand)}
                                                             aria-label="Remove from assignment"
