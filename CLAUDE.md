@@ -42,13 +42,13 @@ Despite the legacy `.sse/` directory name, this is push-based.
 
 `src/lib/notify.ts` increments a single-row `SystemMeta` (`key='realtime_version'`). Browser clients subscribe to that row over Supabase Realtime WS and call `router.refresh()` on change. ~50ms latency, zero idle traffic.
 
-Mounted **once per page tree** via `<RealtimeRefresher />` in `src/app/admin/layout.tsx` and `src/app/super/layout.tsx`. Do NOT call `useRealtimeRefresh()` inside individual pages — that opens a second WS. The driver portal is intentionally NOT subscribed (offline-first Zustand state would be clobbered).
+Mounted **once at the root** via `<RealtimeRefresher />` in `src/app/layout.tsx`, so every portal (admin, super, driver) subscribes from a single shared WS. Do NOT call `useRealtimeRefresh()` inside individual pages — that opens a second WS.
 
 Subscription uses no `filter` and `event: "*"` — filtered postgres_changes would require `REPLICA IDENTITY FULL`, which we avoid since the table holds only one row.
 
 Always call `notifyClients(eventTag)` after mutating actions. Fire-and-forget; errors caught and logged.
 
-Setup (per-environment): `SystemMeta` table must exist; Realtime publication toggled on for it in Supabase dashboard; client envs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` set (restart dev server after changes — `NEXT_PUBLIC_*` is baked at build time).
+Setup (per-environment, easy to miss): (1) `SystemMeta` table exists; (2) Realtime publication toggled on for it in the Supabase dashboard; (3) client envs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` set in Vercel — they're baked at build time, so adding them requires a redeploy and locally a dev-server restart; (4) `anon` role can `SELECT` from `SystemMeta`. If RLS is enabled on the table without an anon `SELECT` policy, the WS connects but events never arrive (silent failure). Either disable RLS on it or run `CREATE POLICY "anon can read realtime version" ON "SystemMeta" FOR SELECT TO anon USING (true);`.
 
 ## Audit trail
 
