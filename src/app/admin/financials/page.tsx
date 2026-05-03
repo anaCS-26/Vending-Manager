@@ -1,7 +1,7 @@
 export const revalidate = 60;
 import { PieChart, TrendingUp, Download, Building2, Package, MapPin, LayoutGrid } from "lucide-react";
 import prisma from "@/lib/prisma";
-import { formatCurrency, formatSaudiDate } from "@/lib/utils";
+import { formatCurrency, formatSaudiDate, startOfRiyadhYear } from "@/lib/utils";
 import Link from "next/link";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import SortableFinancialTable from "@/components/SortableFinancialTable";
@@ -24,7 +24,7 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
             startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
             expenseMultiplier = 1;
         } else if (currentRange === "ytd") {
-            startDate = new Date(now.getFullYear(), 0, 1);
+            startDate = startOfRiyadhYear(now);
             const daysInPeriod = Math.max(1, (now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
             expenseMultiplier = daysInPeriod / 30.44;
         }
