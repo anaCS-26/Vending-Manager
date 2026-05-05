@@ -10,6 +10,7 @@ import {
     ChevronsRight,
     MapPin,
     User,
+    Building2,
     Loader2,
     Calendar,
     X,
@@ -22,17 +23,20 @@ import { EditLogModal } from "./EditLogModal";
 import type { PaginatedResult } from "@/types";
 
 type DriverOption = { id: number; name: string };
+type MachineOption = { id: number; location_name: string };
 
 type UnifiedHistoryManagerProps = {
     initialEvents: PaginatedResult<RefillLogRow>;
     drivers: DriverOption[];
+    machines: MachineOption[];
 };
 
-export default function UnifiedHistoryManager({ initialEvents, drivers }: UnifiedHistoryManagerProps) {
+export default function UnifiedHistoryManager({ initialEvents, drivers, machines }: UnifiedHistoryManagerProps) {
     const [searchQuery, setSearchQuery] = useState("");
 
     // EVENTS-tab server-driven state
     const [eventDriverId, setEventDriverId] = useState<number | "">("");
+    const [eventMachineId, setEventMachineId] = useState<number | "">("");
     const [eventDateFrom, setEventDateFrom] = useState<string>("");
     const [eventDateTo, setEventDateTo] = useState<string>("");
     const [eventPage, setEventPage] = useState(1);
@@ -49,6 +53,7 @@ export default function UnifiedHistoryManager({ initialEvents, drivers }: Unifie
         startEventsFetch(async () => {
             const result = await getRefillLogsPaginated({
                 driverId: eventDriverId === "" ? null : eventDriverId,
+                machineId: eventMachineId === "" ? null : eventMachineId,
                 dateFrom: eventDateFrom || null,
                 dateTo: eventDateTo || null,
                 searchQuery: searchQuery,
@@ -56,7 +61,7 @@ export default function UnifiedHistoryManager({ initialEvents, drivers }: Unifie
             });
             setEventData(result);
         });
-    }, [eventDriverId, eventDateFrom, eventDateTo, eventPage, searchQuery]);
+    }, [eventDriverId, eventMachineId, eventDateFrom, eventDateTo, eventPage, searchQuery]);
 
     // Reset events pagination when any filter (other than page itself) changes
     const resetEventsPage = () => setEventPage(1);
@@ -69,9 +74,10 @@ export default function UnifiedHistoryManager({ initialEvents, drivers }: Unifie
         setEventPage(p);
     };
 
-    const hasActiveEventFilters = eventDriverId !== "" || eventDateFrom !== "" || eventDateTo !== "";
+    const hasActiveEventFilters = eventDriverId !== "" || eventMachineId !== "" || eventDateFrom !== "" || eventDateTo !== "";
     const clearEventFilters = () => {
         setEventDriverId("");
+        setEventMachineId("");
         setEventDateFrom("");
         setEventDateTo("");
         setEventPage(1);
@@ -120,6 +126,22 @@ export default function UnifiedHistoryManager({ initialEvents, drivers }: Unifie
                         <option value="">All drivers</option>
                         {drivers.map(d => (
                             <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="flex flex-col gap-1 min-w-[200px]">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                        <Building2 className="w-3 h-3" /> Machine
+                    </label>
+                    <select
+                        value={eventMachineId}
+                        onChange={(e) => { setEventMachineId(e.target.value === "" ? "" : Number(e.target.value)); resetEventsPage(); }}
+                        className="bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:border-brand-500/50 transition-all"
+                    >
+                        <option value="">All machines</option>
+                        {machines.map(m => (
+                            <option key={m.id} value={m.id}>{m.location_name}</option>
                         ))}
                     </select>
                 </div>

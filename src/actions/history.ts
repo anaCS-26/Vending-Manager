@@ -25,8 +25,19 @@ export async function getDriversForFilter() {
     });
 }
 
+/** Slim machine list (id + location_name) for populating the history filter dropdown. */
+export async function getMachinesForFilter() {
+    await requireAdmin();
+    return await prisma.machine.findMany({
+        where: { isActive: true },
+        select: { id: true, location_name: true },
+        orderBy: { location_name: 'asc' }
+    });
+}
+
 export type RefillLogFilters = {
     driverId?: number | null;
+    machineId?: number | null;
     dateFrom?: string | null; // ISO date "YYYY-MM-DD"
     dateTo?: string | null;
     searchQuery?: string | null;
@@ -69,6 +80,13 @@ export async function getRefillLogsPaginated(
     if (filters.driverId) {
         where.dispatch = { driverId: filters.driverId };
         returnWhere.driverId = filters.driverId;
+    }
+
+    // Machine filter: refills always have machineId; non-SURPLUS returns have machineId;
+    // SURPLUS (driver-bag) returns have no machine and naturally drop out.
+    if (filters.machineId) {
+        where.machineId = filters.machineId;
+        returnWhere.machineId = filters.machineId;
     }
 
     if (filters.dateFrom || filters.dateTo) {
