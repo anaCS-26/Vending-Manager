@@ -1,11 +1,12 @@
 export const revalidate = 30;
-import { getRefillLogsPaginated, getDriversForFilter } from "@/actions/history";
+import { getRefillLogsPaginated, getDriversForFilter, getMachinesForFilter } from "@/actions/history";
 import UnifiedHistoryManager from "@/components/UnifiedHistoryManager";
 
 export default async function HistoryPage() {
-    const [initialEvents, drivers] = await Promise.all([
+    const [initialEvents, drivers, machines] = await Promise.all([
         getRefillLogsPaginated({ page: 1 }),
         getDriversForFilter(),
+        getMachinesForFilter(),
     ]);
 
     return (
@@ -13,6 +14,7 @@ export default async function HistoryPage() {
             <UnifiedHistoryManager
                 initialEvents={initialEvents}
                 drivers={drivers}
+                machines={machines}
             />
         </div>
     );
