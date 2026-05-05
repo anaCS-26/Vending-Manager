@@ -77,8 +77,17 @@ export async function getRefillLogsPaginated(
     const where: Prisma.RefillLogWhereInput = {};
     const returnWhere: Prisma.ReturnVerificationWhereInput = {};
 
+    const whereAnd: Prisma.RefillLogWhereInput[] = [];
+
     if (filters.driverId) {
-        where.dispatch = { driverId: filters.driverId };
+        // Match both legacy dispatch-tied refills AND dispatchless refills
+        // (dispatchless writes driverId directly on RefillLog with dispatchId: null).
+        whereAnd.push({
+            OR: [
+                { driverId: filters.driverId },
+                { dispatch: { driverId: filters.driverId } },
+            ],
+        });
         returnWhere.driverId = filters.driverId;
     }
 
@@ -108,15 +117,22 @@ export async function getRefillLogsPaginated(
 
     if (filters.searchQuery && filters.searchQuery.trim()) {
         const q = filters.searchQuery.trim();
-        where.OR = [
-            { machine: { location_name: { contains: q, mode: 'insensitive' } } },
-            { item: { name: { contains: q, mode: 'insensitive' } } },
-            { dispatch: { driver: { name: { contains: q, mode: 'insensitive' } } } },
-        ];
+        whereAnd.push({
+            OR: [
+                { machine: { location_name: { contains: q, mode: 'insensitive' } } },
+                { item: { name: { contains: q, mode: 'insensitive' } } },
+                { driver: { name: { contains: q, mode: 'insensitive' } } },
+                { dispatch: { driver: { name: { contains: q, mode: 'insensitive' } } } },
+            ],
+        });
         returnWhere.OR = [
             { item: { name: { contains: q, mode: 'insensitive' } } },
             { driver: { name: { contains: q, mode: 'insensitive' } } },
         ];
+    }
+
+    if (whereAnd.length > 0) {
+        where.AND = whereAnd;
     }
 
     const takeCount = page * pageSize;
