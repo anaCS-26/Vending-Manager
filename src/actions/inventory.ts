@@ -1213,11 +1213,22 @@ export async function createItem(name: string, category: string, sku: string, pr
 }
 
 /** Updates standard pricing and metadata for an item. */
-export async function updateItem(id: number, name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, bulk_format?: string): Promise<ActionResult> {
+export async function updateItem(id: number, name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, bulk_format?: string, default_assignment_qty?: number): Promise<ActionResult> {
     const session = await requireAdmin();
     try {
+        if (default_assignment_qty !== undefined) {
+            if (!Number.isInteger(default_assignment_qty) || default_assignment_qty < 0 || default_assignment_qty > 100) {
+                return { success: false, error: "Batch quantity must be an integer between 0 and 100" };
+            }
+        }
         const oldState = await prisma.item.findUnique({ where: { id } });
-        const updated = await prisma.item.update({ where: { id }, data: { name, category, sku, price_standard, price_hospital, price_hotel, bulk_format } })
+        const updated = await prisma.item.update({
+            where: { id },
+            data: {
+                name, category, sku, price_standard, price_hospital, price_hotel, bulk_format,
+                ...(default_assignment_qty !== undefined ? { default_assignment_qty } : {}),
+            }
+        })
 
         await writeAuditLog(session, 'UPDATE_ITEM', 'Item', id, oldState, updated);
 
