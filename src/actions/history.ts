@@ -31,7 +31,7 @@ export async function getMachinesForFilter() {
     return await prisma.machine.findMany({
         where: { isActive: true },
         select: { id: true, location_name: true },
-        orderBy: { location_name: 'asc' }
+        orderBy: { id: 'asc' }
     });
 }
 

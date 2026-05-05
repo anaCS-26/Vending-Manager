@@ -141,7 +141,7 @@ export default function UnifiedHistoryManager({ initialEvents, drivers, machines
                     >
                         <option value="">All machines</option>
                         {machines.map(m => (
-                            <option key={m.id} value={m.id}>{m.location_name}</option>
+                            <option key={m.id} value={m.id}>{m.id} - {m.location_name}</option>
                         ))}
                     </select>
                 </div>
