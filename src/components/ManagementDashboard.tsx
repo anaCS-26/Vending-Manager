@@ -24,6 +24,7 @@ type ItemWithWarehouse = {
     cost: number;
     imageUrl?: string | null;
     bulk_format?: string | null;
+    default_assignment_qty: number;
     WarehouseStock: {
         quantity_on_hand: number;
         warehouse: { name: string };
@@ -104,7 +105,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
     // Forms
     const [driverForm, setDriverForm] = useState({ name: "", phone: "", email: "", pin: "" });
     const [machineForm, setMachineForm] = useState({ location_name: "", district: "", address: "", notes: "", terminalId: "", latitude: undefined as number | undefined, longitude: undefined as number | undefined, operating_cost: 0, rental_cost: 0, tier: "STANDARD" });
-    const [itemForm, setItemForm] = useState({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", warehouseId: undefined as number | undefined, initialStock: 0 });
+    const [itemForm, setItemForm] = useState({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", default_assignment_qty: 0, warehouseId: undefined as number | undefined, initialStock: 0 });
     const [warehouseForm, setWarehouseForm] = useState({ name: "", location: "", address: "", latitude: undefined as number | undefined, longitude: undefined as number | undefined, operating_cost: 0, rental_cost: 0 });
     const [bulkQty, setBulkQty] = useState<string>("");
 
@@ -114,7 +115,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
         setEditingId(null);
         setDriverForm({ name: "", phone: "", email: "", pin: "" });
         setMachineForm({ location_name: "", district: "", address: "", notes: "", terminalId: "", latitude: undefined, longitude: undefined, operating_cost: 0, rental_cost: 0, tier: "STANDARD" });
-        setItemForm({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", warehouseId: undefined, initialStock: 0 });
+        setItemForm({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", default_assignment_qty: 0, warehouseId: undefined, initialStock: 0 });
         setWarehouseForm({ name: "", location: "", address: "", latitude: undefined, longitude: undefined, operating_cost: 0, rental_cost: 0 });
     };
 
@@ -173,7 +174,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
     const handleSaveItem = (id?: number) => {
         startTransition(async () => {
             let res;
-            if (id) res = await updateItem(id, itemForm.name, itemForm.category, itemForm.sku, itemForm.price_standard, itemForm.price_hospital, itemForm.price_hotel, itemForm.bulk_format);
+            if (id) res = await updateItem(id, itemForm.name, itemForm.category, itemForm.sku, itemForm.price_standard, itemForm.price_hospital, itemForm.price_hotel, itemForm.bulk_format, itemForm.default_assignment_qty);
             else res = await createItem(itemForm.name, itemForm.category, itemForm.sku, itemForm.price_standard, itemForm.price_hospital, itemForm.price_hotel, itemForm.warehouseId, itemForm.initialStock, itemForm.bulk_format);
 
             if (res.success) {
@@ -342,6 +343,23 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                     <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Category</label>
                                                     <input type="text" value={itemForm.category} onChange={e => setItemForm({ ...itemForm, category: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Category" />
                                                 </div>
+                                                <div>
+                                                    <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Driver Batch Qty</label>
+                                                    <input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        pattern="[0-9]*"
+                                                        value={itemForm.default_assignment_qty}
+                                                        onChange={e => {
+                                                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                                                            const n = raw === "" ? 0 : Math.min(100, parseInt(raw, 10));
+                                                            setItemForm({ ...itemForm, default_assignment_qty: n });
+                                                        }}
+                                                        className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none"
+                                                        placeholder="e.g. 30"
+                                                    />
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 px-1">Adds a +N batch button on driver stock. Set to 0 to hide. Max 100.</p>
+                                                </div>
                                                 <div className="flex gap-2 pt-2">
                                                     <button onClick={() => setEditingId(null)} className="flex-1 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-white/10 text-slate-900 dark:text-white rounded-lg text-xs font-medium transition-colors">Cancel</button>
                                                     <button onClick={() => handleSaveItem(item.id)} disabled={isPending} className="flex-1 py-1.5 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50">Save</button>
@@ -388,12 +406,18 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                                             <span className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-300 font-bold">{(item as any).bulk_format}</span>
                                                                         </div>
                                                                     )}
+                                                                    {item.default_assignment_qty > 0 && (
+                                                                        <div className="flex items-center gap-1.5 whitespace-nowrap" title="Default driver batch quantity">
+                                                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight">Batch</span>
+                                                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-300 font-bold">+{item.default_assignment_qty}</span>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
-                                                        <button onClick={() => { setEditingId(item.id); setItemForm({ name: item.name, sku: item.sku, category: item.category, price_standard: item.price_standard || 0, price_hospital: item.price_hospital || 0, price_hotel: item.price_hotel || 0, bulk_format: (item as any).bulk_format || "", warehouseId: undefined, initialStock: 0 }); }} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-md transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                        <button onClick={() => { setEditingId(item.id); setItemForm({ name: item.name, sku: item.sku, category: item.category, price_standard: item.price_standard || 0, price_hospital: item.price_hospital || 0, price_hotel: item.price_hotel || 0, bulk_format: (item as any).bulk_format || "", default_assignment_qty: item.default_assignment_qty ?? 0, warehouseId: undefined, initialStock: 0 }); }} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-md transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
                                                         <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-accent-pink bg-slate-100 dark:bg-white/5 hover:bg-accent-pink/20 rounded-md transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                                     </div>
                                                 </div>
