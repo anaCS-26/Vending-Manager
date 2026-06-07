@@ -162,7 +162,7 @@ export default function CostCorrectionModal({ isOpen, onClose, items }: Props) {
                 </div>
 
                 {/* Item list */}
-                <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 dark:bg-zinc-950 custom-scrollbar">
+                <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-slate-50/50 dark:bg-zinc-950 custom-scrollbar">
                     {displayItems.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400">
                             <AlertCircle className="w-12 h-12 mb-4 opacity-50" />
