@@ -5,6 +5,7 @@ import { formatCurrency, formatSaudiDate, startOfRiyadhYear } from "@/lib/utils"
 import Link from "next/link";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import SortableFinancialTable from "@/components/SortableFinancialTable";
+import { computePnLTotals } from "@/lib/pnl";
 
 export default async function FinancialsPage(props: { searchParams: Promise<{ view?: string, range?: string }> }) {
     const searchParams = await props.searchParams;
@@ -60,30 +61,21 @@ export default async function FinancialsPage(props: { searchParams: Promise<{ vi
         })
     ]);
 
-    // 2. Global Totals Calculation
-    let totalRevenue = 0;
-    let totalSoldCOGS = 0;
-    refillLogsRaw.forEach(log => {
-        const sold = log.items_sold_since_last_refill || 0;
-        const price = (log as any).price_at_refill ?? log.item.price_standard ?? 0;
-        const cost = (log as any).cost_at_refill ?? (log.item as any).cost ?? 0;
-
-        // Use exact sales revenue if captured offline, otherwise fallback to realtime logic
-        totalRevenue += log.sales_revenue || (sold * price);
-        totalSoldCOGS += sold * cost;
+    // 2. Global Totals Calculation — shared P&L math (see src/lib/pnl.ts)
+    const {
+        revenue: totalRevenue,
+        cogs: totalSoldCOGS,
+        shrinkage: totalShrinkageCOGS,
+        expenses: totalExpenses,
+        netProfit: totalNetProfit,
+    } = computePnLTotals({
+        refillLogs: refillLogsRaw,
+        approvedReturns: returnVerificationsRaw,
+        damagedDispatchItems: dispatchItemsRaw,
+        machines: machinesRaw,
+        warehouses: warehousesRaw,
+        expenseMultiplier,
     });
-
-    // Shrinkage calculations (using item's current WAC as standard)
-    const shrinkageFromRoutes = returnVerificationsRaw.reduce((sum, rv) => sum + (rv.quantity * ((rv.item as any).cost || 0)), 0);
-    const shrinkageFromReturns = dispatchItemsRaw.reduce((sum, di) => sum + ((di.quantity_damaged || 0) * ((di.item as any).cost || 0)), 0);
-    const totalShrinkageCOGS = shrinkageFromRoutes + shrinkageFromReturns;
-
-    const totalMachineExpenses = machinesRaw.reduce((acc, m) => acc + (((m as any).operating_cost || 0) + ((m as any).rental_cost || 0)) * expenseMultiplier, 0);
-    const totalWarehouseExpenses = warehousesRaw.reduce((acc, w) => acc + (((w as any).operating_cost || 0) + ((w as any).rental_cost || 0)) * expenseMultiplier, 0);
-    const totalExpenses = totalMachineExpenses + totalWarehouseExpenses;
-
-    // Net Profit = Collected Revenue - Cost of Sold Items - Shrinkage Cost - Fixed Expenses
-    const totalNetProfit = totalRevenue - totalSoldCOGS - totalShrinkageCOGS - totalExpenses;
 
     // 3. Performance Aggregation Logic
     let displayData: any[] = [];

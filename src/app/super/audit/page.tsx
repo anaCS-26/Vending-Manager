@@ -21,8 +21,8 @@ export default async function SuperAuditPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">Audit Log</h1>
-                <p className="text-sm text-slate-400 mt-1">
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Audit Trail</h1>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                     Immutable record of every state change — who did what, when, and the before → after.
                 </p>
             </div>
