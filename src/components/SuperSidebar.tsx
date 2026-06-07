@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { ShieldAlert, Users, LayoutDashboard, Eye, ScrollText, Activity, LogOut, ArrowLeft } from "lucide-react";
+import { ShieldAlert, Users, LayoutDashboard, Eye, ScrollText, Activity, LogOut, ArrowLeft, FlaskConical } from "lucide-react";
 import { signOut } from "next-auth/react";
+import { ENABLE_AI_LAB } from "@/lib/feature-flags";
 
 type NavItem = { name: string; href: string; icon: typeof LayoutDashboard; exact?: boolean };
 
@@ -14,6 +15,8 @@ const consoleNav: NavItem[] = [
     { name: 'Audit Trail', href: '/super/audit', icon: ScrollText },
     { name: 'Integrity', href: '/super/integrity', icon: ShieldAlert },
     { name: 'System Health', href: '/super/system', icon: Activity },
+    // Experimental — only when NEXT_PUBLIC_ENABLE_AI_LAB=true.
+    ...(ENABLE_AI_LAB ? [{ name: 'AI Lab', href: '/super/lab', icon: FlaskConical }] : []),
 ];
 
 const accessNav: NavItem[] = [

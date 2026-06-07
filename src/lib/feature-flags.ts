@@ -14,3 +14,12 @@
  * which surface is visible. Cutover happens in Phase B3.
  */
 export const USE_DISPATCHLESS = true;
+
+/**
+ * When true, the experimental "AI Lab" appears in the super-admin console
+ * (/super/lab): the demand-forecasting Stockout Radar and Silent-Failure Watch.
+ * Read-only, advisory, super-admin only. Off by default — env-driven so it can
+ * be enabled per-environment without a code change. Set
+ * NEXT_PUBLIC_ENABLE_AI_LAB=true, then restart the dev server AND hard-refresh.
+ */
+export const ENABLE_AI_LAB = process.env.NEXT_PUBLIC_ENABLE_AI_LAB === "true";
