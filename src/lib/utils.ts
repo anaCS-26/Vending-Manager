@@ -32,6 +32,19 @@ export function formatSaudiTime(date: Date | string | number, options?: Intl.Dat
     });
 }
 
+/** Compact "Xm/h/d ago" from a past instant. Returns "never" for null. Timezone-agnostic (pure elapsed time). */
+export function formatRelativeAge(date: Date | string | number | null | undefined): string {
+    if (date == null) return "never";
+    const ms = Date.now() - new Date(date).getTime();
+    if (ms < 60000) return "just now";
+    const mins = Math.floor(ms / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+}
+
 /**
  * Asia/Riyadh is fixed at +03:00 year-round (Saudi Arabia does not observe DST).
  * All operational day boundaries should anchor to this offset rather than the
