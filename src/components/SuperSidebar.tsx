@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { ShieldAlert, Users, LayoutDashboard, CloudCog, Settings, LogOut } from "lucide-react";
+import { ShieldAlert, Users, LayoutDashboard, CloudCog, Settings, LogOut, ScrollText } from "lucide-react";
 import { signOut } from "next-auth/react";
 
 const mainNav = [
     { name: 'Provider Health', href: '/super', icon: LayoutDashboard },
     { name: 'Tenant Admins', href: '/super/admins', icon: Users },
+    { name: 'Audit Log', href: '/super/audit', icon: ScrollText },
 ];
 
 const infrastructureNav = [

@@ -65,6 +65,9 @@ export type DriverWithDispatches = Prisma.DriverGetPayload<{
     };
 }>;
 
+/** A raw system audit-log entry. Actor name is resolved separately (id → name). */
+export type SystemAuditLogRow = Prisma.SystemAuditLogGetPayload<{}>;
+
 // ==========================================
 // SERVER ACTION RESULT TYPES
 // ==========================================

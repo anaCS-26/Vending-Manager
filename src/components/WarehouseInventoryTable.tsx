@@ -1,20 +1,23 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Package, MapPin, Search, Plus, AlertCircle, ArrowUp, ArrowDown } from "lucide-react";
+import { Package, MapPin, Search, Plus, AlertCircle, ArrowUp, ArrowDown, Scale, AlertTriangle } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import type { WarehouseWithItem, WarehouseType } from "@/types";
 import type { Item } from "@prisma/client";
 import { formatCurrency } from "@/lib/utils";
+import WarehouseAuditModal from "./WarehouseAuditModal";
+import CostCorrectionModal from "./CostCorrectionModal";
 
 type Props = {
     inventory: WarehouseWithItem[];
     warehouses: WarehouseType[];
     existingItems: Item[];
+    isSuperAdmin?: boolean;
 };
 
 type SortKey = "name" | "quantity_on_hand" | "pending_deficit" | "cost" | "price_standard" | "price_hospital" | "price_hotel" | "total_amount" | "location";
 
-export default function WarehouseInventoryTable({ inventory, warehouses, existingItems }: Props) {
+export default function WarehouseInventoryTable({ inventory, warehouses, existingItems, isSuperAdmin = false }: Props) {
     const topScrollRef = useRef<HTMLDivElement>(null);
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const [tableWidth, setTableWidth] = useState<number>(900);
@@ -23,6 +26,8 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
     const [searchQuery, setSearchQuery] = useState("");
     const [sortConfig, setSortConfig] = useState<{ key: SortKey | null; direction: "asc" | "desc" }>({ key: null, direction: "desc" });
     const [currentPage, setCurrentPage] = useState(1);
+    const [isRecountOpen, setIsRecountOpen] = useState(false);
+    const [isCostOpen, setIsCostOpen] = useState(false);
     const PAGE_SIZE = 10;
 
     useEffect(() => {
@@ -176,6 +181,25 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                     </option>
                                 ))}
                             </select>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setIsRecountOpen(true)}
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-accent-blue/10 hover:bg-accent-blue/20 border border-accent-blue/30 text-accent-blue rounded-xl text-sm font-bold transition-colors whitespace-nowrap"
+                            >
+                                <Scale className="w-4 h-4" />
+                                Recount
+                            </button>
+                            {isSuperAdmin && (
+                                <button
+                                    onClick={() => setIsCostOpen(true)}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-xl text-sm font-bold transition-colors whitespace-nowrap"
+                                >
+                                    <AlertTriangle className="w-4 h-4" />
+                                    Correct Cost
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -350,6 +374,19 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                 )}
             </div>
 
+            <WarehouseAuditModal
+                isOpen={isRecountOpen}
+                onClose={() => setIsRecountOpen(false)}
+                inventory={inventory}
+                warehouses={warehouses}
+            />
+            {isSuperAdmin && (
+                <CostCorrectionModal
+                    isOpen={isCostOpen}
+                    onClose={() => setIsCostOpen(false)}
+                    items={existingItems}
+                />
+            )}
         </>
     );
 }

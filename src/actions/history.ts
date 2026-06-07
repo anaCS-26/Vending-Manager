@@ -3,8 +3,8 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { notifyClients } from "@/lib/notify";
-import type { ActionResult, PaginatedResult } from "@/types";
-import { requireAdmin } from "@/lib/auth-utils";
+import type { ActionResult, PaginatedResult, SystemAuditLogRow } from "@/types";
+import { requireAdmin, requireSuperAdmin } from "@/lib/auth-utils";
 import { startOfRiyadhDay, endOfRiyadhDay } from "@/lib/utils";
 import type { Prisma } from "@prisma/client";
 
@@ -298,4 +298,84 @@ export async function updateRefillLog(
             error: error instanceof Error ? error.message : "Failed to update log"
         };
     }
+}
+
+/**
+ * ============================================================================
+ * AUDIT LOG (Super-admin only)
+ * Read-only, server-paginated view over SystemAuditLog — the long-term
+ * "who did what, when, before → after" source of truth.
+ * ============================================================================
+ */
+
+export type AuditLogFilters = {
+    actorId?: number | null;
+    actorRole?: string | null;   // 'admin' | 'super_admin' | 'driver' | 'SYSTEM'
+    actionType?: string | null;
+    entityType?: string | null;
+    dateFrom?: string | null;    // "YYYY-MM-DD" (Riyadh calendar day)
+    dateTo?: string | null;
+    searchQuery?: string | null; // matches message / actionType / entityType
+    page?: number;
+    pageSize?: number;
+};
+
+/** Paginated audit-log feed for the /super/audit viewer. Super-admin only. */
+export async function getAuditLogsPaginated(
+    filters: AuditLogFilters = {}
+): Promise<PaginatedResult<SystemAuditLogRow>> {
+    await requireSuperAdmin();
+
+    const page = Math.max(1, filters.page ?? 1);
+    const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
+
+    const where: Prisma.SystemAuditLogWhereInput = {};
+    if (filters.actorId) where.actorId = filters.actorId;
+    if (filters.actorRole) where.actorRole = filters.actorRole;
+    if (filters.actionType) where.actionType = filters.actionType;
+    if (filters.entityType) where.entityType = filters.entityType;
+
+    if (filters.dateFrom || filters.dateTo) {
+        where.timestamp = {};
+        if (filters.dateFrom) where.timestamp.gte = startOfRiyadhDay(filters.dateFrom);
+        if (filters.dateTo) where.timestamp.lte = endOfRiyadhDay(filters.dateTo);
+    }
+
+    if (filters.searchQuery && filters.searchQuery.trim()) {
+        const q = filters.searchQuery.trim();
+        where.OR = [
+            { message: { contains: q, mode: 'insensitive' } },
+            { actionType: { contains: q, mode: 'insensitive' } },
+            { entityType: { contains: q, mode: 'insensitive' } },
+        ];
+    }
+
+    const [data, total] = await Promise.all([
+        prisma.systemAuditLog.findMany({
+            where,
+            orderBy: { timestamp: 'desc' },
+            skip: (page - 1) * pageSize,
+            take: pageSize,
+        }),
+        prisma.systemAuditLog.count({ where }),
+    ]);
+
+    return {
+        data,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
+}
+
+/** Distinct actionType values present in the log — for populating the filter dropdown. */
+export async function getAuditActionTypes(): Promise<string[]> {
+    await requireSuperAdmin();
+    const rows = await prisma.systemAuditLog.findMany({
+        distinct: ['actionType'],
+        select: { actionType: true },
+        orderBy: { actionType: 'asc' },
+    });
+    return rows.map(r => r.actionType);
 }

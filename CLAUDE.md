@@ -37,6 +37,14 @@ Per-environment setup gotcha: `SystemMeta` must be in the `supabase_realtime` pu
 
 Behind `NEXT_PUBLIC_USE_DISPATCHLESS` (`src/lib/feature-flags.ts`). New path: `src/actions/driver-stock.ts` (`assignToDriver`, `acknowledgeAssignment`, `disputeAssignment`, `submitDriverReturn`, `getDriverBag`). Legacy: `src/actions/inventory.ts` (`dispatchToDriver`, `returnDispatch`). `logBatchRefills` is **still dispatch-required** until B2b. Dispute writes `InventoryAdjustment` reason `ASSIGNMENT_DISCREPANCY`. `approveReturn` works on both rows.
 
+## Warehouse calibration & audit
+
+Correct warehouse stock/cost **without fake POs** (a PO at the wrong `costPerUnit` silently corrupts WAC, and WAC flows into P&L via `RefillLog.cost_at_refill` snapshots + live shrinkage). Both actions in `src/actions/inventory.ts` write `InventoryAdjustment` + `SystemAuditLog` **inside the tx**:
+- `calibrateWarehouseStock(warehouseId, items[{itemId, physicalCount, foundUnitCost?}], note?)` — recount to an absolute qty (`requireAdmin`). WAC is left unchanged for shortages and for found units valued at current WAC; a `foundUnitCost` re-blends WAC via `computeWeightedCost` (same W+M+D aggregation as `completePurchaseOrder`). Never emits `RefillLog` (warehouse stock leaving is not a sale).
+- `correctItemCost(itemId, correctedCost, note)` — direct WAC revaluation (`requireSuperAdmin`). SETs `Item.cost`; **never** rewrites frozen `RefillLog` history (post a correcting entry, don't edit the ledger).
+
+UI: "Recount" / "Correct Cost" buttons on `/admin/warehouse` (`WarehouseAuditModal`, `CostCorrectionModal`); Correct Cost is super-admin-gated (page passes `isSuperAdmin`). Detection heuristic for bad costs: `cost > price_standard` (see `scripts/find-suspect-costs.ts`). Audit-log viewer at `/super/audit` (super-admin only via `src/proxy.ts`; `getAuditLogsPaginated` in `history.ts`).
+
 ## Conventions
 
 - **Vertical slices**: schema changes land end-to-end in one PR (Prisma, actions, `src/types/index.ts`, all UI).

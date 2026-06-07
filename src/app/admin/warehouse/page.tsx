@@ -4,13 +4,16 @@ import { getWarehouses } from "@/actions/warehouses";
 import { Database } from "lucide-react";
 import WarehouseInventoryTable from "@/components/WarehouseInventoryTable";
 import prisma from "@/lib/prisma";
+import { auth } from "@/proxy";
 
 export default async function WarehousePage() {
-    const [inventory, warehouses, existingItems] = await Promise.all([
+    const [inventory, warehouses, existingItems, session] = await Promise.all([
         getWarehouseInventory(),
         getWarehouses(),
-        prisma.item.findMany()
+        prisma.item.findMany(),
+        auth()
     ]);
+    const isSuperAdmin = (session?.user as any)?.role === "super_admin";
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
@@ -33,6 +36,7 @@ export default async function WarehousePage() {
                 inventory={inventory}
                 warehouses={warehouses}
                 existingItems={existingItems}
+                isSuperAdmin={isSuperAdmin}
             />
         </div>
     );
