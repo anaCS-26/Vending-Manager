@@ -102,7 +102,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
         try {
             const result = await calibrateWarehouseStock(selectedWarehouseId, items, note);
             if (result.success) {
-                toast.success("Warehouse recount applied");
+                toast.success("Warehouse calibration applied");
                 onClose();
             } else {
                 toast.error(result.error || "Failed to calibrate warehouse stock");
@@ -140,8 +140,8 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                             <Scale className="w-5 h-5 text-accent-blue" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">Warehouse Recount</h2>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mt-0.5">Calibrate Physical Stock</p>
+                            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">Warehouse Calibration</h2>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mt-0.5">Physical Stock Count</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 rounded-full transition-colors hidden sm:block">
@@ -158,7 +158,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                             value={selectedWarehouseId}
                             onChange={(e) => handleWarehouseChange(e.target.value ? parseInt(e.target.value) : "")}
                         >
-                            <option value="" className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">-- Select Warehouse to Recount --</option>
+                            <option value="" className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">-- Select Warehouse to Calibrate --</option>
                             {warehouses.map(w => (
                                 <option key={w.id} value={w.id} className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">{w.id} - {w.name}</option>
                             ))}
@@ -194,7 +194,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                     {!selectedWarehouseId ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400">
                             <AlertCircle className="w-12 h-12 mb-4 opacity-50" />
-                            <p className="font-medium text-slate-500">Select a warehouse to begin the recount</p>
+                            <p className="font-medium text-slate-500">Select a warehouse to begin the calibration</p>
                         </div>
                     ) : filteredInventory.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400">
@@ -229,7 +229,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                                                     )}
                                                     {isShort && (
                                                         <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-accent-pink/10 text-accent-pink">
-                                                            {Math.abs(diff)} shortage (neutral)
+                                                            −{Math.abs(diff)} shortage (neutral)
                                                         </span>
                                                     )}
                                                 </div>
@@ -321,7 +321,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                                 ) : (
                                     <Save className="w-4 h-4" />
                                 )}
-                                Apply Recount
+                                Apply Calibration
                             </button>
                         </div>
                     </div>
@@ -331,9 +331,9 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
             <ConfirmModal
                 isOpen={showConfirm}
                 isDestructive={false}
-                title="Confirm Warehouse Recount"
-                message={`Apply this recount? Shortages are neutral corrections (no loss booked); found units keep the current WAC unless you set a found-cost. (+${totals.found} found, −${totals.short} shortage)`}
-                confirmText="Yes, Apply Recount"
+                title="Confirm Warehouse Calibration"
+                message={`Apply this calibration? Shortages are neutral corrections (no loss booked); found units keep the current WAC unless you set a found-cost. (+${totals.found} found, −${totals.short} shortage)`}
+                confirmText="Yes, Apply Calibration"
                 onConfirm={executeSubmit}
                 onCancel={() => setShowConfirm(false)}
             />

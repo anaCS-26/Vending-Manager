@@ -189,7 +189,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-accent-blue/10 hover:bg-accent-blue/20 border border-accent-blue/30 text-accent-blue rounded-xl text-sm font-bold transition-colors whitespace-nowrap"
                             >
                                 <Scale className="w-4 h-4" />
-                                Recount
+                                Calibrate Stock
                             </button>
                             {isSuperAdmin && (
                                 <button
