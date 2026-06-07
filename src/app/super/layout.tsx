@@ -1,11 +1,17 @@
 import { SuperSidebar } from "@/components/SuperSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { requireSuperAdmin } from "@/lib/auth-utils";
 
-export default function SuperLayout({
+export default async function SuperLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
+    // Defense-in-depth: src/proxy.ts already gates /super to super_admin at the edge.
+    // This makes the whole /super subtree fail closed at the RSC layer too, covering
+    // pages that do inline prisma reads (admins roster, audit name maps).
+    await requireSuperAdmin();
+
     return (
         <div className="flex min-h-screen bg-neo-bg text-foreground">
             <SuperSidebar />

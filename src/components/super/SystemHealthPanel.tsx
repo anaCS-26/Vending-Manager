@@ -16,10 +16,10 @@ export default function SystemHealthPanel({ health, variant = "full" }: { health
 
     if (variant === "compact") {
         return (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <HealthPill icon={<Database className="w-4 h-4" />} label="Database" value={db.ok ? `${db.latencyMs}ms` : "offline"} ok={db.ok} />
-                <HealthPill icon={<Radio className="w-4 h-4" />} label="Realtime" value={realtime.configured ? formatRelativeAge(realtime.lastBumpAt) : "missing"} ok={realtime.configured && heartbeatWarm} />
-                <HealthPill icon={<Activity className="w-4 h-4" />} label="Last refill" value={formatRelativeAge(lastActivity.lastRefillAt)} ok={lastActivity.lastRefillAt != null} />
+            <div className="space-y-2.5">
+                <HealthRow icon={<Database className="w-4 h-4" />} label="Database" value={db.ok ? `${db.latencyMs} ms` : "Offline"} ok={db.ok} />
+                <HealthRow icon={<Radio className="w-4 h-4" />} label="Realtime" value={realtime.configured ? formatRelativeAge(realtime.lastBumpAt) : "Missing"} ok={realtime.configured && heartbeatWarm} />
+                <HealthRow icon={<Activity className="w-4 h-4" />} label="Last refill" value={formatRelativeAge(lastActivity.lastRefillAt)} ok={lastActivity.lastRefillAt != null} />
             </div>
         );
     }
@@ -99,16 +99,14 @@ export default function SystemHealthPanel({ health, variant = "full" }: { health
     );
 }
 
-function HealthPill({ icon, label, value, ok }: { icon: React.ReactNode; label: string; value: string; ok: boolean }) {
+function HealthRow({ icon, label, value, ok }: { icon: React.ReactNode; label: string; value: string; ok: boolean }) {
     return (
-        <div className="flex items-center gap-3 rounded-2xl bg-slate-50 dark:bg-white/[0.03] px-4 py-3 border border-slate-200 dark:border-white/5">
-            <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", ok ? "bg-accent-green/10 text-accent-green" : "bg-accent-pink/10 text-accent-pink")}>
+        <div className="flex items-center gap-3 rounded-2xl bg-slate-50 dark:bg-white/[0.03] px-4 py-2.5 border border-slate-200 dark:border-white/5">
+            <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center shrink-0", ok ? "bg-accent-green/10 text-accent-green" : "bg-accent-pink/10 text-accent-pink")}>
                 {icon}
             </div>
-            <div className="min-w-0">
-                <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</p>
-                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{value}</p>
-            </div>
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</span>
+            <span className="ml-auto text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap">{value}</span>
         </div>
     );
 }
