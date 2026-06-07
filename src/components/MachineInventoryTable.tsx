@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Package, MapPin, Search, AlertCircle, TrendingDown, Clock, ArrowUp, ArrowDown } from "lucide-react";
+import { Package, MapPin, Search, AlertCircle, TrendingDown, Clock, ArrowUp, ArrowDown, Scale } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import type { MachineStockWithItem, MachineType } from "@/types";
 import { formatCurrency, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
@@ -131,11 +131,12 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                 </h3>
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
-                    <button 
+                    <button
                         onClick={() => setIsAuditModalOpen(true)}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-accent-blue/10 border border-slate-200 dark:border-accent-blue/20 text-slate-900 dark:text-accent-blue hover:text-white hover:bg-accent-blue dark:hover:bg-accent-blue/20 rounded-xl text-sm font-bold transition-all whitespace-nowrap"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-accent-blue/10 hover:bg-accent-blue/20 border border-accent-blue/30 text-accent-blue rounded-xl text-sm font-bold transition-colors whitespace-nowrap"
                     >
-                        Reconcile Audit
+                        <Scale className="w-4 h-4" />
+                        Calibrate Stock
                     </button>
                     <div className="relative flex-1 sm:min-w-[240px]">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 dark:text-slate-400" />

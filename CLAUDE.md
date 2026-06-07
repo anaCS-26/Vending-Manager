@@ -43,7 +43,9 @@ Correct warehouse stock/cost **without fake POs** (a PO at the wrong `costPerUni
 - `calibrateWarehouseStock(warehouseId, items[{itemId, physicalCount, foundUnitCost?}], note?)` — recount to an absolute qty (`requireAdmin`). WAC is left unchanged for shortages and for found units valued at current WAC; a `foundUnitCost` re-blends WAC via `computeWeightedCost` (same W+M+D aggregation as `completePurchaseOrder`). Never emits `RefillLog` (warehouse stock leaving is not a sale).
 - `correctItemCost(itemId, correctedCost, note)` — direct WAC revaluation (`requireSuperAdmin`). SETs `Item.cost`; **never** rewrites frozen `RefillLog` history (post a correcting entry, don't edit the ledger).
 
-UI: "Recount" / "Correct Cost" buttons on `/admin/warehouse` (`WarehouseAuditModal`, `CostCorrectionModal`); Correct Cost is super-admin-gated (page passes `isSuperAdmin`). Detection heuristic for bad costs: `cost > price_standard` (see `scripts/find-suspect-costs.ts`).
+UI: "Calibrate Stock" / "Correct Cost" buttons on `/admin/warehouse` (`WarehouseAuditModal`, `CostCorrectionModal`); Correct Cost is super-admin-gated (page passes `isSuperAdmin`). Detection heuristic for bad costs: `cost > price_standard` (see `scripts/find-suspect-costs.ts`).
+
+`/admin/machine-stock` has a **sibling** "Calibrate Stock" button (`MachineInventoryTable` → `MachineAuditModal` → `reconcileMachineAudit`) that shares the warehouse modal's chrome/copy **by design** (same title pattern, explainer box, columns, badges, confirm flow). Keep the two modals visually in sync, but **do not flatten the semantics**: a machine **shortage IS a sale** (booked as `RefillLog` revenue + COGS, since product leaves a machine by being vended), whereas a warehouse shortage is neutral. Each modal's explainer/confirm copy states its own financial behavior.
 
 ## Super-admin console
 
