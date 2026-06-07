@@ -184,7 +184,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                     <div className="flex gap-3 items-start bg-accent-blue/5 border border-accent-blue/20 rounded-xl px-4 py-3">
                         <Info className="w-4 h-4 text-accent-blue shrink-0 mt-0.5" />
                         <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            <span className="font-bold text-slate-800 dark:text-slate-100">Make the app match reality.</span> Count what&apos;s physically on the shelf and type it in. A <span className="font-semibold text-accent-pink">shortage</span> simply fixes the number — no loss is charged to your profit. <span className="font-semibold text-emerald-500">Found</span> stock is added at its current cost, so your cost &amp; profit figures stay accurate. No purchase order needed.
+                            <span className="font-bold text-slate-800 dark:text-slate-100">Reconcile your records with the shelf.</span> Enter the quantity you actually counted for each item. A <span className="font-semibold text-accent-pink">shortage</span> simply corrects the on-hand figure — no loss is charged against your profit. <span className="font-semibold text-emerald-500">Found</span> stock is added back at its current cost, so your cost &amp; profit figures stay accurate. No purchase order required.
                         </p>
                     </div>
                 </div>
