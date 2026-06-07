@@ -55,6 +55,14 @@ The `/super/*` zone (super-admin only via `src/proxy.ts`) is a provider oversigh
 
 P&L math is shared in `src/lib/pnl.ts` (`computePnLTotals`/`refillRevenueAndCogs`) — used by both `/admin/financials` and `getExecutiveKpis`; reads `RefillLog` snapshots, never live `Item`. `KpiCard` is shared at `src/components/KpiCard.tsx`; super-only presentational/chart components live in `src/components/super/`. Audit viewer: `getAuditLogsPaginated` in `history.ts`.
 
+## AI Lab (experimental, super-admin only)
+
+`/super/lab` — gated behind `ENABLE_AI_LAB` (`NEXT_PUBLIC_ENABLE_AI_LAB`, off by default; build-time so restart+hard-refresh after flipping). Nav entry is conditionally added to `SuperSidebar`. Two pure-statistics, **read-only / advisory** features (no LLM, no writes, no audit rows) in `src/actions/ai-lab.ts` (`requireSuperAdmin`):
+- `getStockoutForecast()` — per-machine-item demand forecast + replenishment recommendation. Each closed refill interval is one observation of daily sales rate (`items_sold_since_last_refill ÷ interval days`); EWMA-weights recency, estimates days-until-empty vs `MachineStock.estimated_stock`, recommends assign qty = lead-time demand + safety stock (`z·σ·√leadDays`), lead time = the machine-item's own measured visit cadence. Surfaces a confidence band.
+- `getSilentFailureAlerts()` — anomalies vs each machine's **own** baseline: demand collapse / spike (z-score on the latest interval), cadence-relative overdue-service (per-machine), abnormal damage/expiry (`ReturnVerification` recent vs window baseline).
+
+Statistics are pure functions in `src/lib/forecast.ts` (no Prisma/IO → unit-tested in `tests/lib/forecast.test.ts`); the action only reconstructs series + classifies. Caveats baked into the UI: demand is refilled-minus-returns (not POS telemetry) and stock is estimated — figures are guidance, weighted by confidence. Types `StockoutForecast`/`SilentFailureAlert` in `src/types/index.ts`; boards `StockoutRadar`/`SilentFailureBoard` in `src/components/super/`.
+
 ## Conventions
 
 - **Vertical slices**: schema changes land end-to-end in one PR (Prisma, actions, `src/types/index.ts`, all UI).

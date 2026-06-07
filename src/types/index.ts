@@ -103,3 +103,61 @@ export type DepletionPrediction = {
     consumptionRate: number; // units per hour
     predictedHoursUntilEmpty: number | null;
 };
+
+// ==========================================
+// AI LAB (experimental — super-admin only)
+// Demand forecasting & anomaly detection over RefillLog history. See
+// src/actions/ai-lab.ts and src/lib/forecast.ts. Read-only / advisory.
+// ==========================================
+
+/** One at-risk machine-item row in the Stockout Radar. */
+export type StockoutForecast = {
+    machineId: number;
+    machineName: string;
+    district: string;
+    itemId: number;
+    itemName: string;
+    /** MachineStock.estimated_stock — an estimate, not a meter reading. */
+    currentStock: number;
+    /** Recency-weighted units/day (EWMA of per-interval rates). */
+    estDailyDemand: number;
+    /** Estimated days until empty at the current demand; null = no measurable demand. */
+    daysUntilEmpty: number | null;
+    /** Average days between refills for this machine-item (the replenishment lead time). */
+    visitCadenceDays: number;
+    /** Item.default_assignment_qty as configured today. */
+    currentAssignQty: number;
+    /** Forecast lead-time demand + safety stock. */
+    recommendedAssignQty: number;
+    riskLevel: "critical" | "warning" | "ok";
+    confidence: "low" | "medium" | "high";
+    /** Number of closed refill intervals backing the estimate. */
+    observations: number;
+};
+
+export type SilentFailureKind =
+    | "demand_collapse"
+    | "demand_spike"
+    | "overdue_service"
+    | "abnormal_shrinkage";
+
+/** One anomaly flagged by Silent-Failure Watch. */
+export type SilentFailureAlert = {
+    /** Stable key, e.g. `demand_collapse-12-3`. */
+    id: string;
+    kind: SilentFailureKind;
+    severity: "critical" | "warning" | "info";
+    machineId: number;
+    machineName: string;
+    district: string;
+    itemId: number | null;
+    itemName: string | null;
+    /** Plain-English one-liner. */
+    headline: string;
+    /** Supporting numbers / explanation. */
+    detail: string;
+    /** Compact right-aligned figure, e.g. "−92%". */
+    metric: string;
+    drillHref: string;
+    confidence: "low" | "medium" | "high";
+};
