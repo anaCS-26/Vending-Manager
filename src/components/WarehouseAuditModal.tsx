@@ -131,10 +131,10 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
         <>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 text-left" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
             <div className="absolute inset-0 bg-slate-900/40 dark:bg-zinc-950/80 backdrop-blur-md" onClick={onClose} />
-            <div className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[90vh] overflow-hidden shadow-2xl">
+            <div className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-accent-blue/10 flex items-center justify-center border border-accent-blue/20">
                             <Scale className="w-5 h-5 text-accent-blue" />
@@ -150,7 +150,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                 </div>
 
                 {/* Controls */}
-                <div className="p-6 border-b border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row gap-4 items-end bg-white dark:bg-zinc-900">
+                <div className="px-6 py-4 border-b border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row gap-4 items-end bg-white dark:bg-zinc-900">
                     <div className="w-full sm:w-1/2">
                         <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Target Warehouse</label>
                         <select
@@ -180,11 +180,11 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                 </div>
 
                 {/* Plain-language explainer for non-technical users */}
-                <div className="px-6 pt-4">
+                <div className="px-6 pt-3">
                     <div className="flex gap-3 items-start bg-accent-blue/5 border border-accent-blue/20 rounded-xl px-4 py-3">
                         <Info className="w-4 h-4 text-accent-blue shrink-0 mt-0.5" />
                         <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            <span className="font-bold text-slate-800 dark:text-slate-100">Reconcile your records with the shelf.</span> Enter the quantity you actually counted for each item. A <span className="font-semibold text-accent-pink">shortage</span> simply corrects the on-hand figure — no loss is charged against your profit. <span className="font-semibold text-emerald-500">Found</span> stock is added back at its current cost, so your cost &amp; profit figures stay accurate. No purchase order required.
+                            <span className="font-bold text-slate-800 dark:text-slate-100">Match the count to the shelf.</span> Enter how many of each item you actually have. A <span className="font-semibold text-accent-pink">shortage</span> simply lowers the number, and no loss is charged to your profit. <span className="font-semibold text-emerald-500">Found stock</span> is added back at its current cost, so your cost &amp; profit stay accurate. No purchase order needed.
                         </p>
                     </div>
                 </div>
@@ -261,7 +261,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                                                 <input
                                                     type="text"
                                                     inputMode="decimal"
-                                                    placeholder={`WAC ${stock.item.cost} (leave blank — no change)`}
+                                                    placeholder={`WAC ${stock.item.cost} (leave blank to keep current cost)`}
                                                     value={foundCosts[stock.itemId] ?? ''}
                                                     onChange={(e) => handleFoundCostChange(stock.itemId, e.target.value)}
                                                     className="flex-1 max-w-[260px] font-mono text-sm rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent-blue/50"
@@ -276,11 +276,11 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50 flex flex-col gap-4">
+                <div className="px-6 py-4 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50 flex flex-col gap-4">
                     {selectedWarehouseId && (
                         <input
                             type="text"
-                            placeholder="Reason / note (optional) — e.g. opening-balance correction, physical recount 06 Jun"
+                            placeholder="Reason or note (optional), e.g. opening-balance correction"
                             value={note}
                             onChange={(e) => setNote(e.target.value)}
                             className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-accent-blue/50 transition-colors"

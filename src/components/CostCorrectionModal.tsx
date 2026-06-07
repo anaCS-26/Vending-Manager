@@ -113,10 +113,10 @@ export default function CostCorrectionModal({ isOpen, onClose, items }: Props) {
         <>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 text-left" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
             <div className="absolute inset-0 bg-slate-900/40 dark:bg-zinc-950/80 backdrop-blur-md" onClick={onClose} />
-            <div className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[90vh] overflow-hidden shadow-2xl">
+            <div className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-accent-blue/10 flex items-center justify-center border border-accent-blue/20">
                             <AlertTriangle className="w-5 h-5 text-accent-blue" />
@@ -132,7 +132,7 @@ export default function CostCorrectionModal({ isOpen, onClose, items }: Props) {
                 </div>
 
                 {/* Controls */}
-                <div className="p-6 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-3">
+                <div className="px-6 py-4 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-3">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 dark:text-slate-400" />
                         <input
@@ -146,17 +146,17 @@ export default function CostCorrectionModal({ isOpen, onClose, items }: Props) {
                     {suspectCount > 0 && (
                         <p className="text-xs font-bold text-amber-500 flex items-center gap-2">
                             <AlertTriangle className="w-3.5 h-3.5" />
-                            {suspectCount} item(s) have a cost above their sell price — likely a case price entered per-unit.
+                            {suspectCount} item(s) have a cost above their sell price, likely a case price entered per unit.
                         </p>
                     )}
                 </div>
 
                 {/* Plain-language explainer for non-technical users */}
-                <div className="px-6 pt-4">
+                <div className="px-6 pt-3">
                     <div className="flex gap-3 items-start bg-accent-blue/5 border border-accent-blue/20 rounded-xl px-4 py-3">
                         <Info className="w-4 h-4 text-accent-blue shrink-0 mt-0.5" />
                         <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            <span className="font-bold text-slate-800 dark:text-slate-100">Fix a wrong item cost.</span> Use this when an item&apos;s cost looks wrong — e.g. a full <em>case</em> price was typed in as the price of a <em>single</em> unit. It corrects the cost used in your profit calculations from now on. Sales already recorded keep their original cost, so your history stays intact.
+                            <span className="font-bold text-slate-800 dark:text-slate-100">Fix a wrong item cost.</span> Use this when an item&apos;s cost looks off, for example when a full <em>case</em> price was typed in as the price of a <em>single</em> unit. It corrects the cost used in your profit calculations from now on. Sales already recorded keep their original cost, so your history stays accurate.
                         </p>
                     </div>
                 </div>
@@ -222,7 +222,7 @@ export default function CostCorrectionModal({ isOpen, onClose, items }: Props) {
                                                 </div>
                                                 <input
                                                     type="text"
-                                                    placeholder="Reason note (required) — e.g. case price 31 entered per-unit; true unit cost"
+                                                    placeholder="Reason (required), e.g. case price of 31 was entered as the unit cost"
                                                     value={note}
                                                     onChange={(e) => setNote(e.target.value)}
                                                     className="w-full bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-accent-blue/50"
@@ -240,7 +240,7 @@ export default function CostCorrectionModal({ isOpen, onClose, items }: Props) {
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50 flex flex-col sm:flex-row items-center gap-4 justify-between">
+                <div className="px-6 py-4 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50 flex flex-col sm:flex-row items-center gap-4 justify-between">
                     <div className="w-full sm:w-auto text-center sm:text-left">
                         {selectedItem && (
                             <p className="text-sm font-medium text-slate-600 dark:text-slate-300 truncate">
