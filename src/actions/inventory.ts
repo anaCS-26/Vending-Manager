@@ -11,6 +11,7 @@ import { put } from '@vercel/blob';
 import bcrypt from "bcryptjs";
 import { requireAdmin, requireSuperAdmin, requireDriver, requireAdminOrDriverOwner } from "@/lib/auth-utils";
 import { writeAuditLog } from "@/lib/audit-utils";
+import { computeWeightedCost } from "@/lib/wac-math";
 
 /**
  * ============================================================================
@@ -1538,7 +1539,7 @@ export async function reconcileMachineAudit(
             
             const machineData = await tx.machine.findUnique({ where: { id: machineId }});
 
-            let auditLogChanges: {itemId: number, expected: number, actual: number, sold: number}[] = [];
+            const auditLogChanges: {itemId: number, expected: number, actual: number, sold: number}[] = [];
 
             for (const audit of itemAudits) {
                 const stock = stockMap.get(audit.itemId);
@@ -1622,5 +1623,171 @@ export async function reconcileMachineAudit(
     } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to reconcile machine";
         return { success: false, error: message };
+    }
+}
+
+/**
+ * ============================================================================
+ * WAREHOUSE CALIBRATION (Quantity Recount + Cost Correction)
+ *
+ * Lets an admin correct warehouse stock that has drifted from physical reality
+ * WITHOUT abusing purchase orders (which create false procurement records and
+ * silently shift WAC). Mirrors reconcileMachineAudit, but warehouse stock
+ * leaving is NOT a sale — so we never emit RefillLog rows. Every change writes
+ * an InventoryAdjustment (inventory ledger) AND a SystemAuditLog row, both
+ * inside the same transaction, so the audit trail can never drift from the data.
+ * ============================================================================
+ */
+
+/**
+ * Recount a warehouse to its physical count (absolute set, per item).
+ *  - delta < 0 (shortage): neutral correction — WAC untouched (removing units at
+ *    the running average never moves the average). No P&L impact.
+ *  - delta > 0, no foundUnitCost: WAC untouched (found units valued at the current
+ *    average — adding qty at the current WAC is a mathematical no-op).
+ *  - delta > 0 with foundUnitCost: re-blend WAC exactly like a PO receipt,
+ *    aggregating qty across Warehouse + Machine + Driver (see completePurchaseOrder).
+ */
+export async function calibrateWarehouseStock(
+    warehouseId: number,
+    items: { itemId: number; physicalCount: number; foundUnitCost?: number | null }[],
+    note?: string
+): Promise<ActionResult> {
+    const session = await requireAdmin();
+    const actorId = session.user ? parseInt((session.user as any).id, 10) : null;
+    const actorRole = session.user ? (session.user as any).role : "SYSTEM";
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            const warehouse = await tx.warehouse.findUnique({ where: { id: warehouseId } });
+            if (!warehouse) throw new Error("Warehouse not found");
+
+            const changes: { itemId: number; from: number; to: number; delta: number; wacFrom: number; wacTo: number }[] = [];
+
+            for (const entry of items) {
+                if (entry.physicalCount < 0) throw new Error("Physical count cannot be negative");
+
+                const existing = await tx.warehouseStock.findUnique({
+                    where: { warehouseId_itemId: { warehouseId, itemId: entry.itemId } },
+                });
+                const current = existing?.quantity_on_hand ?? 0;
+                const delta = entry.physicalCount - current;
+                if (delta === 0) continue;
+
+                const itemData = await tx.item.findUnique({ where: { id: entry.itemId }, select: { cost: true } });
+                const currentCost = itemData?.cost ?? 0;
+                let newCost = currentCost;
+
+                // Re-blend WAC only when adding found units that carry a DIFFERENT cost.
+                const foundCost = entry.foundUnitCost;
+                if (delta > 0 && foundCost != null && foundCost >= 0 && foundCost !== currentCost) {
+                    const wStock = await tx.warehouseStock.aggregate({ where: { itemId: entry.itemId }, _sum: { quantity_on_hand: true } });
+                    const mStock = await tx.machineStock.aggregate({ where: { itemId: entry.itemId }, _sum: { estimated_stock: true } });
+                    const dStock = await (tx as any).driverStock.aggregate({ where: { itemId: entry.itemId }, _sum: { quantity_on_hand: true } });
+                    const totalCurrentQty = (wStock._sum.quantity_on_hand || 0) + (mStock._sum.estimated_stock || 0) + (dStock._sum.quantity_on_hand || 0);
+                    newCost = computeWeightedCost(totalCurrentQty, currentCost, delta, foundCost);
+                }
+
+                // Apply the absolute physical count.
+                await tx.warehouseStock.upsert({
+                    where: { warehouseId_itemId: { warehouseId, itemId: entry.itemId } },
+                    update: { quantity_on_hand: entry.physicalCount },
+                    create: { warehouseId, itemId: entry.itemId, quantity_on_hand: entry.physicalCount },
+                });
+
+                if (newCost !== currentCost) {
+                    await tx.item.update({ where: { id: entry.itemId }, data: { cost: newCost } });
+                }
+
+                // Inventory ledger entry (snapshot the cost basis used for these units).
+                await tx.inventoryAdjustment.create({
+                    data: {
+                        itemId: entry.itemId,
+                        quantity: delta,
+                        reason: `Warehouse Recount (${delta > 0 ? '+' : ''}${delta})${note && note.trim() ? `: ${note.trim()}` : ''}`,
+                        locationName: warehouse.name,
+                        priceAtAdjustment: delta > 0 ? (foundCost ?? currentCost) : currentCost,
+                    },
+                });
+
+                changes.push({ itemId: entry.itemId, from: current, to: entry.physicalCount, delta, wacFrom: currentCost, wacTo: newCost });
+            }
+
+            if (changes.length === 0) {
+                throw new Error("No changes to apply — all counts already match.");
+            }
+
+            await tx.systemAuditLog.create({
+                data: {
+                    actorId,
+                    actorRole,
+                    actionType: "WAREHOUSE_RECOUNT",
+                    entityType: "WarehouseStock",
+                    entityId: warehouseId,
+                    oldState: JSON.parse(JSON.stringify(changes.map(c => ({ itemId: c.itemId, quantity_on_hand: c.from, cost: c.wacFrom })))),
+                    newState: JSON.parse(JSON.stringify(changes.map(c => ({ itemId: c.itemId, quantity_on_hand: c.to, cost: c.wacTo })))),
+                    message: `Recounted ${changes.length} item(s) in ${warehouse.name}. Net qty delta: ${changes.reduce((a, c) => a + c.delta, 0)}.${note && note.trim() ? ` Note: ${note.trim()}` : ''}`,
+                },
+            });
+        });
+
+        revalidatePath('/admin/warehouse');
+        revalidatePath('/admin/financials');
+        notifyClients('warehouseStock');
+        return { success: true, data: undefined };
+    } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Failed to calibrate warehouse stock" };
+    }
+}
+
+/**
+ * Directly correct an item's running cost (WAC) when it is known to be wrong —
+ * e.g. a case price entered as a per-unit cost. This is a revaluation (SET), not
+ * a blend, and it does NOT change quantity. Historical RefillLog.cost_at_refill
+ * snapshots are deliberately left frozen (you never rewrite a posted record); the
+ * correction only fixes go-forward COGS and live shrinkage valuation.
+ * Super-admin only — revaluation is financially sensitive.
+ */
+export async function correctItemCost(
+    itemId: number,
+    correctedCost: number,
+    note: string
+): Promise<ActionResult> {
+    const session = await requireSuperAdmin();
+    const actorId = session.user ? parseInt((session.user as any).id, 10) : null;
+    const actorRole = session.user ? (session.user as any).role : "SYSTEM";
+
+    try {
+        if (correctedCost < 0) throw new Error("Cost cannot be negative");
+        if (!note || !note.trim()) throw new Error("A reason note is required for a cost correction");
+
+        await prisma.$transaction(async (tx) => {
+            const item = await tx.item.findUnique({ where: { id: itemId }, select: { id: true, name: true, cost: true } });
+            if (!item) throw new Error("Item not found");
+            if (item.cost === correctedCost) throw new Error("Corrected cost is identical to the current cost");
+
+            await tx.item.update({ where: { id: itemId }, data: { cost: correctedCost } });
+
+            await tx.systemAuditLog.create({
+                data: {
+                    actorId,
+                    actorRole,
+                    actionType: "COST_CORRECTION",
+                    entityType: "Item",
+                    entityId: itemId,
+                    oldState: { cost: item.cost },
+                    newState: { cost: correctedCost },
+                    message: `Cost correction for ${item.name}: ${item.cost} → ${correctedCost}. Reason: ${note.trim()}`,
+                },
+            });
+        });
+
+        revalidatePath('/admin/warehouse');
+        revalidatePath('/admin/manage');
+        revalidatePath('/admin/financials');
+        notifyClients('item');
+        return { success: true, data: undefined };
+    } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Failed to correct item cost" };
     }
 }
