@@ -37,6 +37,8 @@ Per-environment setup gotcha: `SystemMeta` must be in the `supabase_realtime` pu
 
 Behind `NEXT_PUBLIC_USE_DISPATCHLESS` (`src/lib/feature-flags.ts`). New path: `src/actions/driver-stock.ts` (`assignToDriver`, `acknowledgeAssignment`, `disputeAssignment`, `submitDriverReturn`, `getDriverBag`). Legacy: `src/actions/inventory.ts` (`dispatchToDriver`, `returnDispatch`). `logBatchRefills` is **still dispatch-required** until B2b. Dispute writes `InventoryAdjustment` reason `ASSIGNMENT_DISCREPANCY`. `approveReturn` works on both rows.
 
+`assignToDriver` batches its transaction into **3 set-based statements** (raw `UPDATE…FROM (VALUES…)` warehouse decrement with per-row gte guard, `createManyAndReturn` audit rows, raw `INSERT…ON CONFLICT` bag credit) + a 15s tx timeout. Do NOT regress to per-item loops inside `$transaction`: prod runs through the Supavisor pooler (~70-100ms/query from Vercel), so 3×N sequential queries blows Prisma's 5s interactive-tx window on large pushes (P2028 "Transaction not found"). Repro harness: `scripts/repro-assign-timeout.ts` (`SIM_LATENCY_MS=100 ITEMS=25`). Raw SQL in tests: `prismaMock.$queryRaw`/`$executeRaw` in `tests/__helpers__/prisma-mock.ts`.
+
 ## Warehouse calibration & audit
 
 Correct warehouse stock/cost **without fake POs** (a PO at the wrong `costPerUnit` silently corrupts WAC, and WAC flows into P&L via `RefillLog.cost_at_refill` snapshots + live shrinkage). Both actions in `src/actions/inventory.ts` write `InventoryAdjustment` + `SystemAuditLog` **inside the tx**:

@@ -65,49 +65,76 @@ describe('assignToDriver', () => {
 
   it('fails when warehouse is short on stock', async () => {
     setAdminSession(1);
-    prismaMock.item.findMany.mockResolvedValue([makeItem({ id: 1 })]);
-    // updateMany returns count: 0 → insufficient stock guard fires.
-    prismaMock.warehouseStock.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.item.findMany.mockResolvedValue([makeItem({ id: 1, name: 'Water' })]);
+    // Batched decrement RETURNING covers no rows → insufficient stock guard fires.
+    prismaMock.$queryRaw.mockResolvedValue([]);
 
     const r = await assignToDriver(10, 1, [{ itemId: 1, quantity: 50 }]);
     expect(r.success).toBe(false);
     expect((r as any).error).toMatch(/Insufficient warehouse stock/);
+    expect((r as any).error).toMatch(/Water \(need 50\)/);
+    // Nothing else in the tx runs after the shortage throw.
+    expect(prismaMock.stockAssignment.createManyAndReturn).not.toHaveBeenCalled();
+    expect(prismaMock.$executeRaw).not.toHaveBeenCalled();
   });
 
-  it('happy path: decrements warehouse, creates StockAssignment, upserts DriverStock, audits, notifies', async () => {
+  it('fails when only SOME items are short, naming the short ones', async () => {
+    setAdminSession(1);
+    prismaMock.item.findMany.mockResolvedValue([
+      makeItem({ id: 1, name: 'Water' }),
+      makeItem({ id: 2, name: 'Juice' }),
+    ]);
+    // Only item 1's decrement matched; item 2 is short.
+    prismaMock.$queryRaw.mockResolvedValue([{ itemId: 1 }]);
+
+    const r = await assignToDriver(10, 1, [
+      { itemId: 1, quantity: 5 },
+      { itemId: 2, quantity: 50 },
+    ]);
+    expect(r.success).toBe(false);
+    expect((r as any).error).toMatch(/Juice \(need 50\)/);
+    expect((r as any).error).not.toMatch(/Water/);
+  });
+
+  it('happy path: decrements warehouse, creates StockAssignments, upserts DriverStock, audits, notifies', async () => {
     setAdminSession(1);
     prismaMock.item.findMany.mockResolvedValue([makeItem({ id: 1, cost: 3 })]);
-    prismaMock.warehouseStock.updateMany.mockResolvedValue({ count: 1 });
-    prismaMock.stockAssignment.create.mockResolvedValue(makeStockAssignment({ id: 42 }));
-    prismaMock.driverStock.upsert.mockResolvedValue(makeDriverStock());
+    prismaMock.$queryRaw.mockResolvedValue([{ itemId: 1 }]); // warehouse decrement covered
+    prismaMock.stockAssignment.createManyAndReturn.mockResolvedValue([{ id: 42, itemId: 1 }]);
+    prismaMock.$executeRaw.mockResolvedValue(1); // DriverStock upsert
 
     const r = await assignToDriver(10, 1, [{ itemId: 1, quantity: 20, notes: 'pls' }]);
     expect(r.success).toBe(true);
     expect((r as any).data.assignmentIds).toEqual([42]);
 
-    // Warehouse decrement guarded by gte:
-    expect(prismaMock.warehouseStock.updateMany).toHaveBeenCalledWith({
-      where: { itemId: 1, warehouseId: 1, quantity_on_hand: { gte: 20 } },
-      data: { quantity_on_hand: { decrement: 20 } },
-    });
+    // ONE set-based warehouse decrement (guarded per row in SQL).
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    const decrementSql = (prismaMock.$queryRaw.mock.calls[0][0] as string[]).join('?');
+    expect(decrementSql).toContain('UPDATE "WarehouseStock"');
+    expect(decrementSql).toContain('quantity_on_hand >= v.qty');
+    expect(decrementSql).toContain('RETURNING');
 
-    // StockAssignment row snapshots cost_at_assignment from item.cost.
-    expect(prismaMock.stockAssignment.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
+    // ONE batched insert of StockAssignment rows, snapshotting item.cost.
+    expect(prismaMock.stockAssignment.createManyAndReturn).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
           driverId: 10, itemId: 1, warehouseId: 1, quantity: 20,
           cost_at_assignment: 3, status: 'PENDING_ACK', notes: 'pls', assigned_by: 1,
         }),
-      }),
-    );
+      ],
+      select: { id: true, itemId: true },
+    });
 
-    // Optimistic credit on DriverStock.
-    expect(prismaMock.driverStock.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { driverId_itemId: { driverId: 10, itemId: 1 } },
-        update: { quantity_on_hand: { increment: 20 } },
-        create: { driverId: 10, itemId: 1, quantity_on_hand: 20 },
-      }),
+    // ONE batched optimistic credit on DriverStock via INSERT ... ON CONFLICT.
+    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
+    const upsertSql = (prismaMock.$executeRaw.mock.calls[0][0] as string[]).join('?');
+    expect(upsertSql).toContain('INSERT INTO "DriverStock"');
+    expect(upsertSql).toContain('ON CONFLICT ("driverId", "itemId") DO UPDATE');
+
+    // Transaction gets an explicit timeout (large-push headroom over the 5s default).
+    expect(prismaMock.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ timeout: 15_000 }),
     );
 
     expect(writeAuditLog).toHaveBeenCalledWith(
@@ -118,24 +145,44 @@ describe('assignToDriver', () => {
     expect(revalidatePath).toHaveBeenCalledWith('/admin/driver-stock');
   });
 
+  it('returns assignmentIds in input-line order even if RETURNING order differs', async () => {
+    setAdminSession(1);
+    prismaMock.item.findMany.mockResolvedValue([
+      makeItem({ id: 1, cost: 3 }),
+      makeItem({ id: 2, cost: 4 }),
+    ]);
+    prismaMock.$queryRaw.mockResolvedValue([{ itemId: 2 }, { itemId: 1 }]);
+    // DB hands rows back in reverse order — ids must still map per item.
+    prismaMock.stockAssignment.createManyAndReturn.mockResolvedValue([
+      { id: 91, itemId: 2 },
+      { id: 90, itemId: 1 },
+    ]);
+    prismaMock.$executeRaw.mockResolvedValue(2);
+
+    const r = await assignToDriver(10, 1, [
+      { itemId: 1, quantity: 5 },
+      { itemId: 2, quantity: 8 },
+    ]);
+    expect(r.success).toBe(true);
+    expect((r as any).data.assignmentIds).toEqual([90, 91]);
+  });
+
   it('merges duplicate item lines (same itemId added twice)', async () => {
     setAdminSession(1);
     prismaMock.item.findMany.mockResolvedValue([makeItem({ id: 1 })]);
-    prismaMock.warehouseStock.updateMany.mockResolvedValue({ count: 1 });
-    prismaMock.stockAssignment.create.mockResolvedValue(makeStockAssignment());
-    prismaMock.driverStock.upsert.mockResolvedValue(makeDriverStock());
+    prismaMock.$queryRaw.mockResolvedValue([{ itemId: 1 }]);
+    prismaMock.stockAssignment.createManyAndReturn.mockResolvedValue([{ id: 1, itemId: 1 }]);
+    prismaMock.$executeRaw.mockResolvedValue(1);
 
     await assignToDriver(10, 1, [
       { itemId: 1, quantity: 10 },
       { itemId: 1, quantity: 5 },
     ]);
 
-    // Should make ONE warehouse decrement of 15, not two of 10 + 5.
-    expect(prismaMock.warehouseStock.updateMany).toHaveBeenCalledTimes(1);
-    expect(prismaMock.warehouseStock.updateMany).toHaveBeenCalledWith(
+    // ONE StockAssignment row of 15, not two of 10 + 5.
+    expect(prismaMock.stockAssignment.createManyAndReturn).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ quantity_on_hand: { gte: 15 } }),
-        data: { quantity_on_hand: { decrement: 15 } },
+        data: [expect.objectContaining({ itemId: 1, quantity: 15 })],
       }),
     );
   });

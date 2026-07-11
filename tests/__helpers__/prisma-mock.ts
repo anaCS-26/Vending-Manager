@@ -16,6 +16,7 @@ function makeModelMock() {
     findFirst: vi.fn(),
     create: vi.fn(),
     createMany: vi.fn(),
+    createManyAndReturn: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
     upsert: vi.fn(),
@@ -55,6 +56,10 @@ export const prismaMock = {
     if (Array.isArray(fn)) return Promise.all(fn);
     return fn;
   }),
+  // Tagged-template raw escape hatches (set-based batch statements). Tests
+  // assert against the mock's call args: (TemplateStringsArray, ...values).
+  $queryRaw: vi.fn(),
+  $executeRaw: vi.fn(),
 };
 
 /** Resets every model method between tests but preserves the shape. */
@@ -68,6 +73,12 @@ export function resetPrismaMock() {
         if (Array.isArray(fn)) return Promise.all(fn);
         return fn;
       });
+      continue;
+    }
+    // Top-level client mocks like $queryRaw/$executeRaw are functions, not
+    // model objects — reset them directly.
+    if (typeof value === 'function' && typeof value.mockReset === 'function') {
+      value.mockReset();
       continue;
     }
     if (value && typeof value === 'object') {
