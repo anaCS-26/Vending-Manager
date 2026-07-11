@@ -1,5 +1,6 @@
 "use server"
 
+import { Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { notifyClients } from "@/lib/notify"
@@ -66,48 +67,64 @@ export async function assignToDriver(
 
         const adminId = session.user?.id ? parseInt((session.user as any).id, 10) : null
 
-        const assignmentIds: number[] = []
+        const lines = Array.from(merged, ([itemId, v]) => ({ itemId, quantity: v.quantity, notes: v.notes }))
+
+        // Three set-based statements instead of three queries per item: large
+        // pushes routed through the Supavisor pooler were exceeding Prisma's 5s
+        // interactive-transaction window and dying mid-loop with "Transaction
+        // not found". Round-trip count is now constant regardless of push size.
+        let assignmentIds: number[] = []
         await prisma.$transaction(async (tx) => {
-            for (const [itemId, { quantity, notes }] of merged) {
-                const dbItem = dbItems.find((d) => d.id === itemId)!
-
-                // Decrement warehouse stock; reject if short (mirrors PO/dispatch behavior).
-                const updated = await tx.warehouseStock.updateMany({
-                    where: {
-                        itemId,
-                        warehouseId,
-                        quantity_on_hand: { gte: quantity },
-                    },
-                    data: { quantity_on_hand: { decrement: quantity } },
-                })
-                if (updated.count === 0) {
-                    throw new Error(`Insufficient warehouse stock for item ${dbItem.name}. Need ${quantity}.`)
-                }
-
-                // Audit row first so we can return its id even if the upsert later widens.
-                const assignment = await tx.stockAssignment.create({
-                    data: {
-                        driverId,
-                        itemId,
-                        warehouseId,
-                        quantity,
-                        cost_at_assignment: dbItem.cost,
-                        notes: notes ?? undefined,
-                        assigned_by: adminId,
-                        status: "PENDING_ACK",
-                    },
-                })
-                assignmentIds.push(assignment.id)
-
-                // Optimistic credit so the driver can refill immediately. If they
-                // later dispute the count, disputeAssignment() corrects this.
-                await tx.driverStock.upsert({
-                    where: { driverId_itemId: { driverId, itemId } },
-                    update: { quantity_on_hand: { increment: quantity } },
-                    create: { driverId, itemId, quantity_on_hand: quantity },
-                })
+            // Decrement warehouse stock for every line at once. Each row keeps the
+            // per-item gte guard (mirrors PO/dispatch behavior): a short row simply
+            // doesn't match, drops out of RETURNING, and fails the count check below.
+            const decremented = await tx.$queryRaw<{ itemId: number }[]>`
+                UPDATE "WarehouseStock" AS ws
+                SET quantity_on_hand = ws.quantity_on_hand - v.qty
+                FROM (VALUES ${Prisma.join(lines.map((l) => Prisma.sql`(${l.itemId}::int, ${l.quantity}::int)`))}) AS v("itemId", qty)
+                WHERE ws."warehouseId" = ${warehouseId}
+                  AND ws."itemId" = v."itemId"
+                  AND ws.quantity_on_hand >= v.qty
+                RETURNING ws."itemId"
+            `
+            if (decremented.length !== lines.length) {
+                const covered = new Set(decremented.map((r) => r.itemId))
+                const short = lines
+                    .filter((l) => !covered.has(l.itemId))
+                    .map((l) => `${dbItems.find((d) => d.id === l.itemId)!.name} (need ${l.quantity})`)
+                throw new Error(`Insufficient warehouse stock for: ${short.join(", ")}`)
             }
-        })
+
+            // All audit rows in one INSERT; itemIds are unique after merging, so
+            // ids map back to lines regardless of the order RETURNING uses.
+            const created = await tx.stockAssignment.createManyAndReturn({
+                data: lines.map((l) => ({
+                    driverId,
+                    itemId: l.itemId,
+                    warehouseId,
+                    quantity: l.quantity,
+                    cost_at_assignment: dbItems.find((d) => d.id === l.itemId)!.cost,
+                    notes: l.notes ?? undefined,
+                    assigned_by: adminId,
+                    status: "PENDING_ACK",
+                })),
+                select: { id: true, itemId: true },
+            })
+            const idByItem = new Map(created.map((r) => [r.itemId, r.id]))
+            assignmentIds = lines.map((l) => idByItem.get(l.itemId)!)
+
+            // Optimistic credit so the driver can refill immediately. If they
+            // later dispute the count, denyAssignment() corrects this.
+            // "updatedAt" is set manually because Prisma's @updatedAt is
+            // client-side and doesn't apply to raw SQL.
+            await tx.$executeRaw`
+                INSERT INTO "DriverStock" ("driverId", "itemId", quantity_on_hand, "updatedAt")
+                VALUES ${Prisma.join(lines.map((l) => Prisma.sql`(${driverId}::int, ${l.itemId}::int, ${l.quantity}::int, now())`))}
+                ON CONFLICT ("driverId", "itemId") DO UPDATE
+                SET quantity_on_hand = "DriverStock".quantity_on_hand + EXCLUDED.quantity_on_hand,
+                    "updatedAt" = now()
+            `
+        }, { timeout: 15_000, maxWait: 5_000 })
 
         await writeAuditLog(
             session,
