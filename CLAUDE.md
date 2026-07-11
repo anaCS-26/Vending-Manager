@@ -37,6 +37,8 @@ Per-environment setup gotcha: `SystemMeta` must be in the `supabase_realtime` pu
 
 Behind `NEXT_PUBLIC_USE_DISPATCHLESS` (`src/lib/feature-flags.ts`). New path: `src/actions/driver-stock.ts` (`assignToDriver`, `acknowledgeAssignment`, `disputeAssignment`, `submitDriverReturn`, `getDriverBag`). Legacy: `src/actions/inventory.ts` (`dispatchToDriver`, `returnDispatch`). `logBatchRefills` is **still dispatch-required** until B2b. Dispute writes `InventoryAdjustment` reason `ASSIGNMENT_DISCREPANCY`. `approveReturn` works on both rows.
 
+`getDriversWithBagAndPending` fetches open assignments (`PENDING_ACK`/`DISPUTED`) in a **separate unbounded query** and merges them with a newest-100 `ACKNOWLEDGED` history slice. Don't fold them back into one `take: N` window: open rows are a work queue, and old unresolved disputes previously fell out of the window as new pushes arrived (sidebar badge counted them globally; the page couldn't show them).
+
 `assignToDriver` batches its transaction into **3 set-based statements** (raw `UPDATE…FROM (VALUES…)` warehouse decrement with per-row gte guard, `createManyAndReturn` audit rows, raw `INSERT…ON CONFLICT` bag credit) + a 15s tx timeout. Do NOT regress to per-item loops inside `$transaction`: prod runs through the Supavisor pooler (~70-100ms/query from Vercel), so 3×N sequential queries blows Prisma's 5s interactive-tx window on large pushes (P2028 "Transaction not found"). Repro harness: `scripts/repro-assign-timeout.ts` (`SIM_LATENCY_MS=100 ITEMS=25`). Raw SQL in tests: `prismaMock.$queryRaw`/`$executeRaw` in `tests/__helpers__/prisma-mock.ts`.
 
 ## Warehouse calibration & audit

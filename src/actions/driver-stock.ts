@@ -409,36 +409,60 @@ export async function submitDriverReturn(
 
 /**
  * Admin-side feed for the /admin/driver-stock page: every active driver
- * with their current bag, pending acks, the latest disputed assignments
- * (so admins can resolve discrepancies), and a window of recent refills
- * so the admin can see "what they have refilled and how much they currently
- * have" at a glance. Tries to keep payloads small — only PENDING_ACK and
- * recent DISPUTED rows, last 20 refills, not full history.
+ * with their current bag, ALL open assignments (PENDING_ACK / DISPUTED),
+ * a window of recent acknowledged history, and recent refills.
+ *
+ * Open rows are fetched separately and unbounded: they are a work queue the
+ * admin drains, not history. Folding them into the newest-100 slice let old
+ * unresolved disputes fall out of the window as new pushes arrived, so the
+ * sidebar badge (a global count) showed issues the page could not display.
  */
 export async function getDriversWithBagAndPending() {
     await requireAdmin()
-    return await prisma.driver.findMany({
-        where: { isActive: true },
-        omit: { pin: true },
-        include: {
-            DriverStock: {
-                where: { quantity_on_hand: { gt: 0 } },
-                include: { item: true },
-                orderBy: { item: { name: "asc" } },
+    const [drivers, openAssignments] = await Promise.all([
+        prisma.driver.findMany({
+            where: { isActive: true },
+            omit: { pin: true },
+            include: {
+                DriverStock: {
+                    where: { quantity_on_hand: { gt: 0 } },
+                    include: { item: true },
+                    orderBy: { item: { name: "asc" } },
+                },
+                StockAssignments: {
+                    where: { status: "ACKNOWLEDGED" },
+                    include: { item: true },
+                    orderBy: { assigned_at: "desc" },
+                    take: 100,
+                },
+                RefillLogs: {
+                    include: { item: true, machine: true },
+                    orderBy: { refilled_at: "desc" },
+                    take: 20,
+                },
             },
-            StockAssignments: {
-                include: { item: true },
-                orderBy: { assigned_at: "desc" },
-                take: 100,
-            },
-            RefillLogs: {
-                include: { item: true, machine: true },
-                orderBy: { refilled_at: "desc" },
-                take: 20,
-            },
-        },
-        orderBy: { name: "asc" },
-    })
+            orderBy: { name: "asc" },
+        }),
+        prisma.stockAssignment.findMany({
+            where: { status: { in: ["PENDING_ACK", "DISPUTED"] }, driver: { isActive: true } },
+            include: { item: true },
+            orderBy: { assigned_at: "desc" },
+        }),
+    ])
+
+    const openByDriver = new Map<number, typeof openAssignments>()
+    for (const a of openAssignments) {
+        const list = openByDriver.get(a.driverId)
+        if (list) list.push(a)
+        else openByDriver.set(a.driverId, [a])
+    }
+
+    // Component consumers filter by status, so open rows and acknowledged
+    // history can share the one relation array.
+    return drivers.map((d) => ({
+        ...d,
+        StockAssignments: [...(openByDriver.get(d.id) ?? []), ...d.StockAssignments],
+    }))
 }
 
 /**

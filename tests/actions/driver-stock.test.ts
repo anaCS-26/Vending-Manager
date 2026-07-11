@@ -501,7 +501,8 @@ describe('getDriversWithBagAndPending', () => {
 
   it('returns active drivers with their bag + assignments + recent refills', async () => {
     setAdminSession(1);
-    prismaMock.driver.findMany.mockResolvedValue([{ id: 10, name: 'Ali' }] as any);
+    prismaMock.driver.findMany.mockResolvedValue([{ id: 10, name: 'Ali', StockAssignments: [] }] as any);
+    prismaMock.stockAssignment.findMany.mockResolvedValue([]);
     const result = await getDriversWithBagAndPending();
     expect(result).toHaveLength(1);
     // PIN MUST be omitted from the payload.
@@ -511,10 +512,43 @@ describe('getDriversWithBagAndPending', () => {
         omit: { pin: true },
         include: expect.objectContaining({
           DriverStock: expect.any(Object),
-          StockAssignments: expect.any(Object),
+          // The nested slice is history only — open rows come via the
+          // separate unbounded query below.
+          StockAssignments: expect.objectContaining({
+            where: { status: 'ACKNOWLEDGED' },
+            take: 100,
+          }),
           RefillLogs: expect.any(Object),
         }),
       }),
     );
+    // Open rows (the admin's work queue) are fetched WITHOUT a take window,
+    // so old unresolved disputes can never fall out of view.
+    expect(prismaMock.stockAssignment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: { in: ['PENDING_ACK', 'DISPUTED'] }, driver: { isActive: true } },
+      }),
+    );
+    expect(prismaMock.stockAssignment.findMany).toHaveBeenCalledWith(
+      expect.not.objectContaining({ take: expect.anything() }),
+    );
+  });
+
+  it('surfaces disputed rows even when they are older than the newest-100 history slice', async () => {
+    setAdminSession(1);
+    const oldDispute = makeStockAssignment({ id: 5, driverId: 10, status: 'DISPUTED' });
+    const recentAck = makeStockAssignment({ id: 900, driverId: 10, status: 'ACKNOWLEDGED' });
+    // driver.findMany's nested slice only carries acknowledged history…
+    prismaMock.driver.findMany.mockResolvedValue([
+      { id: 10, name: 'Ali', StockAssignments: [recentAck] },
+      { id: 11, name: 'Omar', StockAssignments: [] },
+    ] as any);
+    // …while the dispute arrives via the open-queue query.
+    prismaMock.stockAssignment.findMany.mockResolvedValue([oldDispute]);
+
+    const result = await getDriversWithBagAndPending();
+    // Merged per driver: open rows first, then history; other drivers untouched.
+    expect(result[0].StockAssignments).toEqual([oldDispute, recentAck]);
+    expect(result[1].StockAssignments).toEqual([]);
   });
 });
