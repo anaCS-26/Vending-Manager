@@ -14,13 +14,15 @@ import {
     Minus,
     Check,
     ClipboardList,
+    BookmarkPlus,
     X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { assignToDriver } from "@/actions/driver-stock";
+import { createDispatchTemplate } from "@/actions/dispatch-templates";
 import { formatSaudiDate, formatSaudiTime } from "@/lib/utils";
-import type { WarehouseWithItem, WarehouseType } from "@/types";
+import type { WarehouseWithItem, WarehouseType, DispatchTemplateWithItems } from "@/types";
 
 type StockAssignmentLite = {
     id: number;
@@ -62,14 +64,17 @@ type Props = {
     drivers: DriverWithBag[];
     inventory: WarehouseWithItem[];
     warehouses: WarehouseType[];
+    templates: DispatchTemplateWithItems[];
 };
 
-export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
+export function DriverStockManager({ drivers, inventory, warehouses, templates }: Props) {
     const [selectedDriverId, setSelectedDriverId] = useState<string>("");
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | "">("");
     const [searchQuery, setSearchQuery] = useState("");
     const [quantities, setQuantities] = useState<Record<number, number>>({});
     const [isPending, startTransition] = useTransition();
+    const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
+    const [templateName, setTemplateName] = useState("");
 
     const selectedDriver = useMemo(
         () => drivers.find((d) => d.id.toString() === selectedDriverId) ?? null,
@@ -106,6 +111,71 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
 
     const handleAddBatch = (itemId: number, currentQty: number, batchQty: number, max: number) => {
         handleQtyChange(itemId, String(currentQty + batchQty), max);
+    };
+
+    /**
+     * Replaces the staged grid with a template's lines, clamped to the selected
+     * warehouse's on-hand stock. Built from the raw inventory (not
+     * filteredInventory) so an active search query can't silently drop lines.
+     */
+    const handleLoadTemplate = (templateId: number) => {
+        const template = templates.find((t) => t.id === templateId);
+        if (!template || !selectedWarehouseId) return;
+
+        const onHandByItem = new Map(
+            inventory
+                .filter((inv) => inv.warehouseId === selectedWarehouseId)
+                .map((inv) => [inv.itemId, inv.quantity_on_hand])
+        );
+
+        const next: Record<number, number> = {};
+        const adjusted: string[] = [];
+        const skipped: string[] = [];
+        for (const line of template.Items) {
+            const onHand = onHandByItem.get(line.itemId) ?? 0;
+            if (onHand <= 0) {
+                skipped.push(line.item.name);
+                continue;
+            }
+            next[line.itemId] = Math.min(line.quantity, onHand);
+            if (line.quantity > onHand) adjusted.push(`${line.item.name} (${line.quantity}→${onHand})`);
+        }
+
+        setQuantities(next);
+        setSearchQuery("");
+
+        const staged = Object.keys(next).length;
+        if (staged === 0) {
+            toast.error("Nothing to load", {
+                description: "None of the template's items are in stock at this warehouse.",
+            });
+            return;
+        }
+        toast.success(`Loaded "${template.name}"`, { description: `${staged} item(s) staged.` });
+        if (adjusted.length || skipped.length) {
+            const clip = (list: string[]) => list.slice(0, 6).join(", ") + (list.length > 6 ? ` +${list.length - 6} more` : "");
+            const parts = [];
+            if (adjusted.length) parts.push(`Capped to stock: ${clip(adjusted)}`);
+            if (skipped.length) parts.push(`Skipped (no stock here): ${clip(skipped)}`);
+            toast.warning("Template adjusted to warehouse stock", { description: parts.join(" — ") });
+        }
+    };
+
+    const handleSaveTemplate = () => {
+        const lineItems = Object.entries(quantities).map(([id, quantity]) => ({ itemId: parseInt(id), quantity }));
+        if (!templateName.trim() || lineItems.length === 0) return;
+        startTransition(async () => {
+            const result = await createDispatchTemplate(templateName, lineItems);
+            if (result.success) {
+                toast.success(`Template "${result.data!.name}" saved`, {
+                    description: "Manage it from the Templates tab in Entity Management.",
+                });
+                setTemplateName("");
+                setIsSaveTemplateOpen(false);
+            } else {
+                toast.error("Failed to save template", { description: result.error });
+            }
+        });
     };
 
     const handlePush = () => {
@@ -191,6 +261,37 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
                                     </div>
                                 </div>
                             </div>
+
+                            {templates.length > 0 && (
+                                <div className="sm:col-span-2">
+                                    <label className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mb-1.5">
+                                        <ClipboardList className="w-3 h-3" /> Load Template
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value=""
+                                            disabled={!selectedWarehouseId}
+                                            title={!selectedWarehouseId ? "Select a warehouse first — quantities are capped to its stock" : undefined}
+                                            onChange={(e) => {
+                                                if (e.target.value) handleLoadTemplate(parseInt(e.target.value));
+                                            }}
+                                            className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white appearance-none focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <option value="" disabled>
+                                                {selectedWarehouseId ? "-- Load a template into the grid --" : "-- Select a warehouse first --"}
+                                            </option>
+                                            {templates.map(t => (
+                                                <option key={t.id} value={t.id}>
+                                                    {t.name} ({t.Items.length} items)
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                            <ChevronDown className="w-4 h-4" />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -305,14 +406,61 @@ export function DriverStockManager({ drivers, inventory, warehouses }: Props) {
 
                     {/* Push Bar */}
                     <div className="p-4 lg:p-5 border-t border-slate-200 dark:border-white/10 bg-white/80 dark:bg-neo-bg/80 backdrop-blur-xl shrink-0">
-                        <button
-                            onClick={handlePush}
-                            disabled={!selectedDriverId || !selectedWarehouseId || !hasSelectedItems || isPending}
-                            className="w-full relative py-3 bg-accent-blue hover:bg-accent-blue/90 disabled:bg-slate-300 dark:disabled:bg-slate-800 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors text-white shadow-lg disabled:shadow-none shadow-accent-blue/20 disabled:cursor-not-allowed text-sm"
-                        >
-                            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Backpack className="w-4 h-4" />}
-                            {isPending ? "Assigning..." : hasSelectedItems ? `Push ${Object.keys(quantities).length} Items to Bag` : "Select Items to Push"}
-                        </button>
+                        <AnimatePresence>
+                            {isSaveTemplateOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 8, height: 0 }}
+                                    animate={{ opacity: 1, y: 0, height: "auto" }}
+                                    exit={{ opacity: 0, y: 8, height: 0 }}
+                                    className="overflow-hidden"
+                                >
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <input
+                                            type="text"
+                                            autoFocus
+                                            maxLength={80}
+                                            placeholder="Template name, e.g. Morning Route A"
+                                            value={templateName}
+                                            onChange={(e) => setTemplateName(e.target.value)}
+                                            onKeyDown={(e) => { if (e.key === "Enter") handleSaveTemplate(); }}
+                                            className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
+                                        />
+                                        <button
+                                            onClick={handleSaveTemplate}
+                                            disabled={!templateName.trim() || isPending}
+                                            className="px-4 py-2 bg-accent-green/90 hover:bg-accent-green disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-colors"
+                                        >
+                                            Save
+                                        </button>
+                                        <button
+                                            onClick={() => { setIsSaveTemplateOpen(false); setTemplateName(""); }}
+                                            className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg transition-colors"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handlePush}
+                                disabled={!selectedDriverId || !selectedWarehouseId || !hasSelectedItems || isPending}
+                                className="flex-1 relative py-3 bg-accent-blue hover:bg-accent-blue/90 disabled:bg-slate-300 dark:disabled:bg-slate-800 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors text-white shadow-lg disabled:shadow-none shadow-accent-blue/20 disabled:cursor-not-allowed text-sm"
+                            >
+                                {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Backpack className="w-4 h-4" />}
+                                {isPending ? "Assigning..." : hasSelectedItems ? `Push ${Object.keys(quantities).length} Items to Bag` : "Select Items to Push"}
+                            </button>
+                            <button
+                                onClick={() => setIsSaveTemplateOpen((open) => !open)}
+                                disabled={!hasSelectedItems || isPending}
+                                title="Save the staged quantities as a reusable template"
+                                className="px-4 py-3 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-bold flex items-center justify-center gap-2 transition-colors text-slate-700 dark:text-slate-200 text-sm"
+                            >
+                                <BookmarkPlus className="w-4 h-4" />
+                                <span className="hidden sm:inline">Save as Template</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

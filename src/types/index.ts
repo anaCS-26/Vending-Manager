@@ -31,6 +31,11 @@ export type DispatchItemWithItem = Prisma.DispatchItemGetPayload<{
     include: { item: true };
 }>;
 
+/** A dispatch template with its item lines (and each line's item metadata) */
+export type DispatchTemplateWithItems = Prisma.DispatchTemplateGetPayload<{
+    include: { Items: { include: { item: true } } };
+}>;
+
 /** A refill log with its associated machine */
 export type RefillLogWithMachine = Prisma.RefillLogGetPayload<{
     include: { machine: true };

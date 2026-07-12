@@ -159,3 +159,25 @@ export function makeDispatchItem(overrides: Partial<any> = {}) {
     ...overrides,
   };
 }
+
+export function makeDispatchTemplateItem(overrides: Partial<any> = {}) {
+  return {
+    id: 1,
+    templateId: 700,
+    itemId: 1,
+    quantity: 30,
+    item: makeItem(),
+    ...overrides,
+  };
+}
+
+export function makeDispatchTemplate(overrides: Partial<any> = {}) {
+  return {
+    id: 700,
+    name: 'Morning Route A',
+    createdAt: new Date('2026-07-01T06:00:00Z'),
+    updatedAt: new Date('2026-07-01T06:00:00Z'),
+    Items: [makeDispatchTemplateItem()],
+    ...overrides,
+  };
+}

@@ -2,13 +2,15 @@ export const dynamic = 'force-dynamic';
 import { getWarehouseInventory } from "@/actions/inventory";
 import { getWarehouses } from "@/actions/warehouses";
 import { getDriversWithBagAndPending } from "@/actions/driver-stock";
+import { getDispatchTemplates } from "@/actions/dispatch-templates";
 import { DriverStockManager } from "@/components/DriverStockManager";
 
 export default async function DriverStockPage() {
-    const [drivers, inventory, warehouses] = await Promise.all([
+    const [drivers, inventory, warehouses, templates] = await Promise.all([
         getDriversWithBagAndPending(),
         getWarehouseInventory(),
         getWarehouses(),
+        getDispatchTemplates(),
     ]);
 
     return (
@@ -18,7 +20,7 @@ export default async function DriverStockPage() {
                 <p className="text-slate-600 dark:text-slate-400 mt-1">Push items directly into a driver's bag. Drivers acknowledge or report missing items from the driver portal.</p>
             </div>
 
-            <DriverStockManager drivers={drivers} inventory={inventory} warehouses={warehouses} />
+            <DriverStockManager drivers={drivers} inventory={inventory} warehouses={warehouses} templates={templates} />
         </div>
     );
 }

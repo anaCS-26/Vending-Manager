@@ -1377,6 +1377,8 @@ export async function resetDatabase(): Promise<ActionResult> {
             await tx.refillLog.deleteMany({});
             await tx.dispatchItem.deleteMany({});
             await tx.dispatch.deleteMany({});
+            await tx.dispatchTemplateItem.deleteMany({});
+            await tx.dispatchTemplate.deleteMany({});
             await tx.warehouseStock.deleteMany({});
             await tx.machineStock.deleteMany({});
             await tx.warehouse.deleteMany({});
