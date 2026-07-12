@@ -37,6 +37,8 @@ export const prismaMock = {
   machineStock: makeModelMock(),
   dispatch: makeModelMock(),
   dispatchItem: makeModelMock(),
+  dispatchTemplate: makeModelMock(),
+  dispatchTemplateItem: makeModelMock(),
   refillLog: makeModelMock(),
   returnVerification: makeModelMock(),
   stockAssignment: makeModelMock(),

@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import ManagementDashboard from "@/components/ManagementDashboard";
 
 export default async function ManagePage() {
-    const [drivers, machines, warehouses, items] = await Promise.all([
+    const [drivers, machines, warehouses, items, templates] = await Promise.all([
         prisma.driver.findMany({ orderBy: { name: 'asc' } }),
         prisma.machine.findMany({ orderBy: { id: 'asc' } }),
         prisma.warehouse.findMany({ orderBy: { name: 'asc' } }),
@@ -18,6 +18,10 @@ export default async function ManagePage() {
                     }
                 }
             }
+        }),
+        prisma.dispatchTemplate.findMany({
+            include: { Items: { include: { item: true } } },
+            orderBy: { name: 'asc' }
         })
     ]);
 
@@ -33,6 +37,7 @@ export default async function ManagePage() {
                 machines={machines}
                 warehouses={warehouses}
                 items={items as any}
+                templates={templates}
             />
         </div>
     );

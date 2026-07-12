@@ -3,9 +3,12 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, Edit2, Save, X, Settings2, Package, MapPin, Users, Loader2, Search, Store, Activity, Phone, Mail, Info, RefreshCw, Key } from "lucide-react";
+import { Plus, Trash2, Edit2, Save, X, Settings2, Package, MapPin, Users, Loader2, Search, Store, Activity, Phone, Mail, Info, RefreshCw, Key, ClipboardList } from "lucide-react";
 import { createDriver, updateDriver, deleteDriver, createMachine, updateMachine, deleteMachine, createItem, updateItem, deleteItem } from "@/actions/inventory";
 import { createWarehouse, updateWarehouse, deleteWarehouse } from "@/actions/warehouses";
+import { deleteDispatchTemplate } from "@/actions/dispatch-templates";
+import TemplateEditorModal from "./TemplateEditorModal";
+import type { DispatchTemplateWithItems } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { ConfirmModal } from "./ConfirmModal";
 import { NumericInput } from "./NumericInput";
@@ -26,6 +29,7 @@ type ItemWithWarehouse = {
     imageUrl?: string | null;
     bulk_format?: string | null;
     default_assignment_qty: number;
+    isActive?: boolean;
     WarehouseStock: {
         quantity_on_hand: number;
         warehouse: { name: string };
@@ -50,11 +54,12 @@ type Props = {
     machines: Machine[];
     warehouses: WarehouseType[];
     items: ItemWithWarehouse[];
+    templates: DispatchTemplateWithItems[];
 };
 
-export default function ManagementDashboard({ drivers, machines, warehouses, items }: Props) {
+export default function ManagementDashboard({ drivers, machines, warehouses, items, templates }: Props) {
     // --- UI & NAVIGATION STATE ---
-    const [activeTab, setActiveTab] = useState<"drivers" | "machines" | "items" | "warehouses">("warehouses");
+    const [activeTab, setActiveTab] = useState<"drivers" | "machines" | "items" | "warehouses" | "templates">("warehouses");
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 12;
 
@@ -68,9 +73,12 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
     const [editingId, setEditingId] = useState<number | null>(null);
 
     // Delete Modal state
-    const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: number | null; type: 'driver' | 'machine' | 'item' | 'warehouse' | null }>({ isOpen: false, id: null, type: null });
+    const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: number | null; type: 'driver' | 'machine' | 'item' | 'warehouse' | 'template' | null }>({ isOpen: false, id: null, type: null });
 
-    const triggerDelete = (id: number, type: 'driver' | 'machine' | 'item' | 'warehouse') => {
+    // Template editor modal (create when template is null, edit otherwise)
+    const [templateModal, setTemplateModal] = useState<{ isOpen: boolean; template: DispatchTemplateWithItems | null }>({ isOpen: false, template: null });
+
+    const triggerDelete = (id: number, type: 'driver' | 'machine' | 'item' | 'warehouse' | 'template') => {
         setDeleteModal({ isOpen: true, id, type });
     };
 
@@ -100,6 +108,12 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                 if (res.success) toast.success("Warehouse deleted");
                 else toast.error(res.error);
             });
+        } else if (deleteModal.type === 'template') {
+            startTransition(async () => {
+                const res = await deleteDispatchTemplate(deleteModal.id!);
+                if (res.success) toast.success("Template deleted");
+                else toast.error(res.error);
+            });
         }
     }
 
@@ -120,7 +134,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
         setWarehouseForm({ name: "", location: "", address: "", latitude: undefined, longitude: undefined, operating_cost: 0, rental_cost: 0 });
     };
 
-    const handleTabChange = (tab: "drivers" | "machines" | "items" | "warehouses") => {
+    const handleTabChange = (tab: "drivers" | "machines" | "items" | "warehouses" | "templates") => {
         resetForms();
         setSearchQuery("");
         setBulkQty("");
@@ -211,11 +225,13 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
     const filteredMachines = machines.filter(m => m.location_name.toLowerCase().includes(searchQuery.toLowerCase()) || m.district.toLowerCase().includes(searchQuery.toLowerCase()) || (m.address || "").toLowerCase().includes(searchQuery.toLowerCase()));
     const filteredDrivers = drivers.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()));
     const filteredWarehouses = warehouses.filter(w => w.name.toLowerCase().includes(searchQuery.toLowerCase()) || (w.address || "").toLowerCase().includes(searchQuery.toLowerCase()));
+    const filteredTemplates = templates.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()) || t.Items.some(l => l.item.name.toLowerCase().includes(searchQuery.toLowerCase())));
 
     const paginatedItems = filteredItems.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
     const paginatedMachines = filteredMachines.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
     const paginatedDrivers = filteredDrivers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
     const paginatedWarehouses = filteredWarehouses.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    const paginatedTemplates = filteredTemplates.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
     const renderPagination = (totalItems: number) => {
         const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
@@ -236,7 +252,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
             {/* Header / Search Controls */}
             <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-8 relative z-10">
                 <div className="flex w-full sm:w-fit gap-1 sm:gap-2 p-1 sm:p-1.5 bg-slate-100 dark:bg-black/40 rounded-2xl border border-slate-200 dark:border-white/10 relative z-10">
-                    {(["warehouses", "machines", "items", "drivers"] as const).map((tab) => (
+                    {(["warehouses", "machines", "items", "drivers", "templates"] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => handleTabChange(tab)}
@@ -256,6 +272,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                 {tab === "machines" && <MapPin className="w-4 h-4" />}
                                 {tab === "drivers" && <Users className="w-4 h-4" />}
                                 {tab === "warehouses" && <Store className="w-4 h-4" />}
+                                {tab === "templates" && <ClipboardList className="w-4 h-4" />}
                                 <span className="hidden sm:inline">{tab}</span>
                             </span>
                         </button>
@@ -891,12 +908,76 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                         {renderPagination(filteredWarehouses.length)}
                     </div>
                 )}
+
+                {/* TEMPLATES TAB */}
+                {activeTab === "templates" && (
+                    <div className="space-y-4">
+                        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center mb-6">
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Dispatch Templates</h2>
+                                <p className="text-sm text-slate-600 dark:text-slate-400">Reusable item-and-quantity presets that pre-fill the Driver Stock allocation grid.</p>
+                            </div>
+                            <button onClick={() => setTemplateModal({ isOpen: true, template: null })} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-brand-500 hover:bg-brand-600 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)]">
+                                <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Template</span>
+                            </button>
+                        </div>
+
+                        {filteredTemplates.length === 0 ? (
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-panel border-slate-200 dark:border-white/5 rounded-[2rem] p-12 flex flex-col items-center justify-center text-center border-dashed"><ClipboardList className="w-12 h-12 text-slate-500 dark:text-slate-400 opacity-30 mb-4" /><h3 className="text-slate-900 dark:text-white font-bold mb-1">No Templates</h3><p className="text-slate-600 dark:text-slate-400 text-sm">Create a template to pre-fill recurring driver dispatches in one click.</p></motion.div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {paginatedTemplates.map(template => {
+                                    const totalUnits = template.Items.reduce((sum, l) => sum + l.quantity, 0);
+                                    const preview = template.Items.slice(0, 3);
+                                    return (
+                                        <div key={template.id} className="bg-white dark:bg-black/20 border border-slate-300 shadow-sm dark:border-white/10 rounded-2xl p-5 hover:border-slate-400 dark:hover:border-white/20 transition-colors group">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className="w-10 h-10 rounded-xl bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center text-accent-blue flex-shrink-0">
+                                                        <ClipboardList className="w-5 h-5" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h3 className="font-bold text-slate-900 dark:text-white truncate">{template.name}</h3>
+                                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mt-0.5">{template.Items.length} item(s) · {totalUnits} units</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => setTemplateModal({ isOpen: true, template })} className="p-2 text-slate-500 dark:text-slate-400 hover:text-accent-blue hover:bg-accent-blue/10 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                                    <button onClick={() => triggerDelete(template.id, 'template')} className="p-2 text-slate-500 dark:text-slate-400 hover:text-accent-pink hover:bg-accent-pink/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                {preview.map(line => (
+                                                    <div key={line.id} className="flex items-center justify-between text-xs">
+                                                        <span className="text-slate-600 dark:text-slate-300 font-medium truncate pr-2">{line.item.name}</span>
+                                                        <span className="font-mono font-bold text-slate-900 dark:text-white shrink-0">×{line.quantity}</span>
+                                                    </div>
+                                                ))}
+                                                {template.Items.length > 3 && (
+                                                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider pt-1">+{template.Items.length - 3} more</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {renderPagination(filteredTemplates.length)}
+                    </div>
+                )}
             </div>
+
+            <TemplateEditorModal
+                isOpen={templateModal.isOpen}
+                onClose={() => setTemplateModal({ isOpen: false, template: null })}
+                template={templateModal.template}
+                items={items}
+            />
 
             <ConfirmModal
                 isOpen={deleteModal.isOpen}
-                title={`Delete ${deleteModal.type === 'driver' ? 'Driver' : deleteModal.type === 'machine' ? 'Machine' : deleteModal.type === 'warehouse' ? 'Warehouse' : 'Item'}?`}
-                message={`Are you sure you want to permanently delete this ${deleteModal.type}? ${deleteModal.type === 'item' ? 'This will also delete its warehouse stock.' : deleteModal.type === 'warehouse' ? 'Warning: Items currently in this warehouse will lose their location records.' : 'This cannot be undone.'}`}
+                title={`Delete ${deleteModal.type === 'driver' ? 'Driver' : deleteModal.type === 'machine' ? 'Machine' : deleteModal.type === 'warehouse' ? 'Warehouse' : deleteModal.type === 'template' ? 'Template' : 'Item'}?`}
+                message={`Are you sure you want to permanently delete this ${deleteModal.type}? ${deleteModal.type === 'item' ? 'This will also delete its warehouse stock.' : deleteModal.type === 'warehouse' ? 'Warning: Items currently in this warehouse will lose their location records.' : deleteModal.type === 'template' ? 'Past pushes are unaffected — a template is only a pre-fill preset.' : 'This cannot be undone.'}`}
                 confirmText="Delete"
                 onConfirm={confirmDelete}
                 onCancel={() => setDeleteModal({ isOpen: false, id: null, type: null })}

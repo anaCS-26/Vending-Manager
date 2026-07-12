@@ -37,6 +37,7 @@ model Item {
   WarehouseStock       WarehouseStock[]
   DriverStock          DriverStock[]
   StockAssignments     StockAssignment[]
+  DispatchTemplateItems DispatchTemplateItem[]
   isActive             Boolean               @default(true)
 }
 
@@ -166,6 +167,31 @@ model DispatchItem {
   item              Item     @relation(fields: [itemId], references: [id])
 
   @@index([dispatchId])
+  @@index([itemId])
+}
+
+/// A reusable named preset of item quantities for driver stock pushes.
+/// Pure configuration — nothing historical references it (assignToDriver
+/// snapshots its own StockAssignment rows), so deletes are hard deletes.
+model DispatchTemplate {
+  id        Int                    @id @default(autoincrement())
+  name      String
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @default(now()) @updatedAt
+  Items     DispatchTemplateItem[]
+}
+
+/// One item line inside a DispatchTemplate.
+model DispatchTemplateItem {
+  id         Int              @id @default(autoincrement())
+  templateId Int
+  itemId     Int
+  quantity   Int
+  template   DispatchTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  item       Item             @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, itemId])
+  @@index([templateId])
   @@index([itemId])
 }
 
