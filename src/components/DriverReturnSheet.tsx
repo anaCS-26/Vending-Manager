@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2, PackageX, AlertTriangle, Clock, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { submitDriverReturn } from "@/actions/driver-stock";
+import { NumericInput } from "@/components/NumericInput";
 
 type BagRow = {
     id: number;
@@ -175,17 +176,11 @@ export function DriverReturnSheet({
 
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400">Qty</span>
-                                                                <input
-                                                                    type="text"
-                                                                    inputMode="numeric"
-                                                                    pattern="[0-9]*"
+                                                                <NumericInput
                                                                     autoComplete="off"
-                                                                    value={String(l.quantity)}
-                                                                    onChange={(e) => {
-                                                                        const raw = e.target.value.replace(/[^0-9]/g, "");
-                                                                        const n = raw === "" ? 0 : parseInt(raw, 10);
-                                                                        updateLine(l.itemId, { quantity: Math.min(meta.quantity_on_hand, Math.max(0, n)) });
-                                                                    }}
+                                                                    max={meta.quantity_on_hand}
+                                                                    value={l.quantity}
+                                                                    onChange={(n) => updateLine(l.itemId, { quantity: n })}
                                                                     className="flex-1 min-w-0 text-center font-bold bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-lg py-1.5 text-slate-900 dark:text-white"
                                                                 />
                                                                 <input

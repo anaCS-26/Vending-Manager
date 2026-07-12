@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Edit2, TrendingUp, Package, Check, X, Loader2, Undo2, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { updateRefillLog } from "@/actions/history";
+import { NumericInput } from "@/components/NumericInput";
 import { toast } from "sonner";
 
 interface EditLogProps {
@@ -124,10 +125,9 @@ export function EditLogModal({ log, verifiedCount, pendingCount }: EditLogProps)
 
             <div className="flex items-center gap-1.5">
                 <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase">Refill</span>
-                <input
-                    type="number"
+                <NumericInput
                     value={refilled}
-                    onChange={(e) => setRefilled(parseInt(e.target.value) || 0)}
+                    onChange={setRefilled}
                     className="w-10 bg-black/50 border border-slate-200 dark:border-white/10 rounded text-[11px] font-bold text-center text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue font-mono py-0.5"
                     autoFocus
                 />

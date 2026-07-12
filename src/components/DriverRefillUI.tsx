@@ -11,6 +11,7 @@ import { ShieldCheck, LogOut, Settings } from "lucide-react"
 import type { MachineType, DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine } from "@/types"
 
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NumericInput } from "@/components/NumericInput";
 import { useDriverStore, OfflineLog } from "@/stores/useDriverStore";
 
 type DriverRefillUIProps = {
@@ -636,17 +637,10 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                         <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1 text-center block">Returned (From Machine)</span>
                                                         <div className="mx-auto flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
                                                             <button onClick={() => updateItem(row.itemId, 'returned', Math.max(0, row.returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                            <input
-                                                                type="text"
-                                                                inputMode="numeric"
-                                                                pattern="[0-9]*"
+                                                            <NumericInput
                                                                 autoComplete="off"
-                                                                value={String(row.returned)}
-                                                                onChange={(e) => {
-                                                                    const raw = e.target.value.replace(/[^0-9]/g, "");
-                                                                    const n = raw === "" ? 0 : parseInt(raw, 10);
-                                                                    updateItem(row.itemId, 'returned', Math.max(0, n));
-                                                                }}
+                                                                value={row.returned}
+                                                                onChange={(n) => updateItem(row.itemId, 'returned', n)}
                                                                 aria-label="Returned quantity"
                                                                 className="flex-1 min-w-0 text-center font-bold text-slate-900 dark:text-white bg-transparent border-none outline-none"
                                                             />
@@ -665,17 +659,10 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                             <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1 text-center block">Refilled (Machine)</span>
                                                             <div className="mx-auto flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
                                                                 <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                                <input
-                                                                    type="text"
-                                                                    inputMode="numeric"
-                                                                    pattern="[0-9]*"
+                                                                <NumericInput
                                                                     autoComplete="off"
-                                                                    value={String(row.refilled)}
-                                                                    onChange={(e) => {
-                                                                        const raw = e.target.value.replace(/[^0-9]/g, "");
-                                                                        const n = raw === "" ? 0 : parseInt(raw, 10);
-                                                                        updateItem(row.itemId, 'refilled', Math.max(0, n));
-                                                                    }}
+                                                                    value={row.refilled}
+                                                                    onChange={(n) => updateItem(row.itemId, 'refilled', n)}
                                                                     onBlur={() => {
                                                                         if (row.refilled + row.bag_returned > row.bagQuantity) {
                                                                             updateItem(row.itemId, 'refilled', Math.max(0, row.bagQuantity - row.bag_returned));
@@ -696,17 +683,10 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                             <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1 whitespace-nowrap text-center block">Return (Warehouse)</span>
                                                             <div className="mx-auto flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
                                                                 <button onClick={() => updateItem(row.itemId, 'bag_returned', Math.max(0, row.bag_returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                                <input
-                                                                    type="text"
-                                                                    inputMode="numeric"
-                                                                    pattern="[0-9]*"
+                                                                <NumericInput
                                                                     autoComplete="off"
-                                                                    value={String(row.bag_returned)}
-                                                                    onChange={(e) => {
-                                                                        const raw = e.target.value.replace(/[^0-9]/g, "");
-                                                                        const n = raw === "" ? 0 : parseInt(raw, 10);
-                                                                        updateItem(row.itemId, 'bag_returned', Math.max(0, n));
-                                                                    }}
+                                                                    value={row.bag_returned}
+                                                                    onChange={(n) => updateItem(row.itemId, 'bag_returned', n)}
                                                                     onBlur={() => {
                                                                         if (row.refilled + row.bag_returned > row.bagQuantity) {
                                                                             updateItem(row.itemId, 'bag_returned', Math.max(0, row.bagQuantity - row.refilled));

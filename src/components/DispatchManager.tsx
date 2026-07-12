@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { DriverType, WarehouseWithItem, DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine, WarehouseType } from "@/types";
 import { formatID, formatSaudiTime } from "@/lib/utils";
 import { DriverBagManager } from "./DriverBagManager";
+import { NumericInput } from "./NumericInput";
 
 type DispatchManagerProps = {
     drivers: DriverType[];
@@ -22,7 +23,7 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
     const [searchQuery, setSearchQuery] = useState("");
     const [isPending, startTransition] = useTransition();
     const [isCopying, setIsCopying] = useState(false);
-    const [bulkQty, setBulkQty] = useState<string>("");
+    const [bulkQty, setBulkQty] = useState<number>(0);
     const [activeTab, setActiveTab] = useState<"dispatch" | "bags">("dispatch");
 
     const handleDispatch = async () => {
@@ -36,7 +37,7 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
                 });
                 setSelectedDriver("");
                 setSelectedItems([]);
-                setBulkQty("");
+                setBulkQty(0);
             } else {
                 toast.error("Dispatch failed", {
                     description: result.error,
@@ -268,14 +269,11 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
                                 {selectedItems.length > 0 && (
                                     <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 mb-4 group/bulk">
                                         <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Bulk Set Qty:</div>
-                                        <input
-                                            type="number"
+                                        <NumericInput
                                             placeholder="Set all..."
                                             value={bulkQty}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                setBulkQty(val);
-                                                const q = parseInt(val);
+                                            onChange={(q) => {
+                                                setBulkQty(q);
                                                 if (q > 0) {
                                                     setSelectedItems(prev => prev.map(i => ({ ...i, quantity: q })));
                                                 }
@@ -309,12 +307,10 @@ export function DispatchManager({ drivers, inventory, activeDispatches, warehous
                                                     >
                                                         <span className="text-sm font-medium text-slate-900 dark:text-white flex-1">{invItem?.item.name}</span>
                                                         <div className="flex items-center gap-3">
-                                                            <input
-                                                                type="number"
-                                                                min="1"
+                                                            <NumericInput
                                                                 className="w-20 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-accent-blue focus:border-accent-blue rounded text-center px-2 py-1.5 text-sm text-slate-900 dark:text-white font-semibold focus:outline-none transition-colors"
                                                                 value={item.quantity}
-                                                                onChange={(e) => updateQuantity(item.itemId, parseInt(e.target.value) || 0)}
+                                                                onChange={(q) => updateQuantity(item.itemId, q)}
                                                             />
                                                             <button
                                                                 onClick={() => setSelectedItems(selectedItems.filter(i => i.itemId !== item.itemId))}
@@ -549,11 +545,9 @@ function DispatchCard({ dispatch }: { dispatch: DispatchWithRelations }) {
                                                 <div className="flex items-center gap-3">
                                                     <div className="flex flex-col items-center">
                                                         <span className="text-[10px] uppercase font-bold text-slate-500 mb-1">Returned</span>
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            value={returnQtys[di.id]}
-                                                            onChange={e => setReturnQtys({ ...returnQtys, [di.id]: parseInt(e.target.value) || 0 })}
+                                                        <NumericInput
+                                                            value={returnQtys[di.id] ?? 0}
+                                                            onChange={(q) => setReturnQtys({ ...returnQtys, [di.id]: q })}
                                                             className={`w-16 bg-white dark:bg-black/50 border rounded-lg px-2 py-1.5 text-center font-bold text-sm focus:outline-none transition-colors ${isMismatch ? 'border-accent-orange text-accent-orange' : 'border-slate-200 dark:border-white/10 text-slate-900 dark:text-white hover:border-slate-300 dark:border-white/20 focus:border-accent-blue'}`}
                                                         />
                                                     </div>

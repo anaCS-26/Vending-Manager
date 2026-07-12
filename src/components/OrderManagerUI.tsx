@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createPurchaseOrder, completePurchaseOrder, cancelPurchaseOrder, createQuickItem } from "@/actions/orders";
 import { formatCurrency, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { NumericInput } from "@/components/NumericInput";
 import type { Item, Warehouse, PurchaseOrder, PurchaseOrderItem } from "@prisma/client";
 
 type OrderWithRelations = PurchaseOrder & {
@@ -428,16 +429,14 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                 <div className="flex items-center gap-6 self-start xl:self-auto">
                                                     <div>
                                                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Request Qty</label>
-                                                        <input
-                                                            type="number"
-                                                            min="1"
-                                                            value={line.quantityRequested === 0 ? "" : line.quantityRequested}
-                                                            onChange={e => {
+                                                        <NumericInput
+                                                            value={line.quantityRequested}
+                                                            onChange={q => {
                                                                 const newLines = [...orderLines];
-                                                                newLines[index].quantityRequested = parseInt(e.target.value) || 0;
+                                                                newLines[index].quantityRequested = q;
                                                                 setOrderLines(newLines);
                                                             }}
-                                                            onBlur={e => {
+                                                            onBlur={() => {
                                                                 if (!line.quantityRequested) {
                                                                     const newLines = [...orderLines];
                                                                     newLines[index].quantityRequested = 1;
@@ -579,61 +578,57 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                             <div className="flex flex-col gap-2 ml-4">
                                                                                 <div className="flex items-center gap-2">
                                                                                     <label className="text-[10px] font-bold text-slate-500 uppercase flex-1 text-right">RCV QTY:</label>
-                                                                                    <input
-                                                                                        type="number"
-                                                                                        value={receivedQtys[oi.id] === 0 ? "" : (receivedQtys[oi.id] ?? oi.quantityRequested)}
-                                                                                        onChange={e => setReceivedQtys({ ...receivedQtys, [oi.id]: parseInt(e.target.value) || 0 })}
-                                                                                        onBlur={e => {
-                                                                                            if (receivedQtys[oi.id] === undefined || receivedQtys[oi.id] === 0) setReceivedQtys({ ...receivedQtys, [oi.id]: 0 });
-                                                                                        }}
+                                                                                    <NumericInput
+                                                                                        value={receivedQtys[oi.id] ?? oi.quantityRequested}
+                                                                                        onChange={q => setReceivedQtys({ ...receivedQtys, [oi.id]: q })}
                                                                                         className="w-20 px-2 py-1 bg-white dark:bg-[#18181b] border border-accent-orange/50 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-accent-orange/50"
                                                                                     />
                                                                                 </div>
                                                                                 <div className="grid grid-cols-2 gap-2 mt-2">
                                                                                     <div className="flex items-center gap-2">
                                                                                         <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Cost:</label>
-                                                                                        <input
-                                                                                            type="number" step="0.01"
-                                                                                            value={receivedPrices[oi.id]?.cost === 0 ? "" : receivedPrices[oi.id]?.cost}
-                                                                                            onChange={e => setReceivedPrices({
+                                                                                        <NumericInput
+                                                                                            decimal
+                                                                                            value={receivedPrices[oi.id]?.cost ?? 0}
+                                                                                            onChange={cost => setReceivedPrices({
                                                                                                 ...receivedPrices,
-                                                                                                [oi.id]: { ...receivedPrices[oi.id], cost: parseFloat(e.target.value) || 0 }
+                                                                                                [oi.id]: { ...receivedPrices[oi.id], cost }
                                                                                             })}
                                                                                             className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
                                                                                         />
                                                                                     </div>
                                                                                     <div className="flex items-center gap-2">
                                                                                         <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Standard:</label>
-                                                                                        <input
-                                                                                            type="number" step="0.01"
-                                                                                            value={receivedPrices[oi.id]?.price_standard === 0 ? "" : receivedPrices[oi.id]?.price_standard}
-                                                                                            onChange={e => setReceivedPrices({
+                                                                                        <NumericInput
+                                                                                            decimal
+                                                                                            value={receivedPrices[oi.id]?.price_standard ?? 0}
+                                                                                            onChange={price_standard => setReceivedPrices({
                                                                                                 ...receivedPrices,
-                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_standard: parseFloat(e.target.value) || 0 }
+                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_standard }
                                                                                             })}
                                                                                             className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
                                                                                         />
                                                                                     </div>
                                                                                     <div className="flex items-center gap-2">
                                                                                         <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Hospital:</label>
-                                                                                        <input
-                                                                                            type="number" step="0.01"
-                                                                                            value={receivedPrices[oi.id]?.price_hospital === 0 ? "" : receivedPrices[oi.id]?.price_hospital}
-                                                                                            onChange={e => setReceivedPrices({
+                                                                                        <NumericInput
+                                                                                            decimal
+                                                                                            value={receivedPrices[oi.id]?.price_hospital ?? 0}
+                                                                                            onChange={price_hospital => setReceivedPrices({
                                                                                                 ...receivedPrices,
-                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_hospital: parseFloat(e.target.value) || 0 }
+                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_hospital }
                                                                                             })}
                                                                                             className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
                                                                                         />
                                                                                     </div>
                                                                                     <div className="flex items-center gap-2">
                                                                                         <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Hotel:</label>
-                                                                                        <input
-                                                                                            type="number" step="0.01"
-                                                                                            value={receivedPrices[oi.id]?.price_hotel === 0 ? "" : receivedPrices[oi.id]?.price_hotel}
-                                                                                            onChange={e => setReceivedPrices({
+                                                                                        <NumericInput
+                                                                                            decimal
+                                                                                            value={receivedPrices[oi.id]?.price_hotel ?? 0}
+                                                                                            onChange={price_hotel => setReceivedPrices({
                                                                                                 ...receivedPrices,
-                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_hotel: parseFloat(e.target.value) || 0 }
+                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_hotel }
                                                                                             })}
                                                                                             className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
                                                                                         />

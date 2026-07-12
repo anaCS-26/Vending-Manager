@@ -76,7 +76,7 @@ Statistics are pure functions in `src/lib/forecast.ts` (no Prisma/IO → unit-te
 - **Server-side pagination**: archive feeds MUST return `PaginatedResult<T>`. Pattern: `getRefillLogsPaginated` in `src/actions/history.ts`. Never ship unbounded `findMany()` to the client.
 - **Pagination UI**: use the shared `<Pagination>` component in `src/components/Pagination.tsx`. Sliding window of consecutive pages (default 3) with first/prev/next/last arrows — no ellipses, no jump-by-N. Don't reimplement.
 - **Image uploads**: `@vercel/blob` `put()` inside server actions. The `writeFile`/`mkdir` imports in `inventory.ts` are legacy local-dev fallbacks.
-- **Mobile numeric input**: `<input type="text" inputMode="numeric" pattern="[0-9]*">`. Avoid `type="number"` and `onFocus={e.target.select()}` (mobile re-fires focus between keystrokes).
+- **Numeric input**: use the shared `<NumericInput>` (`src/components/NumericInput.tsx`) for every typed number field — `decimal` prop for prices/costs, optional `max`. It keeps the raw string internally so a cleared box stays empty (no sticky "0") and partial decimals ("0.5") survive re-renders, while `onChange` hands the parent a plain number (0 when empty). Never hand-roll `type="number"` or `parseInt(e.target.value) || 0` into a `value={number}` input; avoid `onFocus={e.target.select()}` (mobile re-fires focus between keystrokes). `<select>` dropdowns are exempt.
 
 ## UI
 

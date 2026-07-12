@@ -9,6 +9,7 @@ import { calibrateWarehouseStock } from "@/actions/inventory";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { NumericInput } from "@/components/NumericInput";
 
 type Props = {
     isOpen: boolean;
@@ -51,10 +52,8 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
         );
     }
 
-    const handleCountChange = (itemId: number, value: string) => {
-        const cleaned = value.replace(/[^0-9]/g, "");
-        const num = parseInt(cleaned, 10);
-        setPhysicalCounts(prev => ({ ...prev, [itemId]: isNaN(num) ? 0 : num }));
+    const handleCountChange = (itemId: number, count: number) => {
+        setPhysicalCounts(prev => ({ ...prev, [itemId]: count }));
     };
 
     const handleFoundCostChange = (itemId: number, value: string) => {
@@ -241,12 +240,9 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                                             </div>
 
                                             <div className="w-28 flex justify-end">
-                                                <input
-                                                    type="text"
-                                                    inputMode="numeric"
-                                                    pattern="[0-9]*"
-                                                    value={physicalCounts[stock.itemId] ?? ''}
-                                                    onChange={(e) => handleCountChange(stock.itemId, e.target.value)}
+                                                <NumericInput
+                                                    value={physicalCounts[stock.itemId] ?? stock.quantity_on_hand}
+                                                    onChange={(count) => handleCountChange(stock.itemId, count)}
                                                     className={`w-24 text-center font-mono text-base font-bold rounded-lg border ${diff !== 0 ? 'border-accent-blue bg-accent-blue/5 text-accent-blue focus:ring-accent-blue/50' : 'border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 focus:ring-accent-blue/50'} px-2 py-1.5 focus:outline-none focus:ring-2`}
                                                 />
                                             </div>
