@@ -5,6 +5,7 @@ import { X, Search, Plus, Save, MapPin } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { createWarehouseItem, updateWarehouseItemStock } from "@/actions/inventory";
+import { NumericInput } from "@/components/NumericInput";
 import type { WarehouseType, WarehouseWithItem } from "@/types";
 import type { Item } from "@prisma/client";
 
@@ -269,10 +270,9 @@ export default function AddStockModal({ isOpen, onClose, warehouses, existingIte
 
                                         <div>
                                             <label className="text-xs text-slate-600 dark:text-slate-400 font-bold mb-2 block uppercase tracking-wider">Quantity to Receive</label>
-                                            <input
-                                                type="number"
+                                            <NumericInput
                                                 value={quantityToAdd}
-                                                onChange={(e) => setQuantityToAdd(parseInt(e.target.value) || 0)}
+                                                onChange={setQuantityToAdd}
                                                 className="w-full bg-black/50 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-brand-500 transition-colors font-mono"
                                             />
                                         </div>
@@ -329,21 +329,19 @@ export default function AddStockModal({ isOpen, onClose, warehouses, existingIte
                                             </div>
                                             <div>
                                                 <label className="text-xs text-slate-600 dark:text-slate-400 font-bold mb-2 block uppercase tracking-wider">Price (Per Pcs)</label>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
+                                                <NumericInput
+                                                    decimal
                                                     placeholder="1.111"
                                                     value={newItemForm.price}
-                                                    onChange={(e) => setNewItemForm({ ...newItemForm, price: parseFloat(e.target.value) || 0 })}
+                                                    onChange={(price) => setNewItemForm({ ...newItemForm, price })}
                                                     className="w-full bg-black/50 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-brand-500 transition-colors font-mono"
                                                 />
                                             </div>
                                             <div className="col-span-2">
                                                 <label className="text-xs text-slate-600 dark:text-slate-400 font-bold mb-2 block uppercase tracking-wider">Initial Quantity</label>
-                                                <input
-                                                    type="number"
+                                                <NumericInput
                                                     value={quantityToAdd}
-                                                    onChange={(e) => setQuantityToAdd(parseInt(e.target.value) || 0)}
+                                                    onChange={setQuantityToAdd}
                                                     className="w-full bg-black/50 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-brand-500 transition-colors font-mono"
                                                 />
                                             </div>

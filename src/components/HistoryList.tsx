@@ -6,6 +6,7 @@ import type { DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine 
 import { editDispatchReturn } from "@/actions/inventory";
 import { toast } from "sonner";
 import { formatCurrency, formatID, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
+import { NumericInput } from "@/components/NumericInput";
 
 type HistoryListProps = {
     dispatches: DispatchWithRelations[];
@@ -337,11 +338,9 @@ export default function HistoryList({ dispatches, hideHeader }: HistoryListProps
                                                             {editingDispatchId === dispatch.id ? (
                                                                 <div className="flex items-center gap-2 bg-slate-100 dark:bg-black/40 px-2 py-1 rounded-md border border-accent-blue/50">
                                                                     <span className="text-accent-blue font-bold">Rtn:</span>
-                                                                    <input
-                                                                        type="number"
-                                                                        min="0"
+                                                                    <NumericInput
                                                                         value={editQtys[di.id] ?? di.quantity_returned}
-                                                                        onChange={e => setEditQtys({ ...editQtys, [di.id]: parseInt(e.target.value) || 0 })}
+                                                                        onChange={(q) => setEditQtys({ ...editQtys, [di.id]: q })}
                                                                         className="w-16 bg-transparent text-slate-900 dark:text-white font-bold border-b border-slate-300 dark:border-white/20 focus:border-accent-blue focus:outline-none text-right"
                                                                         disabled={isPending}
                                                                     />

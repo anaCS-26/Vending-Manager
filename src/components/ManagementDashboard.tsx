@@ -8,6 +8,7 @@ import { createDriver, updateDriver, deleteDriver, createMachine, updateMachine,
 import { createWarehouse, updateWarehouse, deleteWarehouse } from "@/actions/warehouses";
 import { formatCurrency } from "@/lib/utils";
 import { ConfirmModal } from "./ConfirmModal";
+import { NumericInput } from "./NumericInput";
 import AddressAutocomplete from "./AddressAutocomplete";
 import ExportExcelButton from "./ExportExcelButton";
 
@@ -328,15 +329,15 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                     </div>
                                                     <div>
                                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Std Pr</label>
-                                                        <input type="number" step="0.01" value={itemForm.price_standard} onChange={e => setItemForm({ ...itemForm, price_standard: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Standard" />
+                                                        <NumericInput decimal value={itemForm.price_standard} onChange={price_standard => setItemForm({ ...itemForm, price_standard })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Standard" />
                                                     </div>
                                                     <div>
                                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Hosp Pr</label>
-                                                        <input type="number" step="0.01" value={itemForm.price_hospital} onChange={e => setItemForm({ ...itemForm, price_hospital: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Hospital" />
+                                                        <NumericInput decimal value={itemForm.price_hospital} onChange={price_hospital => setItemForm({ ...itemForm, price_hospital })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Hospital" />
                                                     </div>
                                                     <div>
                                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Hotel Pr</label>
-                                                        <input type="number" step="0.01" value={itemForm.price_hotel} onChange={e => setItemForm({ ...itemForm, price_hotel: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Hotel" />
+                                                        <NumericInput decimal value={itemForm.price_hotel} onChange={price_hotel => setItemForm({ ...itemForm, price_hotel })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Hotel" />
                                                     </div>
                                                 </div>
                                                 <div>
@@ -345,16 +346,10 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                 </div>
                                                 <div>
                                                     <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Driver Batch Qty</label>
-                                                    <input
-                                                        type="text"
-                                                        inputMode="numeric"
-                                                        pattern="[0-9]*"
+                                                    <NumericInput
+                                                        max={100}
                                                         value={itemForm.default_assignment_qty}
-                                                        onChange={e => {
-                                                            const raw = e.target.value.replace(/[^0-9]/g, "");
-                                                            const n = raw === "" ? 0 : Math.min(100, parseInt(raw, 10));
-                                                            setItemForm({ ...itemForm, default_assignment_qty: n });
-                                                        }}
+                                                        onChange={default_assignment_qty => setItemForm({ ...itemForm, default_assignment_qty })}
                                                         className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none"
                                                         placeholder="e.g. 30"
                                                     />
@@ -512,11 +507,11 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Operating Cost (/mo)</label>
-                                        <input type="number" step="0.01" value={machineForm.operating_cost} onChange={e => setMachineForm({ ...machineForm, operating_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="0.00" />
+                                        <NumericInput decimal value={machineForm.operating_cost} onChange={operating_cost => setMachineForm({ ...machineForm, operating_cost })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="0.00" />
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Rental Cost (/mo)</label>
-                                        <input type="number" step="0.01" value={machineForm.rental_cost} onChange={e => setMachineForm({ ...machineForm, rental_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="0.00" />
+                                        <NumericInput decimal value={machineForm.rental_cost} onChange={rental_cost => setMachineForm({ ...machineForm, rental_cost })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="0.00" />
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Pricing Tier</label>
@@ -554,8 +549,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Terminal ID</label><input type="text" value={machineForm.terminalId} onChange={e => setMachineForm({ ...machineForm, terminalId: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="TID" /></div>
 
                                                     <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Notes</label><input type="text" value={machineForm.notes} onChange={e => setMachineForm({ ...machineForm, notes: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Notes" /></div>
-                                                    <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Op Cost (/mo)</label><input type="number" step="0.01" value={machineForm.operating_cost} onChange={e => setMachineForm({ ...machineForm, operating_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Operating Cost" /></div>
-                                                    <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Rental Cost (/mo)</label><input type="number" step="0.01" value={machineForm.rental_cost} onChange={e => setMachineForm({ ...machineForm, rental_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Rental Cost" /></div>
+                                                    <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Op Cost (/mo)</label><NumericInput decimal value={machineForm.operating_cost} onChange={operating_cost => setMachineForm({ ...machineForm, operating_cost })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Operating Cost" /></div>
+                                                    <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Rental Cost (/mo)</label><NumericInput decimal value={machineForm.rental_cost} onChange={rental_cost => setMachineForm({ ...machineForm, rental_cost })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Rental Cost" /></div>
                                                     <div>
                                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Tier</label>
                                                         <select value={machineForm.tier} onChange={e => setMachineForm({ ...machineForm, tier: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none">
@@ -814,11 +809,11 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Operating Cost (/mo)</label>
-                                            <input type="number" step="0.01" value={warehouseForm.operating_cost} onChange={e => setWarehouseForm({ ...warehouseForm, operating_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="0.00" />
+                                            <NumericInput decimal value={warehouseForm.operating_cost} onChange={operating_cost => setWarehouseForm({ ...warehouseForm, operating_cost })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="0.00" />
                                         </div>
                                         <div>
                                             <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Rental Cost (/mo)</label>
-                                            <input type="number" step="0.01" value={warehouseForm.rental_cost} onChange={e => setWarehouseForm({ ...warehouseForm, rental_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="0.00" />
+                                            <NumericInput decimal value={warehouseForm.rental_cost} onChange={rental_cost => setWarehouseForm({ ...warehouseForm, rental_cost })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="0.00" />
                                         </div>
                                     </div>
                                 </div>
@@ -841,8 +836,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                             <div className="space-y-4">
                                                 <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Warehouse Name</label><input type="text" value={warehouseForm.name} onChange={e => setWarehouseForm({ ...warehouseForm, name: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Name" /></div>
                                                 <div className="grid grid-cols-2 gap-3">
-                                                    <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Op Cost (/mo)</label><input type="number" step="0.01" value={warehouseForm.operating_cost} onChange={e => setWarehouseForm({ ...warehouseForm, operating_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Operating Cost" /></div>
-                                                    <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Rental Cost (/mo)</label><input type="number" step="0.01" value={warehouseForm.rental_cost} onChange={e => setWarehouseForm({ ...warehouseForm, rental_cost: parseFloat(e.target.value) || 0 })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Rental Cost" /></div>
+                                                    <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Op Cost (/mo)</label><NumericInput decimal value={warehouseForm.operating_cost} onChange={operating_cost => setWarehouseForm({ ...warehouseForm, operating_cost })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Operating Cost" /></div>
+                                                    <div><label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Rental Cost (/mo)</label><NumericInput decimal value={warehouseForm.rental_cost} onChange={rental_cost => setWarehouseForm({ ...warehouseForm, rental_cost })} className="w-full bg-white dark:bg-black/50 border border-slate-300 dark:border-white/20 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Rental Cost" /></div>
                                                 </div>
                                                 <AddressAutocomplete value={warehouseForm.address} onChange={(address, lat, lon) => setWarehouseForm({ ...warehouseForm, address, latitude: lat, longitude: lon })} />
                                                 <div className="flex gap-2 pt-1 border-t border-slate-200 dark:border-white/5 mt-2">

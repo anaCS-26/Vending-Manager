@@ -4,6 +4,7 @@ import { editDriverBagStock } from "@/actions/inventory";
 import { toast } from "sonner";
 import { Package, Calendar, Loader2, Save, AlertTriangle, ShieldCheck, Trash2 } from "lucide-react";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { NumericInput } from "@/components/NumericInput";
 import type { DriverType } from "@/types";
 
 interface DriverBagManagerProps {
@@ -128,11 +129,9 @@ export function DriverBagManager({ drivers }: DriverBagManagerProps) {
                                             
                                             <div className="flex items-center gap-1.5 flex-col w-16">
                                                 <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">QTY</p>
-                                                <input 
-                                                    type="number"
-                                                    min="0"
+                                                <NumericInput
                                                     value={editedQty !== undefined ? editedQty : s.quantity_on_hand}
-                                                    onChange={(e) => handleQuantityChange(driver.id, s.itemId, parseInt(e.target.value) || 0)}
+                                                    onChange={(q) => handleQuantityChange(driver.id, s.itemId, q)}
                                                     className={`w-full py-1 text-center bg-white dark:bg-black border rounded font-mono text-sm font-bold transition-colors focus:outline-none ${isEdited ? 'border-accent-blue text-accent-blue' : 'border-slate-200 dark:border-white/10 text-slate-900 dark:text-white hover:border-slate-300 dark:hover:border-white/20'}`}
                                                 />
                                                 {isEdited && editedQty === 0 && (
