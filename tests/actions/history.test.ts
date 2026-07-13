@@ -37,7 +37,7 @@ describe('getRefillLogsPaginated', () => {
     expect(result.page).toBe(1);
   });
 
-  it('builds dispatch.driverId filter when driverId is given', async () => {
+  it('matches both denormalized driverId and legacy dispatch.driverId when driverId is given', async () => {
     setAdminSession(1);
     prismaMock.refillLog.findMany.mockResolvedValue([]);
     prismaMock.refillLog.count.mockResolvedValue(0);
@@ -46,9 +46,20 @@ describe('getRefillLogsPaginated', () => {
 
     await getRefillLogsPaginated({ driverId: 10 });
 
-    expect(prismaMock.refillLog.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ dispatch: { driverId: 10 } }) }),
+    // Dispatchless refills write driverId directly (dispatchId: null); legacy
+    // refills carry it via the dispatch relation. The filter ORs both.
+    const refillCall = (prismaMock.refillLog.findMany as any).mock.calls[0][0];
+    expect(refillCall.where.AND).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          OR: expect.arrayContaining([
+            { driverId: 10 },
+            { dispatch: { driverId: 10 } },
+          ]),
+        }),
+      ]),
     );
+    // Returns carry the denormalized driverId directly.
     expect(prismaMock.returnVerification.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ driverId: 10 }) }),
     );
@@ -82,11 +93,14 @@ describe('getRefillLogsPaginated', () => {
 
     await getRefillLogsPaginated({ searchQuery: 'cola' });
 
+    // The search OR lives inside where.AND (driverId/search clauses are AND-combined).
     const refillCall = (prismaMock.refillLog.findMany as any).mock.calls[0][0];
-    expect(refillCall.where.OR).toEqual(
+    const searchClause = refillCall.where.AND.find((c: any) => Array.isArray(c.OR));
+    expect(searchClause.OR).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ machine: { location_name: { contains: 'cola', mode: 'insensitive' } } }),
         expect.objectContaining({ item: { name: { contains: 'cola', mode: 'insensitive' } } }),
+        expect.objectContaining({ driver: { name: { contains: 'cola', mode: 'insensitive' } } }),
         expect.objectContaining({ dispatch: { driver: { name: { contains: 'cola', mode: 'insensitive' } } } }),
       ]),
     );
