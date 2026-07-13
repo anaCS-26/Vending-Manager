@@ -19,8 +19,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { assignToDriver } from "@/actions/driver-stock";
+import { assignToDriver, dismissAllDisputes } from "@/actions/driver-stock";
 import { createDispatchTemplate } from "@/actions/dispatch-templates";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import type { WarehouseWithItem, WarehouseType, DispatchTemplateWithItems } from "@/types";
 
@@ -495,7 +496,22 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
     const disputed = driver.StockAssignments.filter((a) => a.status === "DISPUTED");
     const assignmentHistory = driver.StockAssignments.filter((a) => a.status === "ACKNOWLEDGED");
     const issuesCount = pending.length + disputed.length;
-    
+
+    const [clearAllOpen, setClearAllOpen] = useState(false);
+    const [isClearingAll, startClearAll] = useTransition();
+
+    const handleClearAllDisputes = () => {
+        startClearAll(async () => {
+            const result = await dismissAllDisputes(driver.id);
+            if (result.success) {
+                const n = result.data?.dismissed ?? 0;
+                toast.success("Disputes cleared", { description: `${n} disputed assignment${n === 1 ? "" : "s"} dismissed.` });
+            } else {
+                toast.error("Failed to clear disputes", { description: result.error });
+            }
+        });
+    };
+
     const bagTotalQty = driver.DriverStock.reduce((s, r) => s + r.quantity_on_hand, 0);
 
     return (
@@ -641,9 +657,21 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
                                 <div className="space-y-5">
                                     {disputed.length > 0 && (
                                         <div>
-                                            <h4 className="text-[9px] uppercase font-bold tracking-widest text-accent-pink mb-2.5 flex items-center gap-1.5">
-                                                <AlertTriangle className="w-3 h-3" /> Disputed Assignments
-                                            </h4>
+                                            <div className="flex items-center justify-between mb-2.5">
+                                                <h4 className="text-[9px] uppercase font-bold tracking-widest text-accent-pink flex items-center gap-1.5">
+                                                    <AlertTriangle className="w-3 h-3" /> Disputed Assignments
+                                                </h4>
+                                                {disputed.length > 1 && (
+                                                    <button
+                                                        onClick={() => setClearAllOpen(true)}
+                                                        disabled={isClearingAll}
+                                                        className="text-[9px] uppercase font-bold tracking-widest text-accent-pink/80 hover:text-accent-pink flex items-center gap-1 px-2 py-1 rounded-md hover:bg-accent-pink/10 transition-colors disabled:opacity-50"
+                                                        title="Dismiss all disputes for this driver"
+                                                    >
+                                                        {isClearingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />} Clear all
+                                                    </button>
+                                                )}
+                                            </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                 {disputed.map(a => <AssignmentCard key={a.id} assignment={a} isDisputed={true} />)}
                                             </div>
@@ -677,6 +705,15 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
                     )}
                 </AnimatePresence>
             </div>
+
+            <ConfirmModal
+                isOpen={clearAllOpen}
+                title="Clear all disputes?"
+                message={`Dismiss all ${disputed.length} disputed assignment${disputed.length === 1 ? "" : "s"} for ${driver.name}? These notifications will be removed. The stock was already returned to the warehouse when disputed, so nothing else changes.`}
+                confirmText="Clear all"
+                onConfirm={handleClearAllDisputes}
+                onCancel={() => setClearAllOpen(false)}
+            />
         </div>
     );
 }

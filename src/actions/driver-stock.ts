@@ -306,6 +306,45 @@ export async function dismissAssignment(assignmentId: number): Promise<ActionRes
 }
 
 /**
+ * Bulk-dismiss every DISPUTED assignment for a single driver in one action.
+ * Disputed assignments already had their stock reverted to the warehouse (see
+ * disputeAssignment), so this only clears the lingering notifications — it is
+ * non-destructive to inventory. Deletes the rows and writes one aggregate audit
+ * entry listing exactly which assignments were dismissed.
+ */
+export async function dismissAllDisputes(driverId: number): Promise<ActionResult<{ dismissed: number }>> {
+    const session = await requireAdmin()
+    try {
+        const disputed = await prisma.stockAssignment.findMany({
+            where: { driverId, status: "DISPUTED" },
+            select: { id: true, itemId: true, quantity: true },
+        })
+        if (disputed.length === 0) return { success: true, data: { dismissed: 0 } }
+
+        const ids = disputed.map((a) => a.id)
+        // Delete by the exact ids we read, so a dispute that arrives between the
+        // read and the delete is not silently swept away.
+        await prisma.stockAssignment.deleteMany({ where: { id: { in: ids } } })
+
+        await writeAuditLog(
+            session,
+            "DISMISS_ALL_DISPUTES",
+            "StockAssignment",
+            driverId,
+            { dismissedAssignments: disputed },
+            { status: "DELETED", count: disputed.length },
+            `Admin bulk-dismissed ${disputed.length} disputed assignment(s) for driver ${driverId}.`
+        )
+
+        notifyClients("assignment-dismissed")
+        revalidatePath("/admin/driver-stock")
+        return { success: true, data: { dismissed: disputed.length } }
+    } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Failed to clear disputes" }
+    }
+}
+
+/**
  * Driver-initiated return. Each item-line creates one ReturnVerification with
  * dispatchId NULL and driverId set. DriverStock is decremented immediately
  * (the item leaves the bag the moment the driver records it; admin
