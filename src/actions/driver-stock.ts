@@ -398,34 +398,45 @@ export async function submitDriverReturn(
             }
         }
 
-        const returnIds: number[] = []
+        // Two set-based statements instead of one query per line: same pooler
+        // latency math as assignToDriver — per-item loops inside $transaction
+        // exceed the 5s interactive-tx window on large returns (P2028).
+        let returnIds: number[] = []
+        const decrements = Array.from(totalsPerItem, ([itemId, total]) => ({ itemId, total }))
         await prisma.$transaction(async (tx) => {
-            for (const i of items) {
-                const created = await tx.returnVerification.create({
-                    data: {
-                        dispatchId: null,
-                        driverId,
-                        itemId: i.itemId,
-                        quantity: i.quantity,
-                        reason: i.reason,
-                        status: "PENDING",
-                        notes: i.notes ?? undefined,
-                    },
-                })
-                returnIds.push(created.id)
+            const created = await tx.returnVerification.createManyAndReturn({
+                data: items.map((i) => ({
+                    dispatchId: null,
+                    driverId,
+                    itemId: i.itemId,
+                    quantity: i.quantity,
+                    reason: i.reason,
+                    status: "PENDING",
+                    notes: i.notes ?? undefined,
+                })),
+                select: { id: true },
+            })
+            returnIds = created.map((r) => r.id)
+
+            // One guarded decrement per bag: a short row (concurrent spend since
+            // the pre-check above) fails the gte guard, drops out of RETURNING,
+            // and rolls the whole return back.
+            const decremented = await tx.$queryRaw<{ itemId: number }[]>`
+                UPDATE "DriverStock" AS ds
+                SET quantity_on_hand = ds.quantity_on_hand - v.qty,
+                    "updatedAt" = now()
+                FROM (VALUES ${Prisma.join(decrements.map((d) => Prisma.sql`(${d.itemId}::int, ${d.total}::int)`))}) AS v("itemId", qty)
+                WHERE ds."driverId" = ${driverId}
+                  AND ds."itemId" = v."itemId"
+                  AND ds.quantity_on_hand >= v.qty
+                RETURNING ds."itemId"
+            `
+            if (decremented.length !== decrements.length) {
+                const covered = new Set(decremented.map((r) => r.itemId))
+                const short = decrements.filter((d) => !covered.has(d.itemId)).map((d) => d.itemId)
+                throw new Error(`Insufficient stock for item(s) ${short.join(", ")} or concurrent update detected.`)
             }
-            // Decrement bag totals once per item (could be multiple reasons per item).
-            for (const [itemId, total] of totalsPerItem) {
-                const updated = await tx.driverStock.updateMany({
-                    where: { driverId, itemId, quantity_on_hand: { gte: total } },
-                    data: { quantity_on_hand: { decrement: total } },
-                });
-                
-                if (updated.count === 0) {
-                    throw new Error(`Insufficient stock for item ${itemId} or concurrent update detected.`);
-                }
-            }
-        })
+        }, { timeout: 15_000, maxWait: 5_000 })
 
         await writeAuditLog(
             session,

@@ -566,7 +566,10 @@ export async function logBatchRefills(
                     });
                 }
             }
-        });
+        // Headroom over the 5s default: this legacy path still loops per item
+        // and admins shadowing the portal can push large batches through the
+        // pooler. Retired at B2b cutover — not worth the set-based rewrite.
+        }, { timeout: 15_000, maxWait: 5_000 });
 
         revalidatePath('/driver')
         revalidatePath('/admin')
@@ -604,122 +607,166 @@ async function logBatchRefillsDispatchless(
     if (!Number.isFinite(driverId)) return { success: false, error: "Invalid session." };
 
     try {
-        await prisma.$transaction(async (tx) => {
-            const machineData = await tx.machine.findUnique({ where: { id: machineId } });
+        // Validate and merge duplicate item lines up front so the set-based
+        // statements below see at most one row per item.
+        const merged = new Map<number, { refilled: number; returned: number; bagReturned: number }>();
+        for (const item of items) {
+            assertWholeNonNegative(item.refilled, `Refilled quantity for item ${item.itemId}`);
+            assertWholeNonNegative(item.returned, `Returned quantity for item ${item.itemId}`);
+            const bagReturned = item.bag_returned || 0;
+            assertWholeNonNegative(bagReturned, `Bag Returned quantity for item ${item.itemId}`);
+            if (item.refilled === 0 && item.returned === 0 && bagReturned === 0) continue;
+            const prev = merged.get(item.itemId);
+            merged.set(item.itemId, {
+                refilled: (prev?.refilled || 0) + item.refilled,
+                returned: (prev?.returned || 0) + item.returned,
+                bagReturned: (prev?.bagReturned || 0) + bagReturned,
+            });
+        }
+        const lines = Array.from(merged, ([itemId, v]) => ({ itemId, ...v }));
 
-            for (const item of items) {
-                assertWholeNonNegative(item.refilled, `Refilled quantity for item ${item.itemId}`);
-                assertWholeNonNegative(item.returned, `Returned quantity for item ${item.itemId}`);
-                const bagReturned = item.bag_returned || 0;
-                assertWholeNonNegative(bagReturned, `Bag Returned quantity for item ${item.itemId}`);
-                if (item.refilled === 0 && item.returned === 0 && bagReturned === 0) continue;
+        if (lines.length) {
+            const itemIds = lines.map((l) => l.itemId);
 
-                // Source bag inventory from DriverStock alone — no DispatchItem wrapper.
-                const driverStock = await tx.driverStock.findUnique({
-                    where: { driverId_itemId: { driverId, itemId: item.itemId } },
-                });
-                const onHand = driverStock?.quantity_on_hand || 0;
+            // Reference reads happen before the transaction: through the pooler
+            // each round-trip costs ~100ms and only the writes need atomicity.
+            // Same rationale as assignToDriver — per-item loops inside
+            // $transaction blow Prisma's 5s window on large syncs (P2028).
+            const [machineData, dbItems, bagRows, lastPrices] = await Promise.all([
+                prisma.machine.findUnique({ where: { id: machineId } }),
+                prisma.item.findMany({ where: { id: { in: itemIds } } }),
+                prisma.driverStock.findMany({ where: { driverId, itemId: { in: itemIds } } }),
+                // PREVIOUS RESTOCK LOCK-IN — latest locked-in price per item at
+                // this machine, same convention as the legacy path so
+                // sales_revenue stays comparable across both flows.
+                prisma.$queryRaw<{ itemId: number; price_at_refill: number }[]>`
+                    SELECT DISTINCT ON ("itemId") "itemId", price_at_refill
+                    FROM "RefillLog"
+                    WHERE "machineId" = ${machineId} AND "itemId" IN (${Prisma.join(itemIds)})
+                    ORDER BY "itemId", refilled_at DESC
+                `,
+            ]);
 
-                if (item.refilled + bagReturned > onHand) {
+            const onHand = new Map(bagRows.map((s) => [s.itemId, s.quantity_on_hand] as const));
+            for (const l of lines) {
+                const have = onHand.get(l.itemId) || 0;
+                if (l.refilled + l.bagReturned > have) {
                     throw new Error(
-                        `Not enough in driver bag for item ${item.itemId}. On hand: ${onHand}, attempted refill+return: ${item.refilled + bagReturned}`
+                        `Not enough in driver bag for item ${l.itemId}. On hand: ${have}, attempted refill+return: ${l.refilled + l.bagReturned}`
                     );
                 }
+            }
 
-                const itemData = await tx.item.findUnique({ where: { id: item.itemId } });
+            const itemById = new Map(dbItems.map((i) => [i.id, i]));
+            const historicPrice = new Map(lastPrices.map((p) => [p.itemId, p.price_at_refill]));
+            const priceFor = (itemId: number) => {
+                const itemData = itemById.get(itemId);
                 let priceToUse = itemData?.price_standard || 0;
                 if (machineData?.tier === 'HOSPITAL') priceToUse = itemData?.price_hospital || 0;
                 else if (machineData?.tier === 'HOTEL') priceToUse = itemData?.price_hotel || 0;
+                return priceToUse;
+            };
 
-                const sales = item.refilled;
+            const bagDecrements = lines.filter((l) => l.refilled + l.bagReturned > 0);
+            // Only log a RefillLog when there was actual machine interaction.
+            const refillRows = lines.filter((l) => l.refilled > 0 || l.returned > 0);
 
-                // PREVIOUS RESTOCK LOCK-IN — same convention as the legacy path so
-                // sales_revenue stays comparable across both flows.
-                const previousLog = await tx.refillLog.findFirst({
-                    where: { machineId, itemId: item.itemId },
-                    orderBy: { refilled_at: 'desc' },
-                    select: { price_at_refill: true },
-                });
-                const historicPrice = previousLog ? previousLog.price_at_refill : priceToUse;
-                const sales_revenue = sales * historicPrice;
-
-                // Only create a RefillLog if there was actual machine interaction
-                if (item.refilled > 0 || item.returned > 0) {
-                    await tx.refillLog.create({
-                        data: {
-                            dispatchId: null,
-                            driverId,
-                            machineId,
-                            itemId: item.itemId,
-                            quantity_refilled: item.refilled,
-                            items_sold_since_last_refill: sales,
-                            sales_revenue,
-                            price_at_refill: priceToUse,
-                            cost_at_refill: itemData?.cost || 0,
-                            damaged_quantity: 0,
-                            // Reuse expired_quantity as route-returned for compat with legacy reports.
-                            expired_quantity: item.returned,
-                        } as any,
-                    });
-                }
-
-                // Decrement bag immediately for both refilled AND items returned to warehouse
-                if (item.refilled + bagReturned > 0) {
-                    const updatedStock = await tx.driverStock.updateMany({
-                        where: { driverId, itemId: item.itemId, quantity_on_hand: { gte: item.refilled + bagReturned } },
-                        data: { quantity_on_hand: { decrement: item.refilled + bagReturned } },
-                    });
-                    
-                    if (updatedStock.count === 0) {
-                        throw new Error(`Insufficient driver stock for item ${item.itemId} during refill or concurrent update detected.`);
+            await prisma.$transaction(async (tx) => {
+                // 1. One guarded set-based bag decrement covering refilled AND
+                // items returned to the warehouse. A short row doesn't match the
+                // gte guard, drops out of RETURNING, and fails the count check.
+                if (bagDecrements.length) {
+                    const decremented = await tx.$queryRaw<{ itemId: number }[]>`
+                        UPDATE "DriverStock" AS ds
+                        SET quantity_on_hand = ds.quantity_on_hand - v.qty,
+                            "updatedAt" = now()
+                        FROM (VALUES ${Prisma.join(bagDecrements.map((l) => Prisma.sql`(${l.itemId}::int, ${l.refilled + l.bagReturned}::int)`))}) AS v("itemId", qty)
+                        WHERE ds."driverId" = ${driverId}
+                          AND ds."itemId" = v."itemId"
+                          AND ds.quantity_on_hand >= v.qty
+                        RETURNING ds."itemId"
+                    `;
+                    if (decremented.length !== bagDecrements.length) {
+                        const covered = new Set(decremented.map((r) => r.itemId));
+                        const short = bagDecrements.filter((l) => !covered.has(l.itemId)).map((l) => l.itemId);
+                        throw new Error(`Insufficient driver stock for item(s) ${short.join(", ")} during refill or concurrent update detected.`);
                     }
                 }
 
-                await tx.machineStock.upsert({
-                    where: { machineId_itemId: { machineId, itemId: item.itemId } },
-                    update: {
-                        estimated_stock: { increment: item.refilled - item.returned },
-                        last_refilled_at: new Date(),
-                    },
-                    create: {
-                        machineId,
-                        itemId: item.itemId,
-                        estimated_stock: Math.max(0, item.refilled - item.returned),
-                        last_refilled_at: new Date(),
-                    },
-                });
+                // 2. All RefillLogs in one INSERT.
+                if (refillRows.length) {
+                    await tx.refillLog.createMany({
+                        data: refillRows.map((l) => {
+                            const priceToUse = priceFor(l.itemId);
+                            const sales = l.refilled;
+                            return {
+                                dispatchId: null,
+                                driverId,
+                                machineId,
+                                itemId: l.itemId,
+                                quantity_refilled: l.refilled,
+                                items_sold_since_last_refill: sales,
+                                sales_revenue: sales * (historicPrice.get(l.itemId) ?? priceToUse),
+                                price_at_refill: priceToUse,
+                                cost_at_refill: itemById.get(l.itemId)?.cost || 0,
+                                damaged_quantity: 0,
+                                // Reuse expired_quantity as route-returned for compat with legacy reports.
+                                expired_quantity: l.returned,
+                            };
+                        }),
+                    });
+                }
 
-                if (item.returned > 0) {
-                    // Returned items came out of the machine, not the bag — they go
-                    // straight into the verification queue with driverId so admins
-                    // can track who pulled them.
-                    await tx.returnVerification.create({
-                        data: {
-                            dispatchId: null,
-                            driverId,
+                // 3. MachineStock upsert, set-based: increment existing rows,
+                // then insert the rest (clamped at 0, matching the old upsert).
+                const updatedMachineRows = await tx.$queryRaw<{ itemId: number }[]>`
+                    UPDATE "MachineStock" AS ms
+                    SET estimated_stock = ms.estimated_stock + v.delta,
+                        last_refilled_at = now()
+                    FROM (VALUES ${Prisma.join(lines.map((l) => Prisma.sql`(${l.itemId}::int, ${l.refilled - l.returned}::int)`))}) AS v("itemId", delta)
+                    WHERE ms."machineId" = ${machineId}
+                      AND ms."itemId" = v."itemId"
+                    RETURNING ms."itemId"
+                `;
+                const existing = new Set(updatedMachineRows.map((r) => r.itemId));
+                const missing = lines.filter((l) => !existing.has(l.itemId));
+                if (missing.length) {
+                    await tx.machineStock.createMany({
+                        data: missing.map((l) => ({
                             machineId,
-                            itemId: item.itemId,
-                            quantity: item.returned,
-                            reason: "RETURNED",
-                            status: "PENDING",
-                        },
+                            itemId: l.itemId,
+                            estimated_stock: Math.max(0, l.refilled - l.returned),
+                            last_refilled_at: new Date(),
+                        })),
                     });
                 }
-                
-                if (bagReturned > 0) {
-                    await tx.returnVerification.create({
-                        data: {
-                            dispatchId: null,
-                            driverId,
-                            itemId: item.itemId,
-                            quantity: bagReturned,
-                            reason: "SURPLUS",
-                            status: "PENDING",
-                        },
-                    });
+
+                // 4. Verification queue rows in one INSERT. RETURNED items came
+                // out of the machine (machineId set); SURPLUS came out of the bag.
+                const verificationRows = [
+                    ...lines.filter((l) => l.returned > 0).map((l) => ({
+                        dispatchId: null,
+                        driverId,
+                        machineId,
+                        itemId: l.itemId,
+                        quantity: l.returned,
+                        reason: "RETURNED",
+                        status: "PENDING",
+                    })),
+                    ...lines.filter((l) => l.bagReturned > 0).map((l) => ({
+                        dispatchId: null,
+                        driverId,
+                        itemId: l.itemId,
+                        quantity: l.bagReturned,
+                        reason: "SURPLUS",
+                        status: "PENDING",
+                    })),
+                ];
+                if (verificationRows.length) {
+                    await tx.returnVerification.createMany({ data: verificationRows });
                 }
-            }
-        });
+            }, { timeout: 15_000, maxWait: 5_000 });
+        }
 
         revalidatePath('/driver');
         revalidatePath('/admin');
