@@ -6,7 +6,9 @@ import {
   dispatchToDriver,
   logBatchRefills,
   returnDispatch,
+  deleteDriver,
 } from '@/actions/inventory';
+import { Prisma } from '@prisma/client';
 import { prismaMock } from '../__helpers__/prisma-mock';
 import {
   setAdminSession,
@@ -410,5 +412,72 @@ describe('returnDispatch', () => {
       data: { status: 'CLOSED' },
     });
     expect(notifyClients).toHaveBeenCalledWith('return');
+  });
+});
+
+describe('deleteDriver', () => {
+  it('throws when caller is a driver', async () => {
+    setDriverSession(10);
+    await expect(deleteDriver(7)).rejects.toThrow(/FORBIDDEN/);
+  });
+
+  it('rejects when the driver has open dispatches', async () => {
+    setAdminSession(1);
+    prismaMock.dispatch.count.mockResolvedValueOnce(1); // open-dispatch guard
+    const r = await deleteDriver(7);
+    expect(r.success).toBe(false);
+    expect(prismaMock.driver.delete).not.toHaveBeenCalled();
+    expect(prismaMock.driver.update).not.toHaveBeenCalled();
+  });
+
+  it('hard-deletes a driver with no history', async () => {
+    setAdminSession(1);
+    // open-dispatch guard, then the four history counts — all zero.
+    prismaMock.dispatch.count.mockResolvedValue(0);
+    prismaMock.refillLog.count.mockResolvedValue(0);
+    prismaMock.returnVerification.count.mockResolvedValue(0);
+    prismaMock.stockAssignment.count.mockResolvedValue(0);
+    prismaMock.driver.delete.mockResolvedValue({} as any);
+
+    const r = await deleteDriver(7);
+    expect(r.success).toBe(true);
+    expect(prismaMock.driver.delete).toHaveBeenCalledWith({ where: { id: 7 } });
+    expect(prismaMock.driver.update).not.toHaveBeenCalled();
+  });
+
+  it('soft-deletes (deactivates) a driver with refill history', async () => {
+    setAdminSession(1);
+    prismaMock.dispatch.count.mockResolvedValue(0);
+    prismaMock.refillLog.count.mockResolvedValue(3); // has history
+    prismaMock.returnVerification.count.mockResolvedValue(0);
+    prismaMock.stockAssignment.count.mockResolvedValue(0);
+    prismaMock.driver.update.mockResolvedValue({} as any);
+
+    const r = await deleteDriver(7);
+    expect(r.success).toBe(true);
+    expect(prismaMock.driver.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: { isActive: false },
+    });
+    expect(prismaMock.driver.delete).not.toHaveBeenCalled();
+  });
+
+  it('falls back to soft-delete when a hard delete hits an FK constraint', async () => {
+    setAdminSession(1);
+    prismaMock.dispatch.count.mockResolvedValue(0);
+    prismaMock.refillLog.count.mockResolvedValue(0);
+    prismaMock.returnVerification.count.mockResolvedValue(0);
+    prismaMock.stockAssignment.count.mockResolvedValue(0);
+    prismaMock.driver.delete.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('FK', { code: 'P2003', clientVersion: 'test' }),
+    );
+    prismaMock.driver.update.mockResolvedValue({} as any);
+
+    const r = await deleteDriver(7);
+    expect(r.success).toBe(true);
+    expect(prismaMock.driver.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: { isActive: false },
+    });
   });
 });

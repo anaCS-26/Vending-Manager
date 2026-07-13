@@ -977,7 +977,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
             <ConfirmModal
                 isOpen={deleteModal.isOpen}
                 title={`Delete ${deleteModal.type === 'driver' ? 'Driver' : deleteModal.type === 'machine' ? 'Machine' : deleteModal.type === 'warehouse' ? 'Warehouse' : deleteModal.type === 'template' ? 'Template' : 'Item'}?`}
-                message={`Are you sure you want to permanently delete this ${deleteModal.type}? ${deleteModal.type === 'item' ? 'This will also delete its warehouse stock.' : deleteModal.type === 'warehouse' ? 'Warning: Items currently in this warehouse will lose their location records.' : deleteModal.type === 'template' ? 'Past pushes are unaffected — a template is only a pre-fill preset.' : 'This cannot be undone.'}`}
+                message={deleteModal.type === 'driver' ? "Remove this driver? If they have no refill history they'll be deleted; otherwise they'll be deactivated and kept for audit history." : `Are you sure you want to permanently delete this ${deleteModal.type}? ${deleteModal.type === 'item' ? 'This will also delete its warehouse stock.' : deleteModal.type === 'warehouse' ? 'Warning: Items currently in this warehouse will lose their location records.' : deleteModal.type === 'template' ? 'Past pushes are unaffected — a template is only a pre-fill preset.' : 'This cannot be undone.'}`}
                 confirmText="Delete"
                 onConfirm={confirmDelete}
                 onCancel={() => setDeleteModal({ isOpen: false, id: null, type: null })}
