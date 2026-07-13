@@ -32,6 +32,7 @@ Per-environment setup gotcha: `SystemMeta` must be in the `supabase_realtime` pu
 - `Item.default_assignment_qty` (batch size) renders a separate `+N` button in `DriverStockManager` next to the `+1` stepper. Each click adds one batch; the button is hidden when the value is 0. Editable per-item from `/admin/manage` → Items tab (capped 0–100, validated server-side in `updateItem`).
 - `Dispatch`/`DispatchItem` are frozen historical records — never deleted. New flows write `dispatchId: null` and use denormalized `driverId` on `RefillLog`/`ReturnVerification`.
 - `Admin.role` is `ADMIN`/`SUPER_ADMIN` in DB, lowercase in session (mapped in `src/auth.ts`).
+- Drivers/machines/items/warehouses soft-delete via `isActive` — **every active-list query must filter `where: { isActive: true }`** (the delete only flips the flag). `deleteDriver` (`inventory.ts`) is conditional: it **hard-deletes** a driver with zero history (no `RefillLog`/`ReturnVerification`/`StockAssignment`/`Dispatch`; `DriverStock` cascades), else soft-deletes to preserve the denormalized `driverId` audit trail — falls back to soft-delete on a P2003 FK error. `/super/admins` deliberately shows inactive drivers with an "Inactive" badge (read-only oversight); all other driver lists (`getDrivers`, `/admin/manage`, `getDriversWithBagAndPending`) hide them.
 
 ## Dispatchless driver stock (Phase B, dual-run)
 

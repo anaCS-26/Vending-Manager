@@ -1,6 +1,7 @@
 "use server"
 
 import prisma from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 import { revalidatePath } from "next/cache"
 import { notifyClients } from "@/lib/notify"
 import type { ActionResult, PaginatedResult, DispatchWithRelations } from "@/types"
@@ -85,6 +86,7 @@ function assertWholeNonNegative(value: number, label: string) {
 export async function getDrivers() {
     await requireAdmin();
     return await prisma.driver.findMany({
+        where: { isActive: true },
         omit: { pin: true },
         include: { DriverStock: { include: { item: true } } },
         orderBy: { name: 'asc' }
@@ -1049,14 +1051,46 @@ export async function updateDriver(id: number, name: string, phone?: string, ema
     }
 }
 
-/** Toggles a driver as inactive. Rejects if they have open dispatches. */
+/**
+ * Removes a driver. Hard-deletes the row when the driver has no history
+ * (a throwaway/test account), otherwise soft-deletes (isActive=false) to
+ * preserve the denormalized audit trail on RefillLog/ReturnVerification.
+ * Rejects if they have open dispatches.
+ */
 export async function deleteDriver(id: number): Promise<ActionResult> {
     await requireAdmin();
     try {
         const activeDispatches = await prisma.dispatch.count({ where: { driverId: id, status: "OPEN" } })
         if (activeDispatches > 0) return { success: false, error: "Cannot delete driver with active dispatches" }
-        await prisma.driver.update({ where: { id }, data: { isActive: false } })
+
+        // Count non-cascading history. These FKs have no onDelete cascade, so a
+        // real delete throws if any exist. DriverStock cascades, so leftover bag
+        // stock does not block removal.
+        const [refills, returns, assignments, dispatches] = await Promise.all([
+            prisma.refillLog.count({ where: { driverId: id } }),
+            prisma.returnVerification.count({ where: { driverId: id } }),
+            prisma.stockAssignment.count({ where: { driverId: id } }),
+            prisma.dispatch.count({ where: { driverId: id } }),
+        ])
+
+        if (refills + returns + assignments + dispatches === 0) {
+            try {
+                await prisma.driver.delete({ where: { id } })
+            } catch (err) {
+                // Unexpected FK constraint (P2003) — fall back to soft-delete.
+                if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
+                    await prisma.driver.update({ where: { id }, data: { isActive: false } })
+                } else {
+                    throw err
+                }
+            }
+        } else {
+            await prisma.driver.update({ where: { id }, data: { isActive: false } })
+        }
+
         revalidatePath('/admin/manage')
+        revalidatePath('/admin/dispatches')
+        revalidatePath('/super/admins')
         return { success: true, data: undefined }
     } catch (error) {
         return { success: false, error: "Cannot delete driver (likely has existing logs/history)" }
