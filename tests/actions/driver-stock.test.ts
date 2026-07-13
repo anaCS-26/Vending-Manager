@@ -4,6 +4,7 @@ import {
   acknowledgeAssignment,
   denyAssignment,
   dismissAssignment,
+  dismissAllDisputes,
   submitDriverReturn,
   getDriverBag,
   getDriversWithBagAndPending,
@@ -347,6 +348,51 @@ describe('dismissAssignment', () => {
       expect.any(Object),
       expect.any(String),
     );
+  });
+});
+
+describe('dismissAllDisputes', () => {
+  it('throws for driver callers (admin-only)', async () => {
+    setDriverSession(10);
+    await expect(dismissAllDisputes(10)).rejects.toThrow(/FORBIDDEN/);
+  });
+
+  it('deletes exactly the disputed rows it read and audits once', async () => {
+    setAdminSession(1);
+    const disputed = [
+      makeStockAssignment({ id: 11, driverId: 10, status: 'DISPUTED' }),
+      makeStockAssignment({ id: 12, driverId: 10, status: 'DISPUTED' }),
+    ];
+    prismaMock.stockAssignment.findMany.mockResolvedValue(disputed);
+    prismaMock.stockAssignment.deleteMany.mockResolvedValue({ count: 2 });
+
+    const r = await dismissAllDisputes(10);
+    expect(r.success).toBe(true);
+    expect(r.data?.dismissed).toBe(2);
+    // Deletes by the exact ids that were read (not a blanket status filter).
+    expect(prismaMock.stockAssignment.deleteMany).toHaveBeenCalledWith({ where: { id: { in: [11, 12] } } });
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.anything(),
+      'DISMISS_ALL_DISPUTES',
+      'StockAssignment',
+      10,
+      expect.any(Object),
+      expect.any(Object),
+      expect.any(String),
+    );
+  });
+
+  it('no-ops cleanly when the driver has no disputes', async () => {
+    setAdminSession(1);
+    // writeAuditLog is a shared module mock not reset by the global beforeEach.
+    vi.mocked(writeAuditLog).mockClear();
+    prismaMock.stockAssignment.findMany.mockResolvedValue([]);
+
+    const r = await dismissAllDisputes(10);
+    expect(r.success).toBe(true);
+    expect(r.data?.dismissed).toBe(0);
+    expect(prismaMock.stockAssignment.deleteMany).not.toHaveBeenCalled();
+    expect(writeAuditLog).not.toHaveBeenCalled();
   });
 });
 
