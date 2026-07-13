@@ -261,32 +261,43 @@ describe('logBatchRefills (legacy dispatch path)', () => {
     // Drivers only — admin shadowing is rejected by the dispatchless path.
     setDriverSession(10);
     prismaMock.machine.findUnique.mockResolvedValue(makeMachine());
-    prismaMock.driverStock.findUnique.mockResolvedValue(
+    prismaMock.driverStock.findMany.mockResolvedValue([
       makeDriverStock({ driverId: 10, itemId: 1, quantity_on_hand: 10 }),
-    );
-    prismaMock.item.findUnique.mockResolvedValue(makeItem({ price_standard: 5, cost: 3 }));
-    prismaMock.refillLog.findFirst.mockResolvedValue(null);
-    prismaMock.refillLog.create.mockResolvedValue({} as any);
-    prismaMock.driverStock.updateMany.mockResolvedValue({ count: 1 });
-    prismaMock.machineStock.upsert.mockResolvedValue({} as any);
+    ]);
+    prismaMock.item.findMany.mockResolvedValue([makeItem({ id: 1, price_standard: 5, cost: 3 })]);
+    // Set-based raw statements: historic-price read → no prior logs; bag
+    // decrement and MachineStock update both cover item 1.
+    prismaMock.$queryRaw.mockImplementation(async (strings: any) => {
+      const sql = (strings as string[]).join('?');
+      if (sql.includes('SELECT DISTINCT ON')) return [];
+      return [{ itemId: 1 }];
+    });
+    prismaMock.refillLog.createMany.mockResolvedValue({ count: 1 });
 
     const r = await logBatchRefills(null, 100, [{ itemId: 1, refilled: 4, returned: 0 }]);
     expect(r.success).toBe(true);
 
-    // Dispatchless: bag decremented directly via gte guard.
-    expect(prismaMock.driverStock.updateMany).toHaveBeenCalledWith({
-      where: { driverId: 10, itemId: 1, quantity_on_hand: { gte: 4 } },
-      data: { quantity_on_hand: { decrement: 4 } },
-    });
-    // RefillLog dispatchId NULL, driverId set.
-    expect(prismaMock.refillLog.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        dispatchId: null,
-        driverId: 10,
-        machineId: 100,
-        itemId: 1,
-        quantity_refilled: 4,
-      }),
+    // Dispatchless: ONE set-based bag decrement, guarded per row in SQL.
+    const rawSqls = prismaMock.$queryRaw.mock.calls.map((c) => (c[0] as string[]).join('?'));
+    const decrementSql = rawSqls.find((s) => s.includes('UPDATE "DriverStock"'));
+    expect(decrementSql).toBeDefined();
+    expect(decrementSql).toContain('quantity_on_hand >= v.qty');
+    expect(decrementSql).toContain('RETURNING');
+    // MachineStock incremented set-based too (row exists → no createMany).
+    expect(rawSqls.some((s) => s.includes('UPDATE "MachineStock"'))).toBe(true);
+    expect(prismaMock.machineStock.createMany).not.toHaveBeenCalled();
+
+    // RefillLog dispatchId NULL, driverId set — one batched INSERT.
+    expect(prismaMock.refillLog.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          dispatchId: null,
+          driverId: 10,
+          machineId: 100,
+          itemId: 1,
+          quantity_refilled: 4,
+        }),
+      ],
     });
   });
 
@@ -300,47 +311,56 @@ describe('logBatchRefills (legacy dispatch path)', () => {
   it('dispatchless path: bag-returned items create SURPLUS verification rows', async () => {
     setDriverSession(10);
     prismaMock.machine.findUnique.mockResolvedValue(makeMachine());
-    prismaMock.driverStock.findUnique.mockResolvedValue(
+    prismaMock.driverStock.findMany.mockResolvedValue([
       makeDriverStock({ driverId: 10, itemId: 1, quantity_on_hand: 10 }),
-    );
-    prismaMock.item.findUnique.mockResolvedValue(makeItem({ cost: 3, price_standard: 5 }));
-    prismaMock.refillLog.findFirst.mockResolvedValue(null);
-    prismaMock.driverStock.updateMany.mockResolvedValue({ count: 1 });
-    prismaMock.machineStock.upsert.mockResolvedValue({} as any);
-    prismaMock.returnVerification.create.mockResolvedValue({} as any);
+    ]);
+    prismaMock.item.findMany.mockResolvedValue([makeItem({ id: 1, cost: 3, price_standard: 5 })]);
+    prismaMock.$queryRaw.mockImplementation(async (strings: any) => {
+      const sql = (strings as string[]).join('?');
+      if (sql.includes('SELECT DISTINCT ON')) return [];
+      return [{ itemId: 1 }];
+    });
+    prismaMock.returnVerification.createMany.mockResolvedValue({ count: 1 });
 
     await logBatchRefills(null, 100, [
       { itemId: 1, refilled: 0, returned: 0, bag_returned: 3 },
     ]);
 
-    expect(prismaMock.returnVerification.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        dispatchId: null,
-        driverId: 10,
-        itemId: 1,
-        quantity: 3,
-        reason: 'SURPLUS',
-        status: 'PENDING',
-      }),
+    expect(prismaMock.returnVerification.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          dispatchId: null,
+          driverId: 10,
+          itemId: 1,
+          quantity: 3,
+          reason: 'SURPLUS',
+          status: 'PENDING',
+        }),
+      ],
     });
-    // Bag decremented by bag_returned (no refill in this case).
-    expect(prismaMock.driverStock.updateMany).toHaveBeenCalledWith({
-      where: { driverId: 10, itemId: 1, quantity_on_hand: { gte: 3 } },
-      data: { quantity_on_hand: { decrement: 3 } },
-    });
+    // Bag decremented by bag_returned via the set-based guarded UPDATE.
+    const rawSqls = prismaMock.$queryRaw.mock.calls.map((c) => (c[0] as string[]).join('?'));
+    expect(rawSqls.some((s) => s.includes('UPDATE "DriverStock"'))).toBe(true);
+    // No machine interaction → no RefillLog.
+    expect(prismaMock.refillLog.createMany).not.toHaveBeenCalled();
   });
 
   it('dispatchless path: rejects when refill+bag_returned exceeds bag on hand', async () => {
     setDriverSession(10);
     prismaMock.machine.findUnique.mockResolvedValue(makeMachine());
-    prismaMock.driverStock.findUnique.mockResolvedValue(
+    prismaMock.item.findMany.mockResolvedValue([makeItem({ id: 1 })]);
+    prismaMock.$queryRaw.mockResolvedValue([]); // historic-price read
+    prismaMock.driverStock.findMany.mockResolvedValue([
       makeDriverStock({ driverId: 10, itemId: 1, quantity_on_hand: 5 }),
-    );
+    ]);
     const r = await logBatchRefills(null, 100, [
       { itemId: 1, refilled: 4, returned: 0, bag_returned: 2 }, // 6 > 5 on hand
     ]);
     expect(r.success).toBe(false);
     expect((r as any).error).toMatch(/Not enough in driver bag/);
+    // Pre-check fails before the transaction — nothing was written.
+    expect(prismaMock.refillLog.createMany).not.toHaveBeenCalled();
+    expect(prismaMock.returnVerification.createMany).not.toHaveBeenCalled();
   });
 });
 

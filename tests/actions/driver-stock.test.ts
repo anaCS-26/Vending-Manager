@@ -451,9 +451,11 @@ describe('submitDriverReturn', () => {
     prismaMock.driverStock.findMany.mockResolvedValue([
       makeDriverStock({ itemId: 1, quantity_on_hand: 10 }),
     ]);
-    prismaMock.returnVerification.create.mockResolvedValueOnce({ id: 100 } as any);
-    prismaMock.returnVerification.create.mockResolvedValueOnce({ id: 101 } as any);
-    prismaMock.driverStock.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.returnVerification.createManyAndReturn.mockResolvedValue([
+      { id: 100 },
+      { id: 101 },
+    ] as any);
+    prismaMock.$queryRaw.mockResolvedValue([{ itemId: 1 }]); // set-based bag decrement
 
     const r = await submitDriverReturn([
       { itemId: 1, quantity: 4, reason: 'DAMAGED' },
@@ -462,42 +464,43 @@ describe('submitDriverReturn', () => {
     expect(r.success).toBe(true);
     expect((r as any).data.returnIds).toEqual([100, 101]);
 
-    // Two ReturnVerification rows created — one per reason.
-    expect(prismaMock.returnVerification.create).toHaveBeenCalledTimes(2);
-    expect(prismaMock.returnVerification.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        dispatchId: null,
-        driverId: 10,
-        itemId: 1,
-        quantity: 4,
-        reason: 'DAMAGED',
-        status: 'PENDING',
-      }),
-    });
-    expect(prismaMock.returnVerification.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        reason: 'EXPIRED',
-        quantity: 3,
-      }),
+    // Both ReturnVerification rows land in ONE batched INSERT — one per reason.
+    expect(prismaMock.returnVerification.createManyAndReturn).toHaveBeenCalledTimes(1);
+    expect(prismaMock.returnVerification.createManyAndReturn).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          dispatchId: null,
+          driverId: 10,
+          itemId: 1,
+          quantity: 4,
+          reason: 'DAMAGED',
+          status: 'PENDING',
+        }),
+        expect.objectContaining({
+          reason: 'EXPIRED',
+          quantity: 3,
+        }),
+      ],
+      select: { id: true },
     });
 
-    // ONE bag decrement for the aggregate (4 + 3 = 7), guarded by gte.
-    expect(prismaMock.driverStock.updateMany).toHaveBeenCalledTimes(1);
-    expect(prismaMock.driverStock.updateMany).toHaveBeenCalledWith({
-      where: { driverId: 10, itemId: 1, quantity_on_hand: { gte: 7 } },
-      data: { quantity_on_hand: { decrement: 7 } },
-    });
+    // ONE set-based bag decrement for the aggregate (4 + 3 = 7), gte-guarded in SQL.
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    const decrementSql = (prismaMock.$queryRaw.mock.calls[0][0] as string[]).join('?');
+    expect(decrementSql).toContain('UPDATE "DriverStock"');
+    expect(decrementSql).toContain('quantity_on_hand >= v.qty');
+    expect(decrementSql).toContain('RETURNING');
 
     expect(notifyClients).toHaveBeenCalledWith('return');
   });
 
-  it('throws if a concurrent update beats the decrement (count: 0 from updateMany)', async () => {
+  it('throws if a concurrent update beats the decrement (row misses the gte guard)', async () => {
     setDriverSession(10);
     prismaMock.driverStock.findMany.mockResolvedValue([
       makeDriverStock({ itemId: 1, quantity_on_hand: 10 }),
     ]);
-    prismaMock.returnVerification.create.mockResolvedValue({ id: 1 } as any);
-    prismaMock.driverStock.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.returnVerification.createManyAndReturn.mockResolvedValue([{ id: 1 }] as any);
+    prismaMock.$queryRaw.mockResolvedValue([]); // decrement covered no rows
 
     const r = await submitDriverReturn([{ itemId: 1, quantity: 5, reason: 'SURPLUS' }]);
     expect(r.success).toBe(false);
