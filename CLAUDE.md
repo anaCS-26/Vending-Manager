@@ -17,7 +17,9 @@ All mutations live in `src/actions/*` by domain. Only real REST routes are `api/
 3. Audit row: `RefillLog` / `InventoryAdjustment` for inventory mutations (snapshot prices/costs at write time — never re-derive from live `Item`); `writeAuditLog()` from `src/lib/audit-utils.ts` for admin state changes.
 4. `notifyClients(eventTag)` then `revalidatePath()` where applicable.
 
-Routing guard lives in `src/proxy.ts` (NextAuth edge middleware).
+Routing guard lives in `src/proxy.ts` (NextAuth edge middleware). Middleware does **not** protect server actions — every export in a `"use server"` file is a publicly routable RPC endpoint whose action id ships in the client bundle, so rule 1 is the *only* authorization layer. `createItem` and `getMachineInventoryDetails` both shipped without a guard; `tests/actions/inventory.test.ts` now asserts `rejects.toThrow(/FORBIDDEN|UNAUTHORIZED/)` per action. Add that assertion for any new action.
+
+A few actions guard inline (`auth()` + role + ownership) instead of calling `auth-utils`: `changeDriverPin`, `updateMyProfile`, `acknowledgeAssignment`/`denyAssignment`, and `super.ts`'s private `verifySuperAdmin()`. They're correct, but prefer the shared guards — three idioms is how the two gaps above went unnoticed.
 
 ## Realtime
 
@@ -81,6 +83,8 @@ Statistics are pure functions in `src/lib/forecast.ts` (no Prisma/IO → unit-te
 - **Server-side pagination**: archive feeds MUST return `PaginatedResult<T>`. Pattern: `getRefillLogsPaginated` in `src/actions/history.ts`. Never ship unbounded `findMany()` to the client.
 - **Pagination UI**: use the shared `<Pagination>` component in `src/components/Pagination.tsx`. Sliding window of consecutive pages (default 3) with first/prev/next/last arrows — no ellipses, no jump-by-N. Don't reimplement.
 - **Image uploads**: `@vercel/blob` `put()` inside server actions. The `writeFile`/`mkdir` imports in `inventory.ts` are legacy local-dev fallbacks.
+- **Never serialize `Driver.pin`**: it's a bcrypt hash of a 4-digit PIN — brute-forceable offline in seconds — and unqualified `include: { driver: true }` used to put it in the RSC payload of `/admin/history`, `/admin/returns` and the dashboard. It's now omitted at the Prisma client level (`src/lib/prisma.ts`), so leaking it is opt-in. The only two call sites that may re-enable it with `omit: { pin: false }` are the credential check in `src/auth.ts` and `changeDriverPin`. Adding a third means you're about to leak it.
+- **Offline refills are idempotent**: `RefillLog.clientRequestId` (unique on `(clientRequestId, itemId)`, *not* alone — one batch writes a row per item sharing the key). `DriverRefillUI` generates it once per submission and reuses it for both the online attempt and the offline-queue fallback, so a batch that commits with a lost response isn't double-counted on replay. `logBatchRefills` maps that P2002 to `success: true`. Never mint a fresh key on retry.
 - **Numeric input**: use the shared `<NumericInput>` (`src/components/NumericInput.tsx`) for every typed number field — `decimal` prop for prices/costs, optional `max`. It keeps the raw string internally so a cleared box stays empty (no sticky "0") and partial decimals ("0.5") survive re-renders, while `onChange` hands the parent a plain number (0 when empty). Never hand-roll `type="number"` or `parseInt(e.target.value) || 0` into a `value={number}` input; avoid `onFocus={e.target.select()}` (mobile re-fires focus between keystrokes). `<select>` dropdowns are exempt.
 
 ## UI
