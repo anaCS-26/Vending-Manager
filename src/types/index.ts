@@ -20,7 +20,11 @@ export type MachineStockWithItem = Prisma.MachineStockGetPayload<{
 /** A full dispatch with driver, items (including item details), and refill logs (including machine details) */
 export type DispatchWithRelations = Prisma.DispatchGetPayload<{
     include: {
-        driver: true;
+        // `pin` is omitted globally in the Prisma client (see src/lib/prisma.ts),
+        // so the payload type has to omit it too or it won't match what queries
+        // actually return. This type is also handed to client components — the
+        // hash must never be in it.
+        driver: { omit: { pin: true } };
         DispatchItems: { include: { item: true } };
         RefillLogs: { include: { machine: true } };
     };
