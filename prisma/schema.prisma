@@ -133,6 +133,10 @@ model DriverStock {
   item             Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@unique([driverId, itemId])
+  // Sibling of WarehouseStock/MachineStock, both of which index itemId. This one
+  // was missed, so the per-item `aggregate({ where: { itemId } })` calls in
+  // completePurchaseOrder and calibrateWarehouseStock each did a seq scan.
+  @@index([itemId])
 }
 
 /// A request to move items from a Warehouse to a Driver.
@@ -152,6 +156,8 @@ model Dispatch {
   @@index([driverId])
   @@index([warehouseId])
   @@index([dispatch_date])
+  // getClosedDispatches / getClosedDispatchesPaginated filter status then sort by date.
+  @@index([status, dispatch_date])
 }
 
 /// Specific item and quantity assigned in a Dispatch.
@@ -212,16 +218,32 @@ model RefillLog {
   damaged_quantity             Int       @default(0)
   expired_quantity             Int       @default(0)
   refilled_at                  DateTime  @default(now())
+  /// Client-generated idempotency key for the driver's offline replay queue. If a
+  /// batch commits but the response is lost (dropped signal, lambda timeout), the
+  /// client still has it queued and retries — without this the refill is committed
+  /// twice, double-counting revenue.
+  ///
+  /// Uniqueness is (clientRequestId, itemId), NOT clientRequestId alone: one batch
+  /// writes one row per item and they all share the key, so a bare @unique would
+  /// reject the first legitimate multi-item batch. Nullable, and Postgres treats
+  /// NULLs as distinct, so legacy rows and the online path are unaffected.
+  clientRequestId              String?
   dispatch                     Dispatch? @relation(fields: [dispatchId], references: [id])
   driver                       Driver?   @relation(fields: [driverId], references: [id])
   item                         Item      @relation(fields: [itemId], references: [id])
   machine                      Machine   @relation(fields: [machineId], references: [id])
 
+  @@unique([clientRequestId, itemId])
   @@index([itemId])
   @@index([dispatchId])
   @@index([driverId])
   @@index([machineId])
   @@index([refilled_at])
+  // Composites for the filter+sort pairs the app actually issues. The five
+  // single-column indexes above can't serve an ordered lookup on their own.
+  @@index([machineId, itemId, refilled_at]) // last-price findFirst, per item during a refill
+  @@index([machineId, refilled_at]) // machine history feeds
+  @@index([driverId, refilled_at]) // per-driver last-activity + history slices
 }
 
 /// Request for admin to verify items returned by a Driver. dispatchId was
@@ -250,6 +272,10 @@ model ReturnVerification {
   @@index([driverId])
   @@index([machineId])
   @@index([status])
+  // reported_at is the sole orderBy on the pending/processed return feeds, and
+  // had no index at all.
+  @@index([reported_at])
+  @@index([status, reported_at])
 }
 
 /// Audit record for an admin-to-driver stock push (the dispatchless replacement
@@ -279,6 +305,10 @@ model StockAssignment {
   @@index([itemId])
   @@index([assigned_at])
   @@index([status])
+  // warehouseId is an unindexed FK — it makes warehouse deletes scan this table.
+  @@index([warehouseId])
+  @@index([status, assigned_at]) // open-assignment work queue
+  @@index([driverId, status, assigned_at]) // per-driver bag + dispute lookups
 }
 
 /// Entity providing items for purchase.
@@ -405,4 +435,10 @@ model SystemAuditLog {
 
   @@index([actionType])
   @@index([entityType, entityId])
+  // timestamp had no index despite being the sole orderBy on every audit query,
+  // including the skip/take-paginated /super/audit viewer — which meant Postgres
+  // re-sorted the whole table for each page. This table only ever grows.
+  @@index([timestamp])
+  @@index([actionType, timestamp]) // sensitive-action feed
+  @@index([actorId, timestamp]) // per-actor last-activity rollups
 }

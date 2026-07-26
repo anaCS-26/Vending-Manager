@@ -13,6 +13,14 @@ export interface OfflineLog {
     bag_returned?: number;
   }[];
   timestamp: string;
+  /**
+   * Idempotency key, generated once when the entry is queued and kept stable
+   * across retries. `timestamp` is a local ordering key the server never sees;
+   * this is what lets the server recognise a replay of a batch that already
+   * committed but whose response was lost. Optional so entries queued before
+   * this field existed still drain.
+   */
+  clientRequestId?: string;
 }
 
 interface DriverState {

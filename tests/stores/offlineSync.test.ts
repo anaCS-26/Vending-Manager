@@ -33,7 +33,12 @@ async function autoSyncQueue() {
   const ok: string[] = [];
   for (const log of logs) {
     const wireDispatchId = log.dispatchId === 0 ? null : log.dispatchId;
-    const result = await logBatchRefills(wireDispatchId, log.machineId, log.payload);
+    const result = await logBatchRefills(
+      wireDispatchId,
+      log.machineId,
+      log.payload,
+      log.clientRequestId ?? null,
+    );
     if (result.success) ok.push(log.timestamp);
   }
   useDriverStore.getState().removeOfflineLogs(ok);
@@ -42,6 +47,9 @@ async function autoSyncQueue() {
 
 beforeEach(() => {
   useDriverStore.setState({ activeDispatches: [], machines: [], offlineLogs: [] });
+  // Clears recorded calls (not implementations) so per-test assertions about the
+  // arguments this file's simulator passed don't see earlier tests' calls.
+  vi.mocked(logBatchRefills).mockClear();
 });
 
 describe('offline sync queue', () => {
@@ -78,7 +86,51 @@ describe('offline sync queue', () => {
 
     await autoSyncQueue();
 
-    expect(logBatchRefills).toHaveBeenCalledWith(null, 100, expect.any(Array));
+    expect(logBatchRefills).toHaveBeenCalledWith(null, 100, expect.any(Array), null);
+  });
+
+  it('sends the stored clientRequestId so the server can recognise a replay', async () => {
+    vi.mocked(logBatchRefills).mockResolvedValue({ success: true, data: undefined });
+    useDriverStore.getState().addOfflineLog(
+      makeLog({ timestamp: 't1', clientRequestId: 'req-abc' }),
+    );
+
+    await autoSyncQueue();
+
+    expect(logBatchRefills).toHaveBeenCalledWith(1, 100, expect.any(Array), 'req-abc');
+  });
+
+  it('keeps the same clientRequestId across retries of a failed entry', async () => {
+    vi.mocked(logBatchRefills)
+      .mockResolvedValueOnce({ success: false, error: 'server down' })
+      .mockResolvedValueOnce({ success: true, data: undefined });
+    useDriverStore.getState().addOfflineLog(
+      makeLog({ timestamp: 't1', clientRequestId: 'req-stable' }),
+    );
+
+    await autoSyncQueue();
+    // Entry stayed queued after the failure...
+    expect(useDriverStore.getState().offlineLogs).toHaveLength(1);
+    await autoSyncQueue();
+
+    // ...and the retry carried the identical key. A fresh key per attempt is what
+    // would let a lost-response commit be double-counted.
+    const keys = vi.mocked(logBatchRefills).mock.calls.map((c) => c[3]);
+    expect(keys).toEqual(['req-stable', 'req-stable']);
+    expect(useDriverStore.getState().offlineLogs).toEqual([]);
+  });
+
+  it('drops an entry the server reports as an already-committed replay', async () => {
+    // The action maps a (clientRequestId, itemId) unique violation to success, so
+    // the queue must drain rather than retry forever.
+    vi.mocked(logBatchRefills).mockResolvedValue({ success: true, data: undefined });
+    useDriverStore.getState().addOfflineLog(
+      makeLog({ timestamp: 't1', clientRequestId: 'req-dupe' }),
+    );
+
+    const r = await autoSyncQueue();
+    expect(r.successes).toBe(1);
+    expect(useDriverStore.getState().offlineLogs).toEqual([]);
   });
 
   it('preserves a queue entry when the action throws (transient network error)', async () => {
