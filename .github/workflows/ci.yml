@@ -22,8 +22,22 @@ jobs:
           node-version: 22
           cache: npm
 
+      # `npm install`, not `npm ci`, and deliberately so. package-lock.json is
+      # generated on Windows, so the only platform-gated binaries it records are
+      # win32 (rolldown, @next/swc, lightningcss, oxide, unrs-resolver, esbuild,
+      # sharp). `npm ci` installs the lockfile verbatim and vitest then dies on a
+      # missing @rolldown/binding-linux-x64-gnu — npm/cli#4828.
+      #
+      # `npm install` honours every locked version and additionally resolves the
+      # right native binaries for this platform. Verified: with this lockfile
+      # present it reports zero version drift across all 58 direct dependencies,
+      # so the pinning a gate needs is intact. It is also what Vercel runs, so CI
+      # matches the deploy.
+      #
+      # The real fix is to generate package-lock.json on Linux (a WSL or Docker
+      # `npm install`), after which this can go back to `npm ci`.
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       # src/types/index.ts is built almost entirely on Prisma.<Model>GetPayload<...>,
       # so the generated client has to exist before anything type-checks. There is
