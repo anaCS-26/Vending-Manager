@@ -39,6 +39,23 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # npm resolves a package's optional deps once, at lockfile-generation time,
+      # and honours that record on install — so `npm install` does not heal the
+      # gap either. vitest 4 bundles with rolldown, whose native binding is an
+      # optional dep, and the lockfile only carries the win32 one.
+      #
+      # Install just that binding, at whatever version the resolved rolldown
+      # actually wants, so this cannot drift when vitest is upgraded. --no-save
+      # keeps it out of the lockfile: it is a CI-host concern, not a project
+      # dependency. Goes away once the lockfile is generated on Linux.
+      - name: Install rolldown's Linux binding (npm/cli#4828)
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('rolldown/package.json').version")"
+          echo "rolldown resolved to $VERSION"
+          npm install --no-save --no-audit --no-fund \
+            "@rolldown/binding-linux-x64-gnu@${VERSION}"
+
       # src/types/index.ts is built almost entirely on Prisma.<Model>GetPayload<...>,
       # so the generated client has to exist before anything type-checks. There is
       # no postinstall hook that does this. `generate` only reads schema.prisma and
