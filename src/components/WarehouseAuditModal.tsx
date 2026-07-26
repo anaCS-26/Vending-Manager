@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useId, useState, useEffect } from "react";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 import { createPortal } from "react-dom";
-import { X, Search, AlertCircle, Save, CheckCircle2, Scale, Info } from "lucide-react";
+import { X, Search, AlertCircle, Save, CheckCircle2, Scale } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { WarehouseWithItem, WarehouseType } from "@/types";
 import { calibrateWarehouseStock } from "@/actions/inventory";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { CalibrationLegend } from "@/components/CalibrationLegend";
 import { NumericInput } from "@/components/NumericInput";
 
 type Props = {
@@ -25,6 +27,14 @@ type Props = {
  * "found-unit cost" per surplus row re-blends WAC only when the user sets it.
  */
 export default function WarehouseAuditModal({ isOpen, onClose, inventory, warehouses }: Props) {
+    const titleId = useId();
+    // A recount can be dozens of typed lines — Esc must not discard it.
+    const { panelRef, dialogProps } = useModalBehavior({
+        isOpen,
+        onClose,
+        closeOnEscape: false,
+        labelledBy: titleId,
+    });
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | "">("");
     const [physicalCounts, setPhysicalCounts] = useState<Record<number, number>>({});
     const [foundCosts, setFoundCosts] = useState<Record<number, string>>({});
@@ -130,7 +140,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
         <>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 text-left" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
             <div className="absolute inset-0 bg-slate-900/40 dark:bg-zinc-950/80 backdrop-blur-md" onClick={onClose} />
-            <div className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
+            <div ref={panelRef} {...dialogProps} className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50">
@@ -139,11 +149,11 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                             <Scale className="w-5 h-5 text-accent-blue" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">Warehouse Calibration</h2>
+                            <h2 id={titleId} className="text-xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">Warehouse Calibration</h2>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mt-0.5">Physical Stock Count</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 rounded-full transition-colors hidden sm:block">
+                    <button onClick={onClose} aria-label="Close calibration" className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 rounded-full transition-colors hidden sm:block">
                         <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                     </button>
                 </div>
@@ -178,15 +188,19 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                     )}
                 </div>
 
-                {/* Plain-language explainer for non-technical users */}
-                <div className="px-6 pt-3">
-                    <div className="flex gap-3 items-start bg-accent-blue/5 border border-accent-blue/20 rounded-xl px-4 py-3">
-                        <Info className="w-4 h-4 text-accent-blue shrink-0 mt-0.5" />
-                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            <span className="font-bold text-slate-800 dark:text-slate-100">Match the count to the shelf.</span> Enter how many of each item you actually have. A <span className="font-semibold text-accent-pink">shortage</span> simply lowers the number, and no loss is charged to your profit. <span className="font-semibold text-emerald-500">Found stock</span> is added back at its current cost, so your cost &amp; profit stay accurate. No purchase order needed.
-                        </p>
-                    </div>
-                </div>
+                {/* What each outcome does to the books. Copy is warehouse-specific:
+                    a shortage here is neutral, unlike the machine audit. */}
+                <CalibrationLegend
+                    shortage={{
+                        label: "Shortage — you counted fewer",
+                        effect: "Stock is lowered. No loss is charged to your profit.",
+                    }}
+                    surplus={{
+                        label: "Found — you counted more",
+                        effect: "Added back at its current cost, so profit stays accurate.",
+                    }}
+                    note="No purchase order needed."
+                />
 
                 {/* Content */}
                 <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-slate-50/50 dark:bg-zinc-950 custom-scrollbar">
@@ -222,7 +236,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <span className="font-bold text-slate-900 dark:text-zinc-100 text-sm uppercase">{stock.item.name}</span>
                                                     {isSurplus && (
-                                                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-500">
+                                                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-accent-green/10 text-accent-green">
                                                             +{diff} found (no sale)
                                                         </span>
                                                     )}
@@ -287,14 +301,14 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                             {selectedWarehouseId && hasChanges && (
                                 <p className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
                                     <Scale className="w-4 h-4 text-accent-blue" />
-                                    {totals.found > 0 && <span className="text-emerald-500">+{totals.found} found</span>}
+                                    {totals.found > 0 && <span className="text-accent-green">+{totals.found} found</span>}
                                     {totals.found > 0 && totals.short > 0 && <span className="text-slate-400">·</span>}
                                     {totals.short > 0 && <span className="text-accent-pink">−{totals.short} shortage</span>}
                                     <span className="text-slate-400 font-medium">· no sale logged · WAC preserved unless a found-cost is set</span>
                                 </p>
                             )}
                             {selectedWarehouseId && !hasChanges && (
-                                <p className="text-sm font-bold text-emerald-500 flex items-center gap-2">
+                                <p className="text-sm font-bold text-accent-green flex items-center gap-2">
                                     <CheckCircle2 className="w-4 h-4" />
                                     Counts match the system.
                                 </p>
@@ -330,6 +344,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                 title="Confirm Warehouse Calibration"
                 message={`Apply this calibration? Shortages are neutral corrections (no loss booked); found units keep the current WAC unless you set a found-cost. (+${totals.found} found, −${totals.short} shortage)`}
                 confirmText="Yes, Apply Calibration"
+                isPending={isSubmitting}
                 onConfirm={executeSubmit}
                 onCancel={() => setShowConfirm(false)}
             />

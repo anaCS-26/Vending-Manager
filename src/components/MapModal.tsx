@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-lea
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { MapPin, X, Map as MapIcon, Loader2 } from "lucide-react";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 // Fix Leaflet's default icon path issues in Next.js
 const customIcon = new L.Icon({
@@ -51,6 +52,12 @@ export default function MapModal({ onClose, onConfirm }: Props) {
     const [mapPosition, setMapPosition] = useState<L.LatLng | null>(new L.LatLng(26.3045, 50.1481)); // Default to Dhahran
     const [mapAddressName, setMapAddressName] = useState("");
     const [userLocating, setUserLocating] = useState(false);
+    // Rendered only while open (parent unmounts it), so isOpen is constant true.
+    const { panelRef, dialogProps } = useModalBehavior({
+        isOpen: true,
+        onClose,
+        label: "Drop a pin on the map",
+    });
 
     const locateMe = () => {
         setUserLocating(true);
@@ -79,7 +86,7 @@ export default function MapModal({ onClose, onConfirm }: Props) {
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="w-full max-w-3xl bg-slate-200 dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[80vh]">
+            <div ref={panelRef} {...dialogProps} className="w-full max-w-3xl bg-slate-200 dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[80vh]">
                 <div className="p-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between bg-black/20">
                     <div>
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -88,7 +95,7 @@ export default function MapModal({ onClose, onConfirm }: Props) {
                         </h3>
                         <p className="text-sm text-slate-600 dark:text-slate-400">Click anywhere on the map to pinpoint the exact location.</p>
                     </div>
-                    <button onClick={onClose} className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
+                    <button onClick={onClose} aria-label="Close map" className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>

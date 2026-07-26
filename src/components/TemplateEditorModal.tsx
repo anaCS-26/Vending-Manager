@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { X, Search, Save, ClipboardList, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { createDispatchTemplate, updateDispatchTemplate } from "@/actions/dispatch-templates";
 import { NumericInput } from "@/components/NumericInput";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 import type { DispatchTemplateWithItems } from "@/types";
 
 export type TemplateItemOption = {
@@ -37,6 +38,15 @@ export default function TemplateEditorModal({ isOpen, onClose, template, items }
         setLines(Object.fromEntries((template?.Items ?? []).map(l => [l.itemId, l.quantity])));
         setSearchQuery("");
     }, [isOpen, template]);
+
+    const titleId = useId();
+    // A part-built template is typed work — Esc must not silently bin it.
+    const { panelRef, dialogProps } = useModalBehavior({
+        isOpen,
+        onClose,
+        closeOnEscape: false,
+        labelledBy: titleId,
+    });
 
     if (!isOpen) return null;
 
@@ -110,6 +120,8 @@ export default function TemplateEditorModal({ isOpen, onClose, template, items }
                         initial={{ opacity: 0, scale: 0.95, y: 10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        ref={panelRef}
+                        {...dialogProps}
                         className="relative bg-white dark:bg-[#0a0a0b] border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
                     >
                         {/* Header */}
@@ -119,11 +131,11 @@ export default function TemplateEditorModal({ isOpen, onClose, template, items }
                                     <ClipboardList className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">{template ? "Edit Template" : "New Dispatch Template"}</h2>
+                                    <h2 id={titleId} className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">{template ? "Edit Template" : "New Dispatch Template"}</h2>
                                     <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Predefine items and quantities for one-click driver pushes</p>
                                 </div>
                             </div>
-                            <button onClick={onClose} className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 dark:bg-white/5 hover:text-slate-900 dark:hover:text-white rounded-xl transition-colors">
+                            <button onClick={onClose} aria-label="Close template editor" className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 dark:bg-white/5 hover:text-slate-900 dark:hover:text-white rounded-xl transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>

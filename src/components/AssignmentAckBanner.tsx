@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 import { Package, Check, AlertTriangle, X, Loader2, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -24,6 +25,18 @@ export function AssignmentAckBanner({ pending }: Props) {
     const [items, setItems] = useState(pending);
     const [disputeMode, setDisputeMode] = useState(false);
     const [isPending, startTransition] = useTransition();
+    const titleId = useId();
+
+    // Intentionally has no dismiss path — it clears only once the driver accepts
+    // or denies. So it gets the focus trap, scroll lock and dialog role, but
+    // `closeOnEscape: false` and a no-op onClose: there is nothing to close to.
+    // Hook runs before the early return below to keep hook order stable.
+    const { panelRef, dialogProps } = useModalBehavior({
+        isOpen: items.length > 0,
+        onClose: () => { },
+        closeOnEscape: false,
+        labelledBy: titleId,
+    });
 
     if (items.length === 0) return null;
 
@@ -76,6 +89,8 @@ export function AssignmentAckBanner({ pending }: Props) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm">
             <motion.div
+                ref={panelRef}
+                {...dialogProps}
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 className="w-full max-w-lg bg-white dark:bg-neo-bg border border-slate-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[90vh]"
@@ -87,7 +102,7 @@ export function AssignmentAckBanner({ pending }: Props) {
                             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-inner ${disputeMode ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-accent-blue/20 text-accent-blue'}`}>
                                 {disputeMode ? <AlertTriangle className="w-6 h-6" /> : <Package className="w-6 h-6" />}
                             </div>
-                            <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                            <h2 id={titleId} className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
                                 {disputeMode ? "Deny Entire Assignment" : "Stock Added to Bag"}
                             </h2>
                             <p className="text-sm text-slate-500 mt-1">

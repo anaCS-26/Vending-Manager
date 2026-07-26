@@ -1,13 +1,22 @@
 "use client"
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { X, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { updateMyProfile } from "@/actions/settings";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 export function AdminSettingsModal({ user, isOpen, onClose }: { user: any, isOpen: boolean, onClose: () => void }) {
     const [isPending, startTransition] = useTransition();
     const [form, setForm] = useState({ name: user?.name || "", password: "" });
+    const titleId = useId();
+    // Holds typed credentials — don't let Esc discard them mid-save.
+    const { panelRef, dialogProps } = useModalBehavior({
+        isOpen,
+        onClose,
+        closeOnEscape: !isPending,
+        labelledBy: titleId,
+    });
 
     if (!isOpen) return null;
 
@@ -25,11 +34,11 @@ export function AdminSettingsModal({ user, isOpen, onClose }: { user: any, isOpe
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-neo-bg border border-slate-200 dark:border-white/10 w-full max-w-md rounded-3xl p-6 shadow-2xl relative">
-                <button onClick={onClose} className="absolute right-4 top-4 p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
+            <div ref={panelRef} {...dialogProps} className="bg-white dark:bg-neo-bg border border-slate-200 dark:border-white/10 w-full max-w-md rounded-3xl p-6 shadow-2xl relative">
+                <button onClick={onClose} aria-label="Close settings" className="absolute right-4 top-4 p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
                     <X className="w-5 h-5" />
                 </button>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">My Profile Settings</h3>
+                <h3 id={titleId} className="text-xl font-bold text-slate-900 dark:text-white mb-2">My Profile Settings</h3>
                 <p className="text-sm text-slate-500 mb-6">Update your personal account information.</p>
 
                 <div className="space-y-4">
