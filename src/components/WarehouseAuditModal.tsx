@@ -3,13 +3,14 @@
 import { useId, useState, useEffect } from "react";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
 import { createPortal } from "react-dom";
-import { X, Search, AlertCircle, Save, CheckCircle2, Scale, Info } from "lucide-react";
+import { X, Search, AlertCircle, Save, CheckCircle2, Scale } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { WarehouseWithItem, WarehouseType } from "@/types";
 import { calibrateWarehouseStock } from "@/actions/inventory";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { CalibrationLegend } from "@/components/CalibrationLegend";
 import { NumericInput } from "@/components/NumericInput";
 
 type Props = {
@@ -187,15 +188,19 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                     )}
                 </div>
 
-                {/* Plain-language explainer for non-technical users */}
-                <div className="px-6 pt-3">
-                    <div className="flex gap-3 items-start bg-accent-blue/5 border border-accent-blue/20 rounded-xl px-4 py-3">
-                        <Info className="w-4 h-4 text-accent-blue shrink-0 mt-0.5" />
-                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            <span className="font-bold text-slate-800 dark:text-slate-100">Match the count to the shelf.</span> Enter how many of each item you actually have. A <span className="font-semibold text-accent-pink">shortage</span> simply lowers the number, and no loss is charged to your profit. <span className="font-semibold text-emerald-500">Found stock</span> is added back at its current cost, so your cost &amp; profit stay accurate. No purchase order needed.
-                        </p>
-                    </div>
-                </div>
+                {/* What each outcome does to the books. Copy is warehouse-specific:
+                    a shortage here is neutral, unlike the machine audit. */}
+                <CalibrationLegend
+                    shortage={{
+                        label: "Shortage — you counted fewer",
+                        effect: "Stock is lowered. No loss is charged to your profit.",
+                    }}
+                    surplus={{
+                        label: "Found — you counted more",
+                        effect: "Added back at its current cost, so profit stays accurate.",
+                    }}
+                    note="No purchase order needed."
+                />
 
                 {/* Content */}
                 <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-slate-50/50 dark:bg-zinc-950 custom-scrollbar">
@@ -231,7 +236,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <span className="font-bold text-slate-900 dark:text-zinc-100 text-sm uppercase">{stock.item.name}</span>
                                                     {isSurplus && (
-                                                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-500">
+                                                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-accent-green/10 text-accent-green">
                                                             +{diff} found (no sale)
                                                         </span>
                                                     )}
@@ -296,14 +301,14 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                             {selectedWarehouseId && hasChanges && (
                                 <p className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
                                     <Scale className="w-4 h-4 text-accent-blue" />
-                                    {totals.found > 0 && <span className="text-emerald-500">+{totals.found} found</span>}
+                                    {totals.found > 0 && <span className="text-accent-green">+{totals.found} found</span>}
                                     {totals.found > 0 && totals.short > 0 && <span className="text-slate-400">·</span>}
                                     {totals.short > 0 && <span className="text-accent-pink">−{totals.short} shortage</span>}
                                     <span className="text-slate-400 font-medium">· no sale logged · WAC preserved unless a found-cost is set</span>
                                 </p>
                             )}
                             {selectedWarehouseId && !hasChanges && (
-                                <p className="text-sm font-bold text-emerald-500 flex items-center gap-2">
+                                <p className="text-sm font-bold text-accent-green flex items-center gap-2">
                                     <CheckCircle2 className="w-4 h-4" />
                                     Counts match the system.
                                 </p>

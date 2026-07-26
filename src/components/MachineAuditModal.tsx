@@ -3,12 +3,13 @@
 import { useId, useState, useEffect } from "react";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
 import { createPortal } from "react-dom";
-import { X, Search, AlertCircle, Save, CheckCircle2, Scale, Info } from "lucide-react";
+import { X, Search, AlertCircle, Save, CheckCircle2, Scale } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { MachineStockWithItem, MachineType } from "@/types";
 import { reconcileMachineAudit } from "@/actions/inventory";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { CalibrationLegend } from "@/components/CalibrationLegend";
 import { NumericInput } from "@/components/NumericInput";
 
 type Props = {
@@ -178,15 +179,19 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
                     )}
                 </div>
 
-                {/* Plain-language explainer for non-technical users */}
-                <div className="px-6 pt-3">
-                    <div className="flex gap-3 items-start bg-accent-blue/5 border border-accent-blue/20 rounded-xl px-4 py-3">
-                        <Info className="w-4 h-4 text-accent-blue shrink-0 mt-0.5" />
-                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            <span className="font-bold text-slate-800 dark:text-slate-100">Match the count to the machine.</span> Enter how many of each item you actually counted. Anything <span className="font-semibold text-accent-pink">missing</span> is booked as a <span className="font-semibold text-accent-pink">sale</span> (revenue &amp; cost recorded), since product leaves a machine by being vended. <span className="font-semibold text-emerald-500">Surplus</span> units are added back to stock. The estimated figure is only a guide &mdash; your count becomes the new truth.
-                        </p>
-                    </div>
-                </div>
+                {/* What each outcome does to the books. Copy is machine-specific:
+                    a shortage here IS a sale, unlike the warehouse audit. */}
+                <CalibrationLegend
+                    shortage={{
+                        label: "Missing — you counted fewer",
+                        effect: "Booked as a sale: revenue and cost are recorded.",
+                    }}
+                    surplus={{
+                        label: "Surplus — you counted more",
+                        effect: "Added back to the machine's stock.",
+                    }}
+                    note="Your count replaces the system estimate, which is only a guide."
+                />
 
                 {/* Content Area */}
                 <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-slate-50/50 dark:bg-zinc-950 custom-scrollbar">
@@ -220,7 +225,7 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="font-bold text-slate-900 dark:text-zinc-100 text-sm uppercase">{stock.item.name}</span>
                                                 {isDiscrepancy && (
-                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${diff > 0 ? 'bg-accent-pink/10 text-accent-pink' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${diff > 0 ? 'bg-accent-pink/10 text-accent-pink' : 'bg-accent-green/10 text-accent-green'}`}>
                                                         {diff > 0 ? `−${diff} missing (sale)` : `+${Math.abs(diff)} surplus`}
                                                     </span>
                                                 )}
@@ -254,12 +259,12 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
                                 <Scale className="w-4 h-4 text-accent-blue" />
                                 {totals.missing > 0 && <span className="text-accent-pink">−{totals.missing} missing (sale)</span>}
                                 {totals.missing > 0 && totals.surplus > 0 && <span className="text-slate-400">·</span>}
-                                {totals.surplus > 0 && <span className="text-emerald-500">+{totals.surplus} surplus</span>}
+                                {totals.surplus > 0 && <span className="text-accent-green">+{totals.surplus} surplus</span>}
                                 {totals.missing > 0 && <span className="text-slate-400 font-medium">· booked as {totals.missing === 1 ? 'sale' : 'sales'}</span>}
                             </p>
                         )}
                         {selectedMachineId && !hasChanges && (
-                            <p className="text-sm font-bold text-emerald-500 flex items-center gap-2">
+                            <p className="text-sm font-bold text-accent-green flex items-center gap-2">
                                 <CheckCircle2 className="w-4 h-4" />
                                 Counts match the system.
                             </p>
