@@ -51,6 +51,7 @@ export async function getMachineInventory() {
 
 /** Extracts granular stock levels for a specific machine, typically for detail-view modals. */
 export async function getMachineInventoryDetails(machineId: number) {
+    await requireDriver();
     return await prisma.machineStock.findMany({
         where: { machineId },
         include: { item: true }
@@ -1242,8 +1243,10 @@ export async function deleteMachine(id: number): Promise<ActionResult> {
  * Can optionally initialize stock in a specific warehouse. 
  */
 export async function createItem(name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, warehouseId?: number, initialStock: number = 0, bulk_format?: string): Promise<ActionResult> {
+    const session = await requireAdmin();
     try {
-        await prisma.$transaction(async (tx) => {
+        let createdNew = false;
+        const item = await prisma.$transaction(async (tx) => {
             let targetItem: any = null;
 
             if (warehouseId) {
@@ -1272,6 +1275,7 @@ export async function createItem(name: string, category: string, sku: string, pr
 
             // If we didn't find an existing match in the target warehouse, create a new item record
             if (!targetItem) {
+                createdNew = true;
                 targetItem = await tx.item.create({
                     data: { name, category, sku, price_standard, price_hospital, price_hotel, bulk_format }
                 });
@@ -1286,7 +1290,21 @@ export async function createItem(name: string, category: string, sku: string, pr
                     });
                 }
             }
+
+            return targetItem;
         });
+
+        // This action can either create an item or reprice/restock an existing one
+        // (the SKU-match branch above), so the audit entry records which happened.
+        await writeAuditLog(
+            session,
+            createdNew ? 'CREATE_ITEM' : 'UPSERT_ITEM_BY_SKU',
+            'Item',
+            item.id,
+            null,
+            { name, category, sku, price_standard, price_hospital, price_hotel, bulk_format, warehouseId, initialStock },
+        );
+
         revalidatePath('/admin/manage');
         return { success: true, data: undefined };
     } catch (error) {

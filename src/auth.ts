@@ -45,7 +45,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                     if (!phone || !pin) return null;
 
-                    const driver = await prisma.driver.findUnique({ where: { phone } });
+                    // `pin` is omitted globally in the Prisma client; opt back in here
+                    // because this is the credential check that needs the hash.
+                    const driver = await prisma.driver.findUnique({
+                        where: { phone },
+                        omit: { pin: false },
+                    });
                     if (!driver || !driver.pin) return null;
 
                     const isValid = await bcrypt.compare(pin, driver.pin);

@@ -6,6 +6,7 @@ import imageCompression from 'browser-image-compression';
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { signOut } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ShieldCheck, LogOut, Settings } from "lucide-react"
 import type { MachineType, DispatchWithRelations, DispatchItemWithItem, RefillLogWithMachine } from "@/types"
@@ -32,8 +33,10 @@ type ItemFormState = {
 };
 
 export function DriverRefillUI({ machines: serverMachines, activeDispatches: serverDispatches, userRole = 'driver' }: DriverRefillUIProps) {
+    const router = useRouter();
+
     // Zustand Store
-    const { 
+    const {
         activeDispatches: storeDispatches, 
         machines: storeMachines, 
         setServerData, 
@@ -70,6 +73,23 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
 
     // For visual submission state
     const [isSuccess, setIsSuccess] = useState(false)
+
+    // Warn before losing staged counts. Mobile browsers ship pull-to-refresh on by
+    // default and the back gesture is easy to trigger one-handed, so an unguarded
+    // navigation silently discards everything the driver has counted at the machine.
+    useEffect(() => {
+        const hasStagedWork = Object.values(machineItems).some(
+            (i) => i.refilled > 0 || i.returned > 0 || i.bag_returned > 0
+        );
+        if (!hasStagedWork || isSuccess) return;
+
+        const warn = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = "";
+        };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, [machineItems, isSuccess]);
 
     // View mode toggle
     const [viewMode, setViewMode] = useState<"BAG" | "MACHINE">("BAG");
@@ -115,14 +135,16 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
             }
         }
 
+        if (failedTimestamps.length > 0) {
+            toast.error(`Failed to sync ${failedTimestamps.length} logs. Still in offline queue.`);
+        }
         if (successTimestamps.length > 0) {
             removeOfflineLogs(successTimestamps);
             toast.success(`Successfully synced ${successCount} offline logs.`);
-            // Force a hard refresh of the page to pull down the newly synced server state seamlessly
-            window.location.reload(); 
-        }
-        if (failedTimestamps.length > 0) {
-            toast.error(`Failed to sync ${failedTimestamps.length} logs. Still in offline queue.`);
+            // Pull down the newly synced server state WITHOUT a full page reload —
+            // `window.location.reload()` here would destroy any counts the driver has
+            // already staged for the machine they're standing at.
+            router.refresh();
         }
     };
 
@@ -431,7 +453,14 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                     <div className="relative group mb-3">
                         <select
                             value={selectedMachine}
-                            onChange={(e) => setSelectedMachine(e.target.value)}
+                            onChange={(e) => {
+                                // Drop any counts staged against the previous machine before
+                                // switching. The rebuild effect seeds from prevState keyed by
+                                // itemId alone, so without this the old machine's quantities
+                                // carry over and get logged against the new one.
+                                setMachineItems({});
+                                setSelectedMachine(e.target.value);
+                            }}
                             className="w-full appearance-none bg-white dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-2xl py-4 pl-12 pr-12 text-slate-900 dark:text-white font-bold text-lg focus:outline-none focus:border-accent-purple shadow-sm transition-all"
                         >
                             <option value="" className="text-slate-500 bg-white dark:bg-slate-900">Pick Machine Location...</option>

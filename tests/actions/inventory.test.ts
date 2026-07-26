@@ -7,6 +7,8 @@ import {
   logBatchRefills,
   returnDispatch,
   deleteDriver,
+  createItem,
+  getMachineInventoryDetails,
 } from '@/actions/inventory';
 import { Prisma } from '@prisma/client';
 import { prismaMock } from '../__helpers__/prisma-mock';
@@ -499,5 +501,51 @@ describe('deleteDriver', () => {
       where: { id: 7 },
       data: { isActive: false },
     });
+  });
+});
+
+// These two actions shipped without an RBAC guard. Every export in a "use server"
+// file is a public RPC endpoint, so the guard is the only thing standing between a
+// caller and the database — regression-test it rather than trusting review.
+describe('createItem authorization', () => {
+  it('throws when no session', async () => {
+    clearSession();
+    await expect(
+      createItem('Pepsi', 'Drinks', 'SKU-1', 5, 5, 5),
+    ).rejects.toThrow(/UNAUTHORIZED/);
+  });
+
+  it('throws when caller is a driver', async () => {
+    setDriverSession(10);
+    await expect(
+      createItem('Pepsi', 'Drinks', 'SKU-1', 5, 5, 5),
+    ).rejects.toThrow(/FORBIDDEN/);
+  });
+
+  it('does not touch the database when the guard rejects', async () => {
+    setDriverSession(10);
+    await expect(
+      createItem('Pepsi', 'Drinks', 'SKU-1', 5, 5, 5, 1, 999),
+    ).rejects.toThrow(/FORBIDDEN/);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('getMachineInventoryDetails authorization', () => {
+  it('throws when no session', async () => {
+    clearSession();
+    await expect(getMachineInventoryDetails(1)).rejects.toThrow(/UNAUTHORIZED/);
+  });
+
+  it('does not query stock when the guard rejects', async () => {
+    clearSession();
+    await expect(getMachineInventoryDetails(1)).rejects.toThrow(/UNAUTHORIZED/);
+    expect(prismaMock.machineStock.findMany).not.toHaveBeenCalled();
+  });
+
+  it('drivers may call it (used by the driver portal)', async () => {
+    setDriverSession(10);
+    prismaMock.machineStock.findMany.mockResolvedValue([]);
+    await expect(getMachineInventoryDetails(1)).resolves.toEqual([]);
   });
 });
