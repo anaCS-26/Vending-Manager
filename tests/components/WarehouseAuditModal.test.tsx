@@ -52,4 +52,45 @@ describe('WarehouseAuditModal full flow', () => {
         await waitFor(() => expect(calibrateWarehouseStock).toHaveBeenCalledTimes(1));
         await waitFor(() => expect(onClose).toHaveBeenCalled());
     });
+
+    /**
+     * Regression: the confirm step used to render at z-[999] while this modal sits
+     * at z-[9999]. Both are position:fixed siblings under the same portal wrapper
+     * (a static div, so no stacking context of its own), which meant the confirm
+     * dialog painted *behind* this modal's opaque panel — clicking "Apply
+     * Calibration" produced no visible change whatsoever.
+     *
+     * jsdom does not paint, so the flow test above passes either way. Assert the
+     * ordering invariant numerically instead.
+     */
+    it('renders the confirm step above the calibration panel', async () => {
+        render(
+            <WarehouseAuditModal isOpen onClose={vi.fn()} inventory={inventory} warehouses={warehouses} />,
+        );
+
+        fireEvent.change(screen.getByRole('combobox'), { target: { value: '1' } });
+        const countInput = screen
+            .getAllByRole('textbox')
+            .find((el) => (el as HTMLInputElement).value === '10') as HTMLInputElement;
+        fireEvent.change(countInput, { target: { value: '7' } });
+        fireEvent.click(screen.getByRole('button', { name: /Apply Calibration/i }));
+
+        const confirmBtn = await screen.findByRole('button', { name: /Yes, Apply Calibration/i });
+
+        // Walk up to the nearest ancestor declaring a stacking level. Tailwind is
+        // not compiled under jsdom, so getComputedStyle().zIndex is always 'auto' —
+        // read the authored `z-[N]` utility off the class list instead.
+        const layerZ = (from: Element | null): number => {
+            for (let el = from; el; el = el.parentElement) {
+                const match = el.className?.toString().match(/(?:^|\s)z-\[(\d+)\]/);
+                if (match) return parseInt(match[1], 10);
+            }
+            throw new Error('no z-[N] utility found on ancestor chain');
+        };
+
+        const confirmZ = layerZ(confirmBtn);
+        const panelZ = layerZ(screen.getByRole('button', { name: /Close calibration/i }));
+
+        expect(confirmZ).toBeGreaterThan(panelZ);
+    });
 });

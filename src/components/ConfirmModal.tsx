@@ -48,10 +48,16 @@ export function ConfirmModal({
     // so adopting this prop is opt-in per call site.
     const isControlled = isPending !== undefined;
 
+    // NOTE: the panel below sits at z-[10000] and must stay above the z-[9999]
+    // data-entry modals that nest this one (warehouse/machine calibration, cost
+    // correction). Those render this dialog as a *sibling* under the same portal
+    // wrapper, so at the old z-[999] the confirm step painted behind their opaque
+    // panel and "Apply Calibration" appeared to do nothing at all.
+
     return (
         <AnimatePresence>
             {isOpen && (
-                <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
