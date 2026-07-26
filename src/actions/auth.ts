@@ -90,7 +90,12 @@ export async function changeDriverPin(
         return { success: false, error: "New PIN must differ from the current one." };
     }
 
-    const driver = await prisma.driver.findUnique({ where: { id: driverId } });
+    // `pin` is omitted globally in the Prisma client; opt back in here because
+    // verifying the current PIN needs the hash.
+    const driver = await prisma.driver.findUnique({
+        where: { id: driverId },
+        omit: { pin: false },
+    });
     if (!driver || !driver.pin) {
         return { success: false, error: "Driver record not found." };
     }
