@@ -10,47 +10,47 @@ datasource db {
 
 /// Represents a product saleable in vending machines.
 model Item {
-  id                   Int                   @id @default(autoincrement())
-  name                 String
-  category             String
-  bulk_format          String?
-  sku                  String
+  id                     Int                    @id @default(autoincrement())
+  name                   String
+  category               String
+  bulk_format            String?
+  sku                    String
   // Pricing tiers
-  price_standard       Float                 @default(0.0)
-  price_hospital       Float                 @default(0.0)
-  price_hotel          Float                 @default(0.0)
-  cost                 Float                 @default(0.0)
-  last_purchase_cost   Float                 @default(0.0)
+  price_standard         Float                  @default(0.0)
+  price_hospital         Float                  @default(0.0)
+  price_hotel            Float                  @default(0.0)
+  cost                   Float                  @default(0.0)
+  last_purchase_cost     Float                  @default(0.0)
   // Default quantity prefilled when an admin clicks "+" to add this item to a
   // driver's bag. 0 = no default (admin types manually). Sourced from the
   // client's case-pack list; see scripts/seed-default-assignment-qty.ts.
-  default_assignment_qty Int                 @default(0)
-  imageUrl             String?
+  default_assignment_qty Int                    @default(0)
+  imageUrl               String?
   // Relations
-  DispatchItems        DispatchItem[]
-  InventoryAdjustments InventoryAdjustment[]
-  MachineStock         MachineStock[]
-  PurchaseInvoiceItems PurchaseInvoiceItem[]
-  PurchaseOrderItems   PurchaseOrderItem[]
-  RefillLogs           RefillLog[]
-  ReturnVerifications  ReturnVerification[]
-  WarehouseStock       WarehouseStock[]
-  DriverStock          DriverStock[]
-  StockAssignments     StockAssignment[]
-  DispatchTemplateItems DispatchTemplateItem[]
-  isActive             Boolean               @default(true)
+  DispatchItems          DispatchItem[]
+  InventoryAdjustments   InventoryAdjustment[]
+  MachineStock           MachineStock[]
+  PurchaseInvoiceItems   PurchaseInvoiceItem[]
+  PurchaseOrderItems     PurchaseOrderItem[]
+  RefillLogs             RefillLog[]
+  ReturnVerifications    ReturnVerification[]
+  WarehouseStock         WarehouseStock[]
+  DriverStock            DriverStock[]
+  StockAssignments       StockAssignment[]
+  DispatchTemplateItems  DispatchTemplateItem[]
+  isActive               Boolean                @default(true)
 }
 
 /// A storage facility where items are received from suppliers.
 model Warehouse {
-  id             Int              @id @default(autoincrement())
-  name           String
-  location       String?
-  address        String?
-  latitude       Float?
-  longitude      Float?
-  operating_cost Float            @default(0.0)
-  rental_cost    Float            @default(0.0)
+  id               Int               @id @default(autoincrement())
+  name             String
+  location         String?
+  address          String?
+  latitude         Float?
+  longitude        Float?
+  operating_cost   Float             @default(0.0)
+  rental_cost      Float             @default(0.0)
   Dispatches       Dispatch[]
   PurchaseOrders   PurchaseOrder[]
   Stock            WarehouseStock[]
@@ -74,23 +74,23 @@ model WarehouseStock {
 
 /// A Physical vending machine at a specific location.
 model Machine {
-  id             Int            @id @default(autoincrement())
-  location_name  String
-  district       String
-  address        String?
-  latitude       Float?
-  longitude      Float?
-  notes          String?
-  terminalId     String?        @unique
-  serial_number  String?
-  manufacturer   String?
-  operating_cost Float          @default(0.0)
-  rental_cost    Float          @default(0.0)
-  tier           String         @default("STANDARD") // Pricing tier: STANDARD, HOSPITAL, HOTEL
-  Stock          MachineStock[]
-  RefillLogs     RefillLog[]
+  id                  Int                  @id @default(autoincrement())
+  location_name       String
+  district            String
+  address             String?
+  latitude            Float?
+  longitude           Float?
+  notes               String?
+  terminalId          String?              @unique
+  serial_number       String?
+  manufacturer        String?
+  operating_cost      Float                @default(0.0)
+  rental_cost         Float                @default(0.0)
+  tier                String               @default("STANDARD") // Pricing tier: STANDARD, HOSPITAL, HOTEL
+  Stock               MachineStock[]
+  RefillLogs          RefillLog[]
   ReturnVerifications ReturnVerification[]
-  isActive       Boolean        @default(true)
+  isActive            Boolean              @default(true)
 }
 
 /// Tracks estimated stock and capacity of an Item in a Machine.
@@ -256,15 +256,15 @@ model ReturnVerification {
 /// for DispatchItem-as-receipt). Each row is one item-quantity-driver event;
 /// the driver acknowledges or disputes it via the ack banner.
 model StockAssignment {
-  id                 Int       @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   driverId           Int
   itemId             Int
   warehouseId        Int?
   quantity           Int
-  cost_at_assignment Float     @default(0.0) // snapshot of Item.cost (WAC) at issue time
+  cost_at_assignment Float    @default(0.0) // snapshot of Item.cost (WAC) at issue time
   notes              String?
   assigned_by        Int? // Admin.id (nullable for system-generated rows)
-  assigned_at        DateTime  @default(now())
+  assigned_at        DateTime @default(now())
 
   // Acknowledgment state — drives the driver-side ack banner.
   status           String    @default("PENDING_ACK") // PENDING_ACK, ACKNOWLEDGED, DISPUTED
@@ -392,16 +392,16 @@ model SystemMeta {
 
 /// Universal ledger for tracking system mutations
 model SystemAuditLog {
-  id          Int      @id @default(autoincrement())
-  actorId     Int?
-  actorRole   String   // "ADMIN", "SYSTEM"
-  actionType  String
-  entityType  String
-  entityId    Int?
-  oldState    Json?
-  newState    Json?
-  timestamp   DateTime @default(now())
-  message     String?
+  id         Int      @id @default(autoincrement())
+  actorId    Int?
+  actorRole  String // "ADMIN", "SYSTEM"
+  actionType String
+  entityType String
+  entityId   Int?
+  oldState   Json?
+  newState   Json?
+  timestamp  DateTime @default(now())
+  message    String?
 
   @@index([actionType])
   @@index([entityType, entityId])
