@@ -367,8 +367,11 @@ describe('dismissAllDisputes', () => {
     prismaMock.stockAssignment.deleteMany.mockResolvedValue({ count: 2 });
 
     const r = await dismissAllDisputes(10);
-    expect(r.success).toBe(true);
-    expect(r.data?.dismissed).toBe(2);
+    // Narrow the ActionResult union before reading .data. expect() doesn't
+    // narrow, so `r.data` is a type error without this — and throwing surfaces
+    // the real error string if the action unexpectedly failed.
+    if (!r.success) throw new Error(r.error);
+    expect(r.data.dismissed).toBe(2);
     // Deletes by the exact ids that were read (not a blanket status filter).
     expect(prismaMock.stockAssignment.deleteMany).toHaveBeenCalledWith({ where: { id: { in: [11, 12] } } });
     expect(writeAuditLog).toHaveBeenCalledWith(
@@ -389,8 +392,8 @@ describe('dismissAllDisputes', () => {
     prismaMock.stockAssignment.findMany.mockResolvedValue([]);
 
     const r = await dismissAllDisputes(10);
-    expect(r.success).toBe(true);
-    expect(r.data?.dismissed).toBe(0);
+    if (!r.success) throw new Error(r.error);
+    expect(r.data.dismissed).toBe(0);
     expect(prismaMock.stockAssignment.deleteMany).not.toHaveBeenCalled();
     expect(writeAuditLog).not.toHaveBeenCalled();
   });

@@ -18,7 +18,7 @@ import { notifyClients } from "@/lib/notify"
 /** Comprehensive session check to enforce Super Admin role-based access control. */
 async function verifySuperAdmin() {
     const session = await auth();
-    // @ts-ignore
+    // @ts-expect-error NextAuth default Session user carries no role
     if (session?.user?.role !== 'super_admin') {
         throw new Error("UNAUTHORIZED: Super Admin credentials required.");
     }

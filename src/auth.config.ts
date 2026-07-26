@@ -12,20 +12,20 @@ export const authConfig = {
     callbacks: {
         async jwt({ token, user }) {
             if (user) {
-                // @ts-ignore
+                // @ts-expect-error NextAuth default User/JWT types carry no role/phone
                 token.role = user.role;
                 token.id = user.id;
-                // @ts-ignore
+                // @ts-expect-error NextAuth default User/JWT types carry no role/phone
                 token.phone = user.phone;
             }
             return token;
         },
         async session({ session, token }) {
             if (token) {
-                // @ts-ignore
+                // @ts-expect-error NextAuth default User/JWT types carry no role/phone
                 session.user.role = token.role;
                 session.user.id = token.id as string;
-                // @ts-ignore
+                // @ts-expect-error NextAuth default User/JWT types carry no role/phone
                 session.user.phone = token.phone;
             }
             return session;
