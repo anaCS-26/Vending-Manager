@@ -5,6 +5,10 @@ NexGen Vending Management System — Next.js 16 (App Router, React 19, Turbopack
 ## Commands
 
 - `npm run dev` / `build` / `lint` / `test` (Vitest, see [TESTING.md](TESTING.md)).
+- **CI** (`.github/workflows/ci.yml`): `tsc --noEmit` + `eslint` + `vitest run` on push to `main` and every PR. All three run with `if: !cancelled()`, so one run reports every failure. Lint fails on **errors only** — the 2 remaining `<img>` warnings need a `next/image` migration. Keep it green; it is the only thing between a commit and a production deploy.
+  - Two npm workarounds live in there, both traceable to the lockfile being generated on Windows. **`.npmrc` (`legacy-peer-deps=true`) is committed on purpose** — this dependency set doesn't resolve under strict peer rules, and while that setting sat in the maintainer's `~/.npmrc` the lockfile was valid on exactly one machine. Don't delete it without regenerating the lockfile. The job also runs `npm install` rather than `npm ci`, plus an explicit install of `@rolldown/binding-linux-x64-gnu`, because npm records only the current platform's optional binaries (npm/cli#4828) and vitest 4 needs that binding on Linux. **Generating `package-lock.json` once on Linux (WSL/Docker) retires both hacks.**
+  - `prisma generate` must precede `tsc` — `src/types/index.ts` is built on `Prisma.<Model>GetPayload<...>` and nothing generates the client on install. Tests need no DB (`vitest.setup.ts` mocks `@/lib/prisma`).
+- **`main` branch protection requires a PR but has `enforce_admins: false`**, so the owner's direct pushes bypass it with a "Bypassed rule violations" warning. The rule currently constrains nobody.
 - Schema: edit `prisma/schema.prisma` → `npx prisma db push` → `npx prisma generate`. **No migrations folder** — this repo uses `db push`.
 - Seeding: `npm run db:seed:dev` and variants. `db:reset:dev` is destructive. `:prod` variants exist — be deliberate.
 
