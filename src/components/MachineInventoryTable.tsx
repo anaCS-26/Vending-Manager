@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Package, MapPin, Search, AlertCircle, TrendingDown, Clock, ArrowUp, ArrowDown, Scale } from "lucide-react";
 import Pagination from "@/components/Pagination";
+import { SortIcon } from "@/components/SortIcon";
 import type { MachineStockWithItem, MachineType } from "@/types";
 import { formatCurrency, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import MachineAuditModal from "./MachineAuditModal";
@@ -94,13 +95,6 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
         if (newPage >= 1 && newPage <= totalPages) {
             setCurrentPage(newPage);
         }
-    };
-
-    const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
-        if (sortConfig.key !== columnKey) return <span className="w-4 h-4 inline-block ml-1 opacity-0 group-hover:opacity-30 transition-opacity" />;
-        return sortConfig.direction === "desc" 
-            ? <ArrowDown className="w-4 h-4 ml-1 inline-block text-brand-500" />
-            : <ArrowUp className="w-4 h-4 ml-1 inline-block text-brand-500" />;
     };
 
     // Keep the top scrollbar track perfectly synchronized with the true width of the table content
@@ -196,16 +190,16 @@ export default function MachineInventoryTable({ inventory, machines }: Props) {
                         <tr className="border-b border-slate-200 dark:border-white/5 text-[11px] text-slate-600 dark:text-slate-400 font-bold bg-slate-50 dark:bg-black/20 tracking-wider">
                             <th className="px-3 py-3 md:px-6 md:py-4 uppercase w-16 text-center whitespace-nowrap">SR #</th>
                             <th className="px-3 py-3 md:px-6 md:py-4 uppercase cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("name")}>
-                                <div className="flex items-center">Item Name <SortIcon columnKey="name" /></div>
+                                <div className="flex items-center">Item Name <SortIcon columnKey="name" sortConfig={sortConfig} /></div>
                             </th>
                             <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("estimated_stock")}>
-                                <div className="flex items-center justify-end"><SortIcon columnKey="estimated_stock" /> Est. Machine Stock</div>
+                                <div className="flex items-center justify-end"><SortIcon columnKey="estimated_stock" sortConfig={sortConfig} /> Est. Machine Stock</div>
                             </th>
                             <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("last_refilled_at")}>
-                                <div className="flex items-center justify-end"><SortIcon columnKey="last_refilled_at" /> Last Refill</div>
+                                <div className="flex items-center justify-end"><SortIcon columnKey="last_refilled_at" sortConfig={sortConfig} /> Last Refill</div>
                             </th>
                             <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-center w-48 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("location")}>
-                                <div className="flex items-center justify-center">Location <SortIcon columnKey="location" /></div>
+                                <div className="flex items-center justify-center">Location <SortIcon columnKey="location" sortConfig={sortConfig} /></div>
                             </th>
                         </tr>
                     </thead>

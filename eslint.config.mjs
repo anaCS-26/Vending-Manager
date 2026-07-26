@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated artifacts — not hand-written, so linting them only produces
+    // noise that masks real findings in src/. public/sw.js is the compiled
+    // Serwist service worker; coverage/ is the v8 HTML reporter's bundled JS.
+    "public/sw.js",
+    "public/workbox-*.js",
+    "coverage/**",
   ]),
   {
     rules: {

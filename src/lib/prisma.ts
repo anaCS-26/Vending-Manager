@@ -34,7 +34,6 @@ const prismaClientSingleton = () => {
   })
 
   if (process.env.NODE_ENV !== 'production') {
-    // @ts-ignore
     client.$on('query', (e: Prisma.QueryEvent) => {
       console.log(`⏱️  Query Duration: ${e.duration}ms`)
       // console.log(`📡 Query: ${e.query}`) // Option: uncomment this to see the SQL again

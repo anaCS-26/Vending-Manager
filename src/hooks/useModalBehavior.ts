@@ -65,8 +65,12 @@ export function useModalBehavior({
     const panelRef = useRef<HTMLDivElement | null>(null);
     // Held in a ref so the escape/trap effect doesn't need onClose in its deps
     // (callers almost always pass an inline arrow, which changes every render).
+    // Assigned in an effect, not during render: writing a ref while rendering is
+    // unsafe under concurrent React, where a render can be discarded or replayed.
     const onCloseRef = useRef(onClose);
-    onCloseRef.current = onClose;
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    });
 
     // --- Escape + focus trap ---
     useEffect(() => {

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { ArrowUp, ArrowDown, Search } from "lucide-react";
 import Pagination from "@/components/Pagination";
+import { SortIcon } from "@/components/SortIcon";
 
 export type FinancialRowData = {
     id: string | number;
@@ -75,14 +76,6 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
     const safePage = Math.min(currentPage, totalPages);
     const paginatedData = sortedData.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
-    const SortIcon = ({ columnKey }: { columnKey: keyof FinancialRowData }) => {
-        if (sortConfig.key !== columnKey) return <span className="w-4 h-4 inline-block ml-1 opacity-0 group-hover:opacity-30 transition-opacity" />;
-        
-        return sortConfig.direction === "desc" 
-            ? <ArrowDown className="w-4 h-4 ml-1 inline-block text-brand-500" />
-            : <ArrowUp className="w-4 h-4 ml-1 inline-block text-brand-500" />;
-    };
-
     const handleTopScroll = () => {
         if (tableScrollRef.current && topScrollRef.current) {
             tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
@@ -153,36 +146,36 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
                         <th className="py-3 pr-3 md:py-4 md:pr-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("label")}>
                             <div className="flex items-center">
                                 Segment Information
-                                <SortIcon columnKey="label" />
+                                <SortIcon columnKey="label" sortConfig={sortConfig} />
                             </div>
                         </th>
                         <th className="py-3 px-3 md:py-4 md:px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("revenue")}>
                             <div className="flex items-center justify-end">
-                                <SortIcon columnKey="revenue" />
+                                <SortIcon columnKey="revenue" sortConfig={sortConfig} />
                                 Captured Revenue
                             </div>
                         </th>
                         <th className="py-3 px-3 md:py-4 md:px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("cogs")}>
                             <div className="flex items-center justify-end">
-                                <SortIcon columnKey="cogs" />
+                                <SortIcon columnKey="cogs" sortConfig={sortConfig} />
                                 Est. COGS
                             </div>
                         </th>
                         <th className="py-3 px-3 md:py-4 md:px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("shrinkage")}>
                             <div className="flex items-center justify-end">
-                                <SortIcon columnKey="shrinkage" />
+                                <SortIcon columnKey="shrinkage" sortConfig={sortConfig} />
                                 Shrinkage Loss
                             </div>
                         </th>
                         <th className="py-3 px-3 md:py-4 md:px-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("expenses")}>
                             <div className="flex items-center justify-end">
-                                <SortIcon columnKey="expenses" />
+                                <SortIcon columnKey="expenses" sortConfig={sortConfig} />
                                 Operating Exp
                             </div>
                         </th>
                         <th className="py-3 pl-3 md:py-4 md:pl-6 cursor-pointer group hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onClick={() => handleSort("netProfit")}>
                             <div className="flex items-center justify-end">
-                                <SortIcon columnKey="netProfit" />
+                                <SortIcon columnKey="netProfit" sortConfig={sortConfig} />
                                 Net Benefit
                             </div>
                         </th>

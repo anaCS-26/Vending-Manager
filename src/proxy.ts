@@ -8,7 +8,7 @@ export default baseAuth((req) => {
     const isLoggedIn = !!req.auth;
     const { pathname } = req.nextUrl;
 
-    //@ts-ignore
+    // @ts-expect-error NextAuth default Session user carries no role
     const role = req.auth?.user?.role;
 
     // Protect /super routes

@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer commit on the same ref makes an in-flight run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # src/types/index.ts is built almost entirely on Prisma.<Model>GetPayload<...>,
+      # so the generated client has to exist before anything type-checks. There is
+      # no postinstall hook that does this. `generate` only reads schema.prisma and
+      # never opens a connection, but Prisma still insists the datasource env vars
+      # resolve — hence the throwaway values below. They point at nothing.
+      - name: Generate Prisma client
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+        run: npx prisma generate
+
+      # Each check runs even if an earlier one failed, so a single run reports
+      # everything that's wrong instead of making you fix them one per push.
+      - name: Type check
+        if: ${{ !cancelled() }}
+        run: npx tsc --noEmit
+
+      # Fails on eslint errors. Warnings are printed but do not block — there are
+      # 2 known `<img>` warnings that need a next/image migration to clear.
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: npm run lint
+
+      # No database needed: vitest.setup.ts mocks @/lib/prisma globally, along
+      # with next-auth, next/headers, next/cache and the blob/redis clients.
+      - name: Tests
+        if: ${{ !cancelled() }}
+        run: npx vitest run
