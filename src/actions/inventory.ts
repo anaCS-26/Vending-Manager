@@ -453,17 +453,32 @@ export async function logRefill(
  * Atomic batch processing for machine refills. 
  * Optimized for low-latency mobile updates in the driver-portal interface.
  */
+/**
+ * A unique violation on RefillLog's (clientRequestId, itemId) key means this exact
+ * batch already committed — the driver's offline queue is retrying because the
+ * original response was lost, not because anything failed. Report success so the
+ * client drops it from the queue instead of replaying it forever.
+ */
+function isDuplicateRefillReplay(error: unknown): boolean {
+    return (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002' &&
+        JSON.stringify(error.meta?.target ?? '').includes('clientRequestId')
+    );
+}
+
 export async function logBatchRefills(
     dispatchId: number | null,
     machineId: number,
-    items: { itemId: number, refilled: number, returned: number, bag_returned?: number }[]
+    items: { itemId: number, refilled: number, returned: number, bag_returned?: number }[],
+    clientRequestId?: string | null
 ): Promise<ActionResult> {
     try {
         // Dispatchless path: no Dispatch wrapper, source bag from DriverStock,
         // decrement directly on each refill. Driver-only — admins shadowing the
         // portal still go through the dispatch flow above.
         if (dispatchId === null) {
-            return await logBatchRefillsDispatchless(machineId, items);
+            return await logBatchRefillsDispatchless(machineId, items, clientRequestId);
         }
 
         const dispatchAuthCheck = await prisma.dispatch.findUnique({ where: { id: dispatchId }, select: { driverId: true } });
@@ -543,7 +558,8 @@ export async function logBatchRefills(
                         cost_at_refill: (itemData as any)?.cost || 0,
                         damaged_quantity: 0,
                         // Reusing expired_quantity as route-returned quantity for compatibility.
-                        expired_quantity: item.returned
+                        expired_quantity: item.returned,
+                        clientRequestId: clientRequestId ?? null
                     } as any
                 });
 
@@ -581,6 +597,7 @@ export async function logBatchRefills(
 
         return { success: true, data: undefined }
     } catch (error) {
+        if (isDuplicateRefillReplay(error)) return { success: true, data: undefined }
         const message = error instanceof Error ? error.message : "Failed to log batch refill"
         return { success: false, error: message }
     }
@@ -597,7 +614,8 @@ export async function logBatchRefills(
  */
 async function logBatchRefillsDispatchless(
     machineId: number,
-    items: { itemId: number, refilled: number, returned: number, bag_returned?: number }[]
+    items: { itemId: number, refilled: number, returned: number, bag_returned?: number }[],
+    clientRequestId?: string | null
 ): Promise<ActionResult> {
     const session = await requireDriver();
     const role = (session.user as any).role;
@@ -713,6 +731,7 @@ async function logBatchRefillsDispatchless(
                                 damaged_quantity: 0,
                                 // Reuse expired_quantity as route-returned for compat with legacy reports.
                                 expired_quantity: l.returned,
+                                clientRequestId: clientRequestId ?? null,
                             };
                         }),
                     });
@@ -778,6 +797,7 @@ async function logBatchRefillsDispatchless(
 
         return { success: true, data: undefined };
     } catch (error) {
+        if (isDuplicateRefillReplay(error)) return { success: true, data: undefined };
         const message = error instanceof Error ? error.message : "Failed to log batch refill";
         return { success: false, error: message };
     }

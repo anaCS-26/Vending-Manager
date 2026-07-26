@@ -10,47 +10,47 @@ datasource db {
 
 /// Represents a product saleable in vending machines.
 model Item {
-  id                   Int                   @id @default(autoincrement())
-  name                 String
-  category             String
-  bulk_format          String?
-  sku                  String
+  id                     Int                    @id @default(autoincrement())
+  name                   String
+  category               String
+  bulk_format            String?
+  sku                    String
   // Pricing tiers
-  price_standard       Float                 @default(0.0)
-  price_hospital       Float                 @default(0.0)
-  price_hotel          Float                 @default(0.0)
-  cost                 Float                 @default(0.0)
-  last_purchase_cost   Float                 @default(0.0)
+  price_standard         Float                  @default(0.0)
+  price_hospital         Float                  @default(0.0)
+  price_hotel            Float                  @default(0.0)
+  cost                   Float                  @default(0.0)
+  last_purchase_cost     Float                  @default(0.0)
   // Default quantity prefilled when an admin clicks "+" to add this item to a
   // driver's bag. 0 = no default (admin types manually). Sourced from the
   // client's case-pack list; see scripts/seed-default-assignment-qty.ts.
-  default_assignment_qty Int                 @default(0)
-  imageUrl             String?
+  default_assignment_qty Int                    @default(0)
+  imageUrl               String?
   // Relations
-  DispatchItems        DispatchItem[]
-  InventoryAdjustments InventoryAdjustment[]
-  MachineStock         MachineStock[]
-  PurchaseInvoiceItems PurchaseInvoiceItem[]
-  PurchaseOrderItems   PurchaseOrderItem[]
-  RefillLogs           RefillLog[]
-  ReturnVerifications  ReturnVerification[]
-  WarehouseStock       WarehouseStock[]
-  DriverStock          DriverStock[]
-  StockAssignments     StockAssignment[]
-  DispatchTemplateItems DispatchTemplateItem[]
-  isActive             Boolean               @default(true)
+  DispatchItems          DispatchItem[]
+  InventoryAdjustments   InventoryAdjustment[]
+  MachineStock           MachineStock[]
+  PurchaseInvoiceItems   PurchaseInvoiceItem[]
+  PurchaseOrderItems     PurchaseOrderItem[]
+  RefillLogs             RefillLog[]
+  ReturnVerifications    ReturnVerification[]
+  WarehouseStock         WarehouseStock[]
+  DriverStock            DriverStock[]
+  StockAssignments       StockAssignment[]
+  DispatchTemplateItems  DispatchTemplateItem[]
+  isActive               Boolean                @default(true)
 }
 
 /// A storage facility where items are received from suppliers.
 model Warehouse {
-  id             Int              @id @default(autoincrement())
-  name           String
-  location       String?
-  address        String?
-  latitude       Float?
-  longitude      Float?
-  operating_cost Float            @default(0.0)
-  rental_cost    Float            @default(0.0)
+  id               Int               @id @default(autoincrement())
+  name             String
+  location         String?
+  address          String?
+  latitude         Float?
+  longitude        Float?
+  operating_cost   Float             @default(0.0)
+  rental_cost      Float             @default(0.0)
   Dispatches       Dispatch[]
   PurchaseOrders   PurchaseOrder[]
   Stock            WarehouseStock[]
@@ -74,23 +74,23 @@ model WarehouseStock {
 
 /// A Physical vending machine at a specific location.
 model Machine {
-  id             Int            @id @default(autoincrement())
-  location_name  String
-  district       String
-  address        String?
-  latitude       Float?
-  longitude      Float?
-  notes          String?
-  terminalId     String?        @unique
-  serial_number  String?
-  manufacturer   String?
-  operating_cost Float          @default(0.0)
-  rental_cost    Float          @default(0.0)
-  tier           String         @default("STANDARD") // Pricing tier: STANDARD, HOSPITAL, HOTEL
-  Stock          MachineStock[]
-  RefillLogs     RefillLog[]
+  id                  Int                  @id @default(autoincrement())
+  location_name       String
+  district            String
+  address             String?
+  latitude            Float?
+  longitude           Float?
+  notes               String?
+  terminalId          String?              @unique
+  serial_number       String?
+  manufacturer        String?
+  operating_cost      Float                @default(0.0)
+  rental_cost         Float                @default(0.0)
+  tier                String               @default("STANDARD") // Pricing tier: STANDARD, HOSPITAL, HOTEL
+  Stock               MachineStock[]
+  RefillLogs          RefillLog[]
   ReturnVerifications ReturnVerification[]
-  isActive       Boolean        @default(true)
+  isActive            Boolean              @default(true)
 }
 
 /// Tracks estimated stock and capacity of an Item in a Machine.
@@ -133,6 +133,10 @@ model DriverStock {
   item             Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@unique([driverId, itemId])
+  // Sibling of WarehouseStock/MachineStock, both of which index itemId. This one
+  // was missed, so the per-item `aggregate({ where: { itemId } })` calls in
+  // completePurchaseOrder and calibrateWarehouseStock each did a seq scan.
+  @@index([itemId])
 }
 
 /// A request to move items from a Warehouse to a Driver.
@@ -152,6 +156,8 @@ model Dispatch {
   @@index([driverId])
   @@index([warehouseId])
   @@index([dispatch_date])
+  // getClosedDispatches / getClosedDispatchesPaginated filter status then sort by date.
+  @@index([status, dispatch_date])
 }
 
 /// Specific item and quantity assigned in a Dispatch.
@@ -212,16 +218,32 @@ model RefillLog {
   damaged_quantity             Int       @default(0)
   expired_quantity             Int       @default(0)
   refilled_at                  DateTime  @default(now())
+  /// Client-generated idempotency key for the driver's offline replay queue. If a
+  /// batch commits but the response is lost (dropped signal, lambda timeout), the
+  /// client still has it queued and retries — without this the refill is committed
+  /// twice, double-counting revenue.
+  ///
+  /// Uniqueness is (clientRequestId, itemId), NOT clientRequestId alone: one batch
+  /// writes one row per item and they all share the key, so a bare @unique would
+  /// reject the first legitimate multi-item batch. Nullable, and Postgres treats
+  /// NULLs as distinct, so legacy rows and the online path are unaffected.
+  clientRequestId              String?
   dispatch                     Dispatch? @relation(fields: [dispatchId], references: [id])
   driver                       Driver?   @relation(fields: [driverId], references: [id])
   item                         Item      @relation(fields: [itemId], references: [id])
   machine                      Machine   @relation(fields: [machineId], references: [id])
 
+  @@unique([clientRequestId, itemId])
   @@index([itemId])
   @@index([dispatchId])
   @@index([driverId])
   @@index([machineId])
   @@index([refilled_at])
+  // Composites for the filter+sort pairs the app actually issues. The five
+  // single-column indexes above can't serve an ordered lookup on their own.
+  @@index([machineId, itemId, refilled_at]) // last-price findFirst, per item during a refill
+  @@index([machineId, refilled_at]) // machine history feeds
+  @@index([driverId, refilled_at]) // per-driver last-activity + history slices
 }
 
 /// Request for admin to verify items returned by a Driver. dispatchId was
@@ -250,21 +272,25 @@ model ReturnVerification {
   @@index([driverId])
   @@index([machineId])
   @@index([status])
+  // reported_at is the sole orderBy on the pending/processed return feeds, and
+  // had no index at all.
+  @@index([reported_at])
+  @@index([status, reported_at])
 }
 
 /// Audit record for an admin-to-driver stock push (the dispatchless replacement
 /// for DispatchItem-as-receipt). Each row is one item-quantity-driver event;
 /// the driver acknowledges or disputes it via the ack banner.
 model StockAssignment {
-  id                 Int       @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   driverId           Int
   itemId             Int
   warehouseId        Int?
   quantity           Int
-  cost_at_assignment Float     @default(0.0) // snapshot of Item.cost (WAC) at issue time
+  cost_at_assignment Float    @default(0.0) // snapshot of Item.cost (WAC) at issue time
   notes              String?
   assigned_by        Int? // Admin.id (nullable for system-generated rows)
-  assigned_at        DateTime  @default(now())
+  assigned_at        DateTime @default(now())
 
   // Acknowledgment state — drives the driver-side ack banner.
   status           String    @default("PENDING_ACK") // PENDING_ACK, ACKNOWLEDGED, DISPUTED
@@ -279,6 +305,10 @@ model StockAssignment {
   @@index([itemId])
   @@index([assigned_at])
   @@index([status])
+  // warehouseId is an unindexed FK — it makes warehouse deletes scan this table.
+  @@index([warehouseId])
+  @@index([status, assigned_at]) // open-assignment work queue
+  @@index([driverId, status, assigned_at]) // per-driver bag + dispute lookups
 }
 
 /// Entity providing items for purchase.
@@ -392,17 +422,23 @@ model SystemMeta {
 
 /// Universal ledger for tracking system mutations
 model SystemAuditLog {
-  id          Int      @id @default(autoincrement())
-  actorId     Int?
-  actorRole   String   // "ADMIN", "SYSTEM"
-  actionType  String
-  entityType  String
-  entityId    Int?
-  oldState    Json?
-  newState    Json?
-  timestamp   DateTime @default(now())
-  message     String?
+  id         Int      @id @default(autoincrement())
+  actorId    Int?
+  actorRole  String // "ADMIN", "SYSTEM"
+  actionType String
+  entityType String
+  entityId   Int?
+  oldState   Json?
+  newState   Json?
+  timestamp  DateTime @default(now())
+  message    String?
 
   @@index([actionType])
   @@index([entityType, entityId])
+  // timestamp had no index despite being the sole orderBy on every audit query,
+  // including the skip/take-paginated /super/audit viewer — which meant Postgres
+  // re-sorted the whole table for each page. This table only ever grows.
+  @@index([timestamp])
+  @@index([actionType, timestamp]) // sensitive-action feed
+  @@index([actorId, timestamp]) // per-actor last-activity rollups
 }

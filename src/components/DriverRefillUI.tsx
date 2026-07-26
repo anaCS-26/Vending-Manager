@@ -123,7 +123,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 // dispatchId=0 is the dispatchless sentinel — translate to null at the
                 // server-action boundary so logBatchRefills routes to the bag-based path.
                 const wireDispatchId = log.dispatchId === 0 ? null : log.dispatchId;
-                const result = await logBatchRefills(wireDispatchId, log.machineId, normalizedPayload);
+                const result = await logBatchRefills(wireDispatchId, log.machineId, normalizedPayload, log.clientRequestId ?? null);
                 if (result.success) {
                     successCount++;
                     successTimestamps.push(log.timestamp);
@@ -320,13 +320,21 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 bag_returned: m.bag_returned
             }));
 
+            // One idempotency key for this submission, generated before we know
+            // whether it goes out online or into the queue. The online attempt and
+            // its offline fallback below MUST share it: if the request actually
+            // committed and only the response was lost, the fallback entry would
+            // otherwise replay it and double-count the refill.
+            const clientRequestId = crypto.randomUUID();
+
             if (isOffline || !navigator.onLine) {
                 // Instantly log in Zustand store
                 addOfflineLog({
                     dispatchId: currentDispatch.id,
                     machineId: parseInt(selectedMachine),
                     payload,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    clientRequestId
                 });
 
                 setIsSuccess(true)
@@ -344,7 +352,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 // dispatchId=0 is the dispatchless sentinel — translate to null at the
                 // server-action boundary so logBatchRefills routes to the bag-based path.
                 const wireDispatchId = currentDispatch.id === 0 ? null : currentDispatch.id;
-                const result = await logBatchRefills(wireDispatchId, parseInt(selectedMachine), payload);
+                const result = await logBatchRefills(wireDispatchId, parseInt(selectedMachine), payload, clientRequestId);
                 if (result.success) {
                     setIsSuccess(true)
                     toast.success("Inventory Logs Saved", {
@@ -365,12 +373,16 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 // Force UI into offline mode since we just proved the network is down
                 setIsOffline(true);
                 
-                // Instantly log in Zustand store as fallback
+                // Instantly log in Zustand store as fallback. Reuses the same
+                // clientRequestId as the failed attempt above, so if that request
+                // did reach the server the replay is recognised and discarded
+                // instead of being committed a second time.
                 addOfflineLog({
                     dispatchId: currentDispatch.id,
                     machineId: parseInt(selectedMachine),
                     payload,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    clientRequestId
                 });
 
                 setIsSuccess(true)

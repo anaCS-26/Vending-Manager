@@ -549,3 +549,42 @@ describe('getMachineInventoryDetails authorization', () => {
     await expect(getMachineInventoryDetails(1)).resolves.toEqual([]);
   });
 });
+
+describe('logBatchRefills idempotency', () => {
+  // A batch that commits but whose response is lost stays in the driver's offline
+  // queue and gets replayed. Without this mapping the replay either errors forever
+  // or, worse, commits the refill a second time and inflates revenue.
+  it('reports success when the replay hits the (clientRequestId, itemId) unique key', async () => {
+    setAdminSession(1);
+    prismaMock.dispatch.findUnique.mockResolvedValueOnce({ driverId: 10 } as any);
+    prismaMock.$transaction.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+        meta: { target: ['clientRequestId', 'itemId'] },
+      }),
+    );
+
+    const r = await logBatchRefills(
+      500, 100, [{ itemId: 1, refilled: 5, returned: 0 }], 'req-dupe',
+    );
+    expect(r.success).toBe(true);
+  });
+
+  it('still surfaces unrelated unique-constraint failures as errors', async () => {
+    setAdminSession(1);
+    prismaMock.dispatch.findUnique.mockResolvedValueOnce({ driverId: 10 } as any);
+    prismaMock.$transaction.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+        meta: { target: ['machineId', 'itemId'] },
+      }),
+    );
+
+    const r = await logBatchRefills(
+      500, 100, [{ itemId: 1, refilled: 5, returned: 0 }], 'req-x',
+    );
+    expect(r.success).toBe(false);
+  });
+});
