@@ -509,6 +509,9 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
             } else {
                 toast.error("Failed to clear disputes", { description: result.error });
             }
+            // Passing isPending to ConfirmModal makes it controlled — it no longer
+            // self-closes on confirm, so close it here once the work is done.
+            setClearAllOpen(false);
         });
     };
 
@@ -711,6 +714,7 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
                 title="Clear all disputes?"
                 message={`Dismiss all ${disputed.length} disputed assignment${disputed.length === 1 ? "" : "s"} for ${driver.name}? These notifications will be removed. The stock was already returned to the warehouse when disputed, so nothing else changes.`}
                 confirmText="Clear all"
+                isPending={isClearingAll}
                 onConfirm={handleClearAllDisputes}
                 onCancel={() => setClearAllOpen(false)}
             />

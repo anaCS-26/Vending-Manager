@@ -93,6 +93,12 @@ Neo-Design System: glassmorphism + slate. Use project tokens (`accent-blue`, `ac
 
 Timestamps: `formatSaudiDate`/`formatSaudiTime` from `src/lib/utils.ts`, never `toLocaleString()`. Day/year boundaries: `startOfRiyadhDay()`/`endOfRiyadhDay()`/`startOfRiyadhYear()` — never `setHours(0,0,0,0)` or `new Date(y, 0, 1)`. Rolling-window math (`now - 7*24*60*60*1000`) is timezone-agnostic and fine.
 
+**Modals**: every modal calls `useModalBehavior()` (`src/hooks/useModalBehavior.ts`) for Escape, focus trap, focus restore, `role="dialog" aria-modal`, and ref-counted body scroll lock — then spreads `{...dialogProps}` and `ref={panelRef}` onto its **existing** panel div. It's a hook, not a `<Modal>` wrapper, on purpose: the panels have deliberately different chrome (the warehouse/machine audit pair is kept in sync by hand, MapModal is `h-[80vh]`, several animate with framer-motion), and one wrapper would flatten that. Pass `closeOnEscape: false` for anything holding typed data — the calibration, cost-correction and template modals all do, so a stray Escape can't bin a 40-line recount. Point `labelledBy` at the visible heading's id.
+
+`ConfirmModal` takes an optional `isPending`: supply it and the dialog stays open with a spinner and disabled buttons until the caller closes it (used by the two audit modals, cost correction, and Clear-all-disputes). **Passing it makes the dialog controlled — the caller must then close it itself.** Omit it and you keep the old fire-and-close behaviour.
+
+**Route states**: `loading.tsx` + `error.tsx` exist for `/`, `/admin`, `/driver`, `/super`, plus a root `global-error.tsx` for root-layout failures. Skeletons come from `src/components/Skeleton.tsx` (RSC — no `"use client"`, so they paint before hydration); error bodies from `src/components/ErrorState.tsx`. `ErrorState` shows `error.digest`, **never `error.message` in production** — server actions return raw Prisma text (constraint and column names) and an error boundary must not echo that to a driver or a client's admin.
+
 ## Domain skills
 
 `.agents/skills/*/SKILL.md` — read before non-trivial changes: `vms-accounting-wac`, `vms-audit-trail`, `vms-security-rbac`, `vms-neo-design`, `supabase-postgres-best-practices`.

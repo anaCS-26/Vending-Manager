@@ -120,7 +120,17 @@ export function EditLogModal({ log, verifiedCount, pendingCount }: EditLogProps)
     }
 
     return (
-        <div className="flex items-center gap-2 bg-slate-200 dark:bg-slate-900 pr-1 pl-3 py-1 rounded-lg border border-accent-blue/50 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        // An inline edit popover, not a dialog — it doesn't trap focus or overlay
+        // the page, so it gets Escape-to-cancel rather than full dialog semantics.
+        <div
+            onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setIsOpen(false);
+                }
+            }}
+            className="flex items-center gap-2 bg-slate-200 dark:bg-slate-900 pr-1 pl-3 py-1 rounded-lg border border-accent-blue/50 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+        >
 
 
             <div className="flex items-center gap-1.5">
@@ -137,12 +147,14 @@ export function EditLogModal({ log, verifiedCount, pendingCount }: EditLogProps)
                 <button
                     onClick={handleSave}
                     disabled={isSaving}
+                    aria-label="Save refill quantity"
                     className="w-6 h-6 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-900 dark:text-white flex items-center justify-center transition-all disabled:opacity-50"
                 >
                     {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                 </button>
                 <button
                     onClick={() => setIsOpen(false)}
+                    aria-label="Cancel edit"
                     className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-700 text-slate-600 dark:text-slate-400 flex items-center justify-center transition-all"
                 >
                     <X className="w-3.5 h-3.5" />

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useId, useState, useEffect } from "react";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 import { createPortal } from "react-dom";
 import { X, Search, AlertCircle, Save, CheckCircle2, Scale, Info } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -25,6 +26,15 @@ type Props = {
  * to the machine's estimated stock.
  */
 export default function MachineAuditModal({ isOpen, onClose, inventory, machines }: Props) {
+    const titleId = useId();
+    // Kept in step with WarehouseAuditModal by design (see CLAUDE.md) — a recount
+    // is dozens of typed lines, so Esc must not discard it.
+    const { panelRef, dialogProps } = useModalBehavior({
+        isOpen,
+        onClose,
+        closeOnEscape: false,
+        labelledBy: titleId,
+    });
     const [selectedMachineId, setSelectedMachineId] = useState<number | "">("");
     const [physicalCounts, setPhysicalCounts] = useState<Record<number, number>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -120,7 +130,7 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
         <>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 text-left" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
             <div className="absolute inset-0 bg-slate-900/40 dark:bg-zinc-950/80 backdrop-blur-md" onClick={onClose} />
-            <div className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
+            <div ref={panelRef} {...dialogProps} className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
 
                 {/* Header Section */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50">
@@ -129,11 +139,11 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
                             <Scale className="w-5 h-5 text-accent-blue" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">Machine Calibration</h2>
+                            <h2 id={titleId} className="text-xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">Machine Calibration</h2>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mt-0.5">Physical Stock Count</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 rounded-full transition-colors hidden sm:block">
+                    <button onClick={onClose} aria-label="Close calibration" className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 rounded-full transition-colors hidden sm:block">
                         <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                     </button>
                 </div>
@@ -284,6 +294,7 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
                 title="Confirm Machine Calibration"
                 message={`Apply this calibration? Missing units are booked as sales (${totals.missing}); surplus is added to stock. This cannot be undone.`}
                 confirmText="Yes, Apply Calibration"
+                isPending={isSubmitting}
                 onConfirm={executeSubmit}
                 onCancel={() => setShowConfirm(false)}
             />

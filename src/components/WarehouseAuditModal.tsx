@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useId, useState, useEffect } from "react";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 import { createPortal } from "react-dom";
 import { X, Search, AlertCircle, Save, CheckCircle2, Scale, Info } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -25,6 +26,14 @@ type Props = {
  * "found-unit cost" per surplus row re-blends WAC only when the user sets it.
  */
 export default function WarehouseAuditModal({ isOpen, onClose, inventory, warehouses }: Props) {
+    const titleId = useId();
+    // A recount can be dozens of typed lines — Esc must not discard it.
+    const { panelRef, dialogProps } = useModalBehavior({
+        isOpen,
+        onClose,
+        closeOnEscape: false,
+        labelledBy: titleId,
+    });
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | "">("");
     const [physicalCounts, setPhysicalCounts] = useState<Record<number, number>>({});
     const [foundCosts, setFoundCosts] = useState<Record<number, string>>({});
@@ -130,7 +139,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
         <>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 text-left" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
             <div className="absolute inset-0 bg-slate-900/40 dark:bg-zinc-950/80 backdrop-blur-md" onClick={onClose} />
-            <div className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
+            <div ref={panelRef} {...dialogProps} className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/50">
@@ -139,11 +148,11 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                             <Scale className="w-5 h-5 text-accent-blue" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">Warehouse Calibration</h2>
+                            <h2 id={titleId} className="text-xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">Warehouse Calibration</h2>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mt-0.5">Physical Stock Count</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 rounded-full transition-colors hidden sm:block">
+                    <button onClick={onClose} aria-label="Close calibration" className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 rounded-full transition-colors hidden sm:block">
                         <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                     </button>
                 </div>
@@ -330,6 +339,7 @@ export default function WarehouseAuditModal({ isOpen, onClose, inventory, wareho
                 title="Confirm Warehouse Calibration"
                 message={`Apply this calibration? Shortages are neutral corrections (no loss booked); found units keep the current WAC unless you set a found-cost. (+${totals.found} found, −${totals.short} shortage)`}
                 confirmText="Yes, Apply Calibration"
+                isPending={isSubmitting}
                 onConfirm={executeSubmit}
                 onCancel={() => setShowConfirm(false)}
             />
