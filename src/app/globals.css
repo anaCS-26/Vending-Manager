@@ -2,7 +2,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: var(--font-outfit), "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), "Bricolage Grotesque", var(--font-geist), sans-serif;
   --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   /* We'll pass the colors down from the variables defined in :root and .dark */
@@ -69,9 +70,23 @@
     outline-color: var(--ring);
   }
 
+  /* Display face is scoped to page-level titles. h3 is deliberately excluded —
+     it's used 62 times for small card and row headings, which is text, not
+     display, and Bricolage has nothing to offer at that size. Anything that
+     needs the display face below h2 should opt in with `font-display`. */
+  h1, h2 {
+    font-family: theme(--font-display);
+    font-optical-sizing: auto;
+    letter-spacing: -0.02em;
+  }
+
   body {
     background-color: var(--background);
     color: var(--foreground);
+    /* Every numeric column in this app (stock, cost, price, deficits) must align
+       digit-for-digit. Geist ships real tabular figures; opt in globally so a
+       stray proportional `1` can't ragged-edge a financial table. */
+    font-variant-numeric: tabular-nums;
     background-image:
       radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
       radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.08) 0%, transparent 40%);

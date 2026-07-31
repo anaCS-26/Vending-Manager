@@ -43,7 +43,7 @@ export default function KpiCard({
                     <h3 className="text-slate-500 dark:text-slate-400 font-mono text-[10px] font-bold tracking-[0.2em] uppercase mb-1">
                         {title}
                     </h3>
-                    <div className={`text-4xl font-black tracking-tighter transition-colors duration-300 ${color}`}>
+                    <div className={`font-display text-4xl font-extrabold tracking-tight transition-colors duration-300 ${color}`}>
                         {value}
                     </div>
                     <div
