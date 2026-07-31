@@ -3,6 +3,7 @@
 
 @theme {
   --font-sans: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), "Bricolage Grotesque", var(--font-geist), sans-serif;
   --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   /* We'll pass the colors down from the variables defined in :root and .dark */
@@ -67,6 +68,16 @@
   * {
     border-color: var(--border);
     outline-color: var(--ring);
+  }
+
+  /* Display face is scoped to page-level titles. h3 is deliberately excluded —
+     it's used 62 times for small card and row headings, which is text, not
+     display, and Bricolage has nothing to offer at that size. Anything that
+     needs the display face below h2 should opt in with `font-display`. */
+  h1, h2 {
+    font-family: theme(--font-display);
+    font-optical-sizing: auto;
+    letter-spacing: -0.02em;
   }
 
   body {
