@@ -29,16 +29,12 @@ export default function TabbedContainer({ tabs }: { tabs: { id: string, label: s
                 })}
             </div>
 
-            {/* Tab Content */}
-            <div className="relative">
-                {tabs.map((tab) => (
-                    <div 
-                        key={tab.id} 
-                        className={`transition-all duration-500 ${activeTab === tab.id ? "opacity-100 translate-y-0 relative z-10" : "opacity-0 translate-y-4 absolute inset-0 pointer-events-none z-0"}`}
-                    >
-                        {tab.content}
-                    </div>
-                ))}
+            {/* Tab Content — only the active panel is mounted. Stacking the inactive ones
+                with `absolute inset-0` sized them to the active tab but let their taller
+                content paint past it, and that phantom overflow raised a second scrollbar
+                on the admin layout column. */}
+            <div key={activeTab} className="animate-in fade-in duration-300 fill-mode-both">
+                {(tabs.find((t) => t.id === activeTab) ?? tabs[0]).content}
             </div>
         </div>
     );

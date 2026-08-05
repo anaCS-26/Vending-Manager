@@ -23,7 +23,11 @@ export default async function AdminLayout({
     return (
         <div className="flex min-h-screen bg-slate-50 dark:bg-neo-bg text-slate-900 dark:text-white transition-colors duration-300">
             <Sidebar user={session?.user} notifications={notifications} />
-            <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden relative z-10 w-full min-w-0">
+            {/* overflow-x-clip, not -hidden: `hidden` on one axis computes the other axis from
+                `visible` to `auto`, making this column a silent vertical scroll container (a
+                second scrollbar the moment any descendant overflows). `clip` leaves overflow-y
+                `visible` and still contains horizontal overflow. */}
+            <div className="flex-1 flex flex-col min-h-screen overflow-x-clip relative z-10 w-full min-w-0">
                 <header className="h-16 bg-white/50 dark:bg-neo-bg/80 backdrop-blur-md border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-8 sticky top-0 z-20 transition-colors">
                     <div className="flex items-center gap-4">
                         <h2 className="text-lg font-semibold text-slate-900 dark:text-white hidden md:block">System Overview</h2>
