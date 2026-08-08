@@ -235,6 +235,16 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
             return a.name.localeCompare(b.name);
         }).slice(0, 10);
 
+    // Estimated PO value while drafting: uses each item's last known cost (the
+    // same Item.cost that createPurchaseOrder snapshots server-side), so the
+    // figure here matches what the pending card will show after submission.
+    const orderEstimateTotals = orderLines.length > 0
+        ? computeReceiptTotals(orderLines.map(l => ({
+            quantity: l.quantityRequested,
+            unitCost: items.find(i => i.id === l.itemId)?.cost ?? 0,
+        })))
+        : null;
+
     const confirmingOrder = confirmModal.action === "RECEIVE" && confirmModal.payload
         ? pendingOrders.find(o => o.id === confirmModal.payload)
         : null;
@@ -472,16 +482,47 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                 </div>
                             </div>
 
-                            {orderLines.length > 0 && (
-                                <div className="mt-8 flex justify-end">
-                                    <button
-                                        onClick={handleCreateOrder}
-                                        disabled={isPending || !selectedWarehouseId}
-                                        className="flex items-center gap-2 px-6 py-3 bg-accent-purple hover:bg-accent-purple/90 text-white rounded-xl font-bold transition-all disabled:opacity-50"
-                                    >
-                                        {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Store className="w-4 h-4" />}
-                                        Submit Order
-                                    </button>
+                            {orderLines.length > 0 && orderEstimateTotals && (
+                                <div className="mt-8 bg-slate-50 dark:bg-white/[0.02] border border-accent-purple/30 rounded-2xl p-5">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-4">
+                                        <p className="text-[10px] font-bold text-accent-purple uppercase tracking-widest">Estimated Order Value</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">Cross-check the final value before submitting.</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Line Items</p>
+                                            <p className="text-lg font-bold text-slate-900 dark:text-white">{orderEstimateTotals.lineCount}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Total Units</p>
+                                            <p className="text-lg font-bold text-slate-900 dark:text-white">{orderEstimateTotals.totalUnits}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Est. Subtotal (excl. VAT)</p>
+                                            <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(orderEstimateTotals.subtotal)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">VAT (15%)</p>
+                                            <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(orderEstimateTotals.vat)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-accent-purple uppercase tracking-widest mb-1">Est. Grand Total (incl. VAT)</p>
+                                            <p className="text-lg font-bold text-accent-purple">{formatCurrency(orderEstimateTotals.grandTotal)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-4 pt-4 border-t border-slate-200 dark:border-white/10">
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                            Estimated from each item&apos;s last known cost — actual invoice costs are entered at receiving.
+                                        </p>
+                                        <button
+                                            onClick={handleCreateOrder}
+                                            disabled={isPending || !selectedWarehouseId}
+                                            className="flex items-center justify-center gap-2 px-6 py-3 bg-accent-purple hover:bg-accent-purple/90 text-white rounded-xl font-bold transition-all disabled:opacity-50 shrink-0"
+                                        >
+                                            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Store className="w-4 h-4" />}
+                                            Submit Order
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
