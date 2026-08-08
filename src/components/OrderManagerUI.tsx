@@ -6,6 +6,7 @@ import { Plus, CheckCircle2, History, Package, Clock, Loader2, Search, Store, Fi
 import { motion, AnimatePresence } from "framer-motion";
 import { createPurchaseOrder, completePurchaseOrder, cancelPurchaseOrder, createQuickItem } from "@/actions/orders";
 import { formatCurrency, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
+import { computeReceiptTotals } from "@/lib/receipt-totals";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { NumericInput } from "@/components/NumericInput";
 import type { Item, Warehouse, PurchaseOrder, PurchaseOrderItem } from "@prisma/client";
@@ -233,6 +234,16 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
             // TIER 3: Global Catalog items not currently in local warehouse (sorted alphabetically A-Z)
             return a.name.localeCompare(b.name);
         }).slice(0, 10);
+
+    const confirmingOrder = confirmModal.action === "RECEIVE" && confirmModal.payload
+        ? pendingOrders.find(o => o.id === confirmModal.payload)
+        : null;
+    const confirmTotals = confirmingOrder
+        ? computeReceiptTotals(confirmingOrder.Items.map(oi => ({
+            quantity: receivedQtys[oi.id] ?? oi.quantityRequested,
+            unitCost: receivedPrices[oi.id]?.cost ?? 0,
+        })))
+        : null;
 
     const filteredHistory = completedOrders.filter(o =>
         o.warehouse.name.toLowerCase().includes(historySearchQuery.toLowerCase()) ||
@@ -526,6 +537,12 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                             <div className="grid grid-cols-1 gap-6">
                                 {pendingOrders.map(order => {
                                     const isReceiving = receivingOrderId === order.id;
+                                    const receiptTotals = isReceiving
+                                        ? computeReceiptTotals(order.Items.map(oi => ({
+                                            quantity: receivedQtys[oi.id] ?? oi.quantityRequested,
+                                            unitCost: receivedPrices[oi.id]?.cost ?? 0,
+                                        })))
+                                        : null;
                                     return (
                                         <div key={order.id} className="glass-panel border border-slate-300 shadow-sm dark:border-white/10 rounded-[2rem] p-6 lg:p-8 relative overflow-hidden group">
                                             <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-accent-orange"></div>
@@ -651,6 +668,40 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                             ))}
                                                         </div>
                                                     </div>
+
+                                                    {isReceiving && receiptTotals && (
+                                                        <div className="bg-slate-50 dark:bg-white/[0.02] border border-accent-orange/30 rounded-2xl p-5">
+                                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-4">
+                                                                <p className="text-[10px] font-bold text-accent-orange uppercase tracking-widest">Receipt Summary</p>
+                                                                <p className="text-xs text-slate-500 dark:text-slate-400">Match these figures against the supplier invoice before completing.</p>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                                                                <div>
+                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Line Items</p>
+                                                                    <p className="text-lg font-bold text-slate-900 dark:text-white">{receiptTotals.lineCount}</p>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Total Units</p>
+                                                                    <p className="text-lg font-bold text-slate-900 dark:text-white">{receiptTotals.totalUnits}</p>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Subtotal (excl. VAT)</p>
+                                                                    <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(receiptTotals.subtotal)}</p>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">VAT (15%)</p>
+                                                                    <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(receiptTotals.vat)}</p>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-[10px] font-bold text-accent-orange uppercase tracking-widest mb-1">Grand Total (incl. VAT)</p>
+                                                                    <p className="text-lg font-bold text-accent-orange">{formatCurrency(receiptTotals.grandTotal)}</p>
+                                                                </div>
+                                                            </div>
+                                                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">
+                                                                Enter unit costs excluding VAT. Supplier invoices round VAT per line, so the grand total may differ by a few halalas.
+                                                            </p>
+                                                        </div>
+                                                    )}
 
                                                     {isReceiving && (
                                                         <div className="flex justify-end gap-3 pt-4">
@@ -862,7 +913,9 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                 message={
                     confirmModal.action === "CANCEL"
                         ? "Are you sure you want to cancel this order? This action cannot be undone."
-                        : "Are you sure you want to finalize this receipt? This action cannot be undone."
+                        : confirmTotals
+                            ? `You are checking in ${confirmTotals.totalUnits} units across ${confirmTotals.lineCount} line items — ${formatCurrency(confirmTotals.grandTotal)} incl. 15% VAT (${formatCurrency(confirmTotals.subtotal)} + ${formatCurrency(confirmTotals.vat)} VAT). Make sure this matches the supplier invoice. This action cannot be undone.`
+                            : "Are you sure you want to finalize this receipt? This action cannot be undone."
                 }
                 confirmText={confirmModal.action === "CANCEL" ? "Yes, Cancel Order" : "Confirm Receipt"}
                 onConfirm={executeConfirmAction}
