@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BellOff, Loader2, Send, Share, ShieldAlert, Smartphone } from "lucide-react";
+import { Bell, BellOff, Loader2, RefreshCw, Send, Share, ShieldAlert, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { usePushNotifications, type PushState } from "@/hooks/usePushNotifications";
 
@@ -121,6 +121,26 @@ function StateBody({
             <Notice icon={<Smartphone className="w-4 h-4" />} tone="muted">
                 This browser can&apos;t receive push notifications. Try Chrome or Safari on your phone, or install the
                 app to your home screen.
+            </Notice>
+        );
+    }
+
+    if (state === "no-service-worker") {
+        return (
+            <Notice icon={<RefreshCw className="w-4 h-4" />} tone="muted">
+                The app&apos;s background worker isn&apos;t running on this page, so notifications can&apos;t be
+                delivered yet. On a local dev server that&apos;s expected — it&apos;s switched off there, so use{" "}
+                <span className="font-mono">npm run build &amp;&amp; npm start</span> to test this. On the live site,
+                reload the page once and it should register.
+            </Notice>
+        );
+    }
+
+    if (state === "error") {
+        return (
+            <Notice icon={<RefreshCw className="w-4 h-4" />} tone="warn">
+                Couldn&apos;t check the notification status for this device — that&apos;s a connection or server
+                problem, not your browser. Reload the page to try again.
             </Notice>
         );
     }
