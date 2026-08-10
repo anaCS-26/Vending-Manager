@@ -30,6 +30,16 @@ export type PushState =
     | "loading"
     /** No service worker / PushManager — e.g. a desktop browser in private mode. */
     | "unsupported"
+    /**
+     * The browser is capable, but no service worker is running on this page.
+     * Distinct from `unsupported` because the cause is ours, not the browser's:
+     * next.config.ts disables the SW in development, and on a first visit after
+     * a deploy it may still be installing. Blaming the browser for either sends
+     * the user off to change something that was never wrong.
+     */
+    | "no-service-worker"
+    /** Couldn't reach the server to check status. Transient; retryable. */
+    | "error"
     /** iOS Safari, not installed to the home screen. Push is impossible until it is. */
     | "needs-install"
     /** Server has no VAPID keys; nothing the user can do. */
@@ -60,6 +70,22 @@ function isIosBrowserTab(): boolean {
         window.matchMedia("(display-mode: standalone)").matches ||
         (window.navigator as unknown as { standalone?: boolean }).standalone === true;
     return !standalone;
+}
+
+/**
+ * Waits for an ACTIVE service worker registration, giving up after `ms`.
+ *
+ * `navigator.serviceWorker.ready` is the correct signal — a one-shot
+ * `getRegistration()` returns undefined while the worker is still installing,
+ * which on a first visit after a deploy made the UI claim the browser couldn't
+ * do push at all. But `ready` never settles when nothing is registered (the
+ * development case, where the SW is disabled outright), so it needs a bound.
+ */
+function serviceWorkerReadyWithin(ms: number): Promise<ServiceWorkerRegistration | null> {
+    return Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+    ]);
 }
 
 /** Flattens a browser PushSubscription into the shape the server stores. */
@@ -105,8 +131,12 @@ export function usePushNotifications() {
         let status: Awaited<ReturnType<typeof getPushRegistrationStatus>>;
         try {
             status = await getPushRegistrationStatus();
-        } catch {
-            if (aliveRef.current) setState("unsupported");
+        } catch (err) {
+            // A failed server call says nothing about the browser. Reporting it
+            // as "unsupported" sent the user to check their browser over what
+            // is usually a dropped connection or a server-side fault.
+            console.error("[push] could not read registration status:", err);
+            if (aliveRef.current) setState("error");
             return;
         }
         if (!aliveRef.current) return;
@@ -123,14 +153,10 @@ export function usePushNotifications() {
             return;
         }
 
-        // In development the service worker is disabled (see next.config.ts),
-        // so getRegistration() resolves undefined and push genuinely is
-        // unavailable. Reporting "unsupported" is honest — testing this feature
-        // requires `npm run build && npm start`.
-        const registration = await navigator.serviceWorker.getRegistration();
+        const registration = await serviceWorkerReadyWithin(10_000);
         if (!aliveRef.current) return;
         if (!registration) {
-            setState("unsupported");
+            setState("no-service-worker");
             return;
         }
 
@@ -163,7 +189,11 @@ export function usePushNotifications() {
                 return { ok: false, error: "Notification permission was not granted." };
             }
 
-            const registration = await navigator.serviceWorker.ready;
+            const registration = await serviceWorkerReadyWithin(10_000);
+            if (!registration) {
+                setState("no-service-worker");
+                return { ok: false, error: "The app's background worker isn't running on this page." };
+            }
             const key = publicKeyRef.current;
             if (!key) return { ok: false, error: "Server is missing its notification keys." };
 
@@ -201,8 +231,8 @@ export function usePushNotifications() {
     const disable = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
         setBusy(true);
         try {
-            const registration = await navigator.serviceWorker.ready;
-            const sub = await registration.pushManager.getSubscription();
+            const registration = await serviceWorkerReadyWithin(10_000);
+            const sub = registration ? await registration.pushManager.getSubscription() : null;
             if (sub) {
                 // Server first: if the local unsubscribe succeeds but the row
                 // survives, we keep pushing at a dead endpoint. The reverse
