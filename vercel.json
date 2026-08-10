@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npx prisma db push --accept-data-loss && npm run build",
   "crons": [
     {
       "path": "/api/cron/stock-alerts",
