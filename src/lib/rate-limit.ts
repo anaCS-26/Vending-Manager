@@ -33,6 +33,17 @@ export const passwordResetRequestRateLimit = new Ratelimit({
   prefix: "vms_ratelimit_pwreset_request",
 });
 
+// "Send a test notification", per user. The only push an end user can trigger
+// on demand, so it's the only one that can be used to hammer the push service
+// (which rate-limits the whole origin, not the caller — a loop here would get
+// real notifications throttled for the entire fleet).
+export const pushTestRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, "10 m"),
+  analytics: true,
+  prefix: "vms_ratelimit_push_test",
+});
+
 // Reset-link redemption, per IP. The token is 256 bits of entropy so guessing
 // is not the threat; this caps the damage of a scripted replay/probe loop.
 export const passwordResetConfirmRateLimit = new Ratelimit({

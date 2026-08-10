@@ -8,6 +8,7 @@ import type { ActionResult } from "@/types"
 import { auth } from "@/auth"
 import { requireAdmin, requireDriver } from "@/lib/auth-utils"
 import { writeAuditLog } from "@/lib/audit-utils"
+import { sendPushToAdmins, sendPushToDriver } from "@/lib/push"
 
 /**
  * ============================================================================
@@ -31,6 +32,24 @@ function assertWholeNonNegative(value: number, label: string) {
     if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
         throw new Error(`${label} must be a whole number >= 0`)
     }
+}
+
+/**
+ * One-line summary of a push for the notification body. A lock screen truncates
+ * hard, so name the first two items (which is the whole message for a typical
+ * two-line push) and fall back to a count beyond that.
+ */
+function summariseAssignment(
+    lines: { itemId: number; quantity: number }[],
+    dbItems: { id: number; name: string }[]
+): string {
+    const units = lines.reduce((sum, l) => sum + l.quantity, 0)
+    const named = lines
+        .slice(0, 2)
+        .map((l) => `${l.quantity} × ${dbItems.find((d) => d.id === l.itemId)?.name ?? "item"}`)
+    const rest = lines.length - named.length
+    const head = rest > 0 ? `${named.join(", ")} +${rest} more` : named.join(", ")
+    return lines.length > 2 ? `${head} (${units} units total)` : head
 }
 
 /**
@@ -141,6 +160,26 @@ export async function assignToDriver(
         revalidatePath("/driver")
         notifyClients("stock-assignment")
 
+        // The whole point of the notification feature: until now a driver only
+        // discovered a push by happening to open the app. notifyClients() above
+        // reaches browsers that already have the portal open — this reaches the
+        // phone in their pocket. Never throws; a dead push service must not
+        // fail an assignment whose stock has already moved.
+        await sendPushToDriver(
+            driverId,
+            {
+                title: "New stock assigned to you",
+                body: `${summariseAssignment(lines, dbItems)} — open the app to confirm you received it.`,
+                url: "/driver",
+                // Per-driver collapse key: two pushes in a row replace one
+                // another rather than stacking, so the lock screen shows the
+                // latest state instead of a pile of near-identical alerts.
+                tag: `assignment-${driverId}`,
+                requireInteraction: true,
+            },
+            { urgency: "high" }
+        )
+
         return { success: true, data: { assignmentIds } }
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to assign stock" }
@@ -211,7 +250,15 @@ export async function denyAssignment(
     if (!Number.isFinite(driverId)) return { success: false, error: "Invalid session." }
 
     try {
-        const assignment = await prisma.stockAssignment.findUnique({ where: { id: assignmentId } })
+        const assignment = await prisma.stockAssignment.findUnique({
+            where: { id: assignmentId },
+            // `select` rather than `include`, so the driver relation can't drag
+            // the PIN hash in behind a future schema change.
+            include: {
+                item: { select: { name: true } },
+                driver: { select: { name: true } },
+            },
+        })
         if (!assignment) return { success: false, error: "Assignment not found." }
         if (assignment.driverId !== driverId) return { success: false, error: "Not your assignment." }
         if (assignment.status !== "PENDING_ACK") {
@@ -266,6 +313,24 @@ export async function denyAssignment(
         revalidatePath("/driver")
         revalidatePath("/admin/driver-stock")
         revalidatePath("/admin/warehouse")
+
+        // Disputes are the slow half of this workflow: the stock has already
+        // reverted to the warehouse, but nobody knows to go and ask the driver
+        // what happened until an admin next opens /admin/driver-stock. Alerting
+        // ops directly is what turns a week-long dispute into a same-day one.
+        await sendPushToAdmins(
+            {
+                title: "Delivery disputed",
+                body: `${assignment.driver.name} denied receiving ${assignment.quantity} × ${assignment.item.name}. Stock returned to the warehouse.`,
+                url: "/admin/driver-stock",
+                // Per-driver, not per-assignment: five disputes from one driver
+                // in one morning are one conversation, not five notifications.
+                tag: `dispute-${driverId}`,
+                requireInteraction: true,
+            },
+            { urgency: "high" }
+        )
+
         return { success: true, data: undefined }
     } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to deny assignment" }

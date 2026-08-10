@@ -2,15 +2,17 @@
 
 import prisma from "@/lib/prisma";
 import { requireSuperAdmin } from "@/lib/auth-utils";
+import { ewma, mean, demandStdDev, zScore, confidenceFromObservations } from "@/lib/forecast";
 import {
-    ewma,
-    mean,
-    demandStdDev,
-    zScore,
-    daysUntilEmpty as calcDaysUntilEmpty,
-    recommendReplenishment,
-    confidenceFromObservations,
-} from "@/lib/forecast";
+    MS_PER_DAY,
+    WINDOW_DAYS,
+    DEFAULT_CADENCE_DAYS,
+    computeStockoutForecast,
+    demandStats,
+    groupKey,
+    loadGroups,
+    type Group,
+} from "@/lib/stockout";
 import type { StockoutForecast, SilentFailureAlert } from "@/types";
 
 /**
@@ -28,8 +30,10 @@ import type { StockoutForecast, SilentFailureAlert } from "@/types";
  *      abnormal shrinkage.
  *
  * Both are pure reads — no mutations, no audit rows (mirrors super-insights.ts).
- * The statistics live in src/lib/forecast.ts; this file only reconstructs the
- * numeric series from Prisma rows and classifies the results.
+ * The statistics live in src/lib/forecast.ts; the series reconstruction and the
+ * forecast itself live in src/lib/stockout.ts (shared with the stock-alert
+ * cron, which must run whether or not this experimental lab is switched on).
+ * This file adds the super-admin guard and owns the Silent-Failure Watch.
  *
  * Each closed refill interval (gap between two consecutive refills of the same
  * machine-item) is ONE observation of the average daily sales rate during that
@@ -37,14 +41,7 @@ import type { StockoutForecast, SilentFailureAlert } from "@/types";
  * ============================================================================
  */
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
 // --- Tunables -------------------------------------------------------------
-const WINDOW_DAYS = 60; // history considered for demand reconstruction
-const DEFAULT_CADENCE_DAYS = 7; // fallback lead time when cadence can't be measured
-const MIN_INTERVAL_DAYS = 0.25; // clamp so same-day refills don't explode the rate
-const RADAR_LIMIT = 30; // cap the radar to the most urgent rows
-
 // Silent-Failure thresholds
 const RECENT_SHRINK_DAYS = 14; // "recent" window for damage/expiry spikes
 const COLLAPSE_FLOOR = 1.0; // baseline must have sold ≥1/day to call a drop a "collapse"
@@ -53,19 +50,6 @@ const Z_OUTLIER = 2; // |z| beyond which the latest interval is an outlier
 const MIN_SHRINK_UNITS = 5; // ignore tiny absolute damage/expiry counts
 const SILENT_LIMIT = 40;
 
-type RefillEvent = { at: Date; sold: number | null };
-
-type Group = {
-    machineId: number;
-    itemId: number;
-    machineName: string;
-    district: string;
-    itemName: string;
-    currentAssignQty: number;
-    events: RefillEvent[]; // ascending by `at`
-};
-
-const groupKey = (machineId: number, itemId: number) => `${machineId}-${itemId}`;
 const round1 = (x: number) => Math.round(x * 10) / 10;
 
 /** YYYY-MM-DD as observed in Riyadh — used to collapse a machine's refills into visit-days. */
@@ -78,136 +62,17 @@ function riyadhYMD(date: Date): string {
     }).format(date);
 }
 
-/**
- * Per-interval daily sales rates and the interval lengths that produced them.
- * `events` must be ascending. Interval i runs (events[i-1], events[i]] and its
- * units sold are events[i].sold; intervals with a null count are skipped (we
- * can't measure them).
- */
-function demandStats(events: RefillEvent[]): { rates: number[]; intervalDays: number[] } {
-    const rates: number[] = [];
-    const intervalDays: number[] = [];
-    for (let i = 1; i < events.length; i++) {
-        const sold = events[i].sold;
-        if (sold == null) continue;
-        const days = Math.max(
-            MIN_INTERVAL_DAYS,
-            (events[i].at.getTime() - events[i - 1].at.getTime()) / MS_PER_DAY,
-        );
-        rates.push(sold / days);
-        intervalDays.push(days);
-    }
-    return { rates, intervalDays };
-}
-
-/** Pulls window refills and groups them per machine-item (ascending events). */
-async function loadGroups(windowStart: Date): Promise<Map<string, Group>> {
-    const refills = await prisma.refillLog.findMany({
-        where: {
-            refilled_at: { gte: windowStart },
-            machine: { isActive: true },
-            item: { isActive: true },
-        },
-        select: {
-            machineId: true,
-            itemId: true,
-            refilled_at: true,
-            items_sold_since_last_refill: true,
-            machine: { select: { location_name: true, district: true } },
-            item: { select: { name: true, default_assignment_qty: true } },
-        },
-        orderBy: { refilled_at: "asc" },
-    });
-
-    const groups = new Map<string, Group>();
-    for (const r of refills) {
-        const key = groupKey(r.machineId, r.itemId);
-        let g = groups.get(key);
-        if (!g) {
-            g = {
-                machineId: r.machineId,
-                itemId: r.itemId,
-                machineName: r.machine.location_name,
-                district: r.machine.district,
-                itemName: r.item.name,
-                currentAssignQty: r.item.default_assignment_qty,
-                events: [],
-            };
-            groups.set(key, g);
-        }
-        g.events.push({ at: r.refilled_at, sold: r.items_sold_since_last_refill });
-    }
-    return groups;
-}
-
 /* ========================================================================== */
 /* 1. STOCKOUT RADAR                                                          */
 /* ========================================================================== */
 
+/**
+ * Stockout Radar. The computation is shared with the stock-alert cron
+ * (src/lib/stockout.ts); this wrapper exists to add the super-admin guard.
+ */
 export async function getStockoutForecast(): Promise<StockoutForecast[]> {
     await requireSuperAdmin();
-
-    const windowStart = new Date(Date.now() - WINDOW_DAYS * MS_PER_DAY);
-    const groups = await loadGroups(windowStart);
-    if (groups.size === 0) return [];
-
-    // Current on-hand for the involved machine-items (estimated, not measured).
-    const machineIds = [...new Set([...groups.values()].map((g) => g.machineId))];
-    const itemIds = [...new Set([...groups.values()].map((g) => g.itemId))];
-    const stocks = await prisma.machineStock.findMany({
-        where: { machineId: { in: machineIds }, itemId: { in: itemIds } },
-        select: { machineId: true, itemId: true, estimated_stock: true },
-    });
-    const stockMap = new Map<string, number>();
-    for (const s of stocks) stockMap.set(groupKey(s.machineId, s.itemId), s.estimated_stock);
-
-    const out: StockoutForecast[] = [];
-    for (const [key, g] of groups) {
-        const { rates, intervalDays } = demandStats(g.events);
-        if (rates.length === 0) continue; // no measurable demand history
-
-        const estDailyDemand = ewma(rates, 0.5); // recency-weighted demand level
-        if (estDailyDemand <= 0) continue;
-
-        const std = demandStdDev(rates);
-        const cadence = intervalDays.length ? mean(intervalDays) : DEFAULT_CADENCE_DAYS;
-        const currentStock = stockMap.get(key) ?? 0;
-        const dte = calcDaysUntilEmpty(currentStock, estDailyDemand);
-
-        let riskLevel: StockoutForecast["riskLevel"] = "ok";
-        if (dte != null) {
-            if (dte < cadence) riskLevel = "critical"; // will run dry before the next expected visit
-            else if (dte < cadence * 1.5) riskLevel = "warning";
-        }
-
-        out.push({
-            machineId: g.machineId,
-            machineName: g.machineName,
-            district: g.district,
-            itemId: g.itemId,
-            itemName: g.itemName,
-            currentStock,
-            estDailyDemand: round1(estDailyDemand),
-            daysUntilEmpty: dte == null ? null : round1(dte),
-            visitCadenceDays: Math.max(1, Math.round(cadence)),
-            currentAssignQty: g.currentAssignQty,
-            recommendedAssignQty: recommendReplenishment({ dailyDemand: estDailyDemand, std, leadDays: cadence }),
-            riskLevel,
-            confidence: confidenceFromObservations(rates.length),
-            observations: rates.length,
-        });
-    }
-
-    // At-risk first, then soonest-empty; rows with no finite ETA sink to the bottom.
-    const rank: Record<StockoutForecast["riskLevel"], number> = { critical: 0, warning: 1, ok: 2 };
-    out.sort((a, b) => {
-        if (rank[a.riskLevel] !== rank[b.riskLevel]) return rank[a.riskLevel] - rank[b.riskLevel];
-        if (a.daysUntilEmpty == null) return 1;
-        if (b.daysUntilEmpty == null) return -1;
-        return a.daysUntilEmpty - b.daysUntilEmpty;
-    });
-
-    return out.slice(0, RADAR_LIMIT);
+    return computeStockoutForecast();
 }
 
 /* ========================================================================== */

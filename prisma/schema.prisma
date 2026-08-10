@@ -119,6 +119,7 @@ model Driver {
   StockAssignments    StockAssignment[]
   RefillLogs          RefillLog[]
   ReturnVerifications ReturnVerification[]
+  PushSubscriptions   PushSubscription[]
   isActive            Boolean              @default(true)
 }
 
@@ -398,15 +399,72 @@ model PurchaseOrderItem {
 
 /// System administrator account.
 model Admin {
-  id               Int       @id @default(autoincrement())
-  email            String    @unique
-  name             String?
-  password         String
-  role             String    @default("ADMIN")
-  resetToken       String?   @unique
-  resetTokenExpiry DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                Int                @id @default(autoincrement())
+  email             String             @unique
+  name              String?
+  password          String
+  role              String             @default("ADMIN")
+  resetToken        String?            @unique
+  resetTokenExpiry  DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  PushSubscriptions PushSubscription[]
+}
+
+/// A browser's Web Push registration, owned by exactly one Driver or Admin.
+///
+/// This table is the whole point of the feature: the endpoint URL and its two
+/// keys are minted by the browser's push service and are the ONLY way to reach
+/// a device that has the app closed. The predecessor kept them in a
+/// process-global Map, so every serverless cold start (i.e. constantly, on
+/// Vercel) silently dropped the fleet's registrations and no push ever landed.
+///
+/// `endpoint` is the natural key — the browser hands back the same URL for the
+/// same registration, so upserting on it makes re-subscribing idempotent and
+/// keeps one row per device rather than one per sign-in.
+model PushSubscription {
+  id       Int    @id @default(autoincrement())
+  endpoint String @unique
+  /// Client public key for payload encryption (ECDH P-256, base64url).
+  p256dh   String
+  /// Client auth secret for payload encryption (base64url).
+  auth     String
+
+  /// Owner. Exactly one of these is set — enforced in savePushSubscription,
+  /// which derives the owner from the session and never from client input.
+  driverId Int?
+  adminId  Int?
+
+  /// Diagnostic only, so an admin can tell two of their own devices apart.
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  /// Last time the push service accepted a delivery for this endpoint.
+  lastSeenAt DateTime @default(now())
+  /// Consecutive soft failures. Hard failures (404/410) delete the row
+  /// outright; this counts the retryable ones so a permanently broken
+  /// endpoint can be pruned without guessing.
+  failureCount Int @default(0)
+
+  driver Driver? @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  admin  Admin?  @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([driverId])
+  @@index([adminId])
+}
+
+/// De-duplication ledger for scheduled (non-event) notifications.
+///
+/// Event-driven pushes fire once because the event happens once. The
+/// stock-alert cron has no such guarantee: the same machine-item stays at risk
+/// every morning until someone refills it, and a notification that arrives
+/// daily for a week is one the driver learns to swipe away. One row per
+/// dedupe key records when we last warned, so runStockAlerts can re-warn only
+/// after the machine was actually serviced (or after a hard ceiling).
+model PushDedupe {
+  id     Int      @id @default(autoincrement())
+  /// e.g. `stockout:<machineId>:<itemId>`.
+  key    String   @unique
+  sentAt DateTime @default(now())
 }
 
 /// Single-row table holding a version counter that bumps on every data

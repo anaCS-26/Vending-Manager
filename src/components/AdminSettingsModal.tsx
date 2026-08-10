@@ -5,6 +5,7 @@ import { X, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { updateMyProfile } from "@/actions/settings";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
+import { PushNotificationToggle } from "@/components/PushNotificationToggle";
 
 export function AdminSettingsModal({ user, isOpen, onClose }: { user: any, isOpen: boolean, onClose: () => void }) {
     const [isPending, startTransition] = useTransition();
@@ -54,6 +55,11 @@ export function AdminSettingsModal({ user, isOpen, onClose }: { user: any, isOpe
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block">New Password</label>
                         <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Leave blank to keep current password" className="w-full bg-slate-50 dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue" />
                     </div>
+
+                    {/* Per-device, not per-account: this registers the browser
+                        you're sitting at. Saving the profile form above has no
+                        effect on it, hence the visual separation. */}
+                    <PushNotificationToggle audience="admin" />
                 </div>
 
                 <div className="mt-8 flex gap-3">

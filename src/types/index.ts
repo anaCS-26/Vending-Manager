@@ -170,3 +170,18 @@ export type SilentFailureAlert = {
     drillHref: string;
     confidence: "low" | "medium" | "high";
 };
+
+// ==========================================
+// PUSH NOTIFICATIONS
+// ==========================================
+
+/** Everything the notification toggle needs to render, in one round trip. */
+export type PushRegistrationStatus = {
+    /** False when the server has no VAPID keys — the UI must say so, not offer a dead switch. */
+    configured: boolean;
+    /** VAPID application-server public key, served at runtime (never a NEXT_PUBLIC_ var). */
+    publicKey: string | null;
+    /** Devices this user currently has registered, across all their browsers. */
+    deviceCount: number;
+    maxDevices: number;
+};
