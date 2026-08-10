@@ -28,6 +28,7 @@ function makeModelMock() {
 }
 
 export const prismaMock = {
+  admin: makeModelMock(),
   driver: makeModelMock(),
   driverStock: makeModelMock(),
   item: makeModelMock(),

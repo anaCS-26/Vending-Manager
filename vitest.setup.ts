@@ -65,6 +65,16 @@ vi.mock('@vercel/blob', () => ({
 vi.mock('@/lib/rate-limit', () => ({
   loginRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
   pinChangeRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
+  passwordResetRequestRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
+  passwordResetConfirmRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
+}));
+
+// Transactional email. Tests assert on the token handed to the transport —
+// that is the only place the raw (unhashed) token is ever observable.
+vi.mock('@/lib/email', () => ({
+  isEmailConfigured: vi.fn(() => true),
+  sendPasswordResetEmail: vi.fn(async () => ({ ok: true })),
+  getAppOrigin: vi.fn(() => 'http://localhost:3000'),
 }));
 
 vi.mock('@/lib/notify', () => ({

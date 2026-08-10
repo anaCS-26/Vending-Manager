@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { authenticate } from "@/actions/auth"
 import { useActionState } from "react"
 import { MapPin, KeyRound, Phone, Mail, Eye, EyeOff, KeySquare, Loader2, ShieldCheck, Truck } from "lucide-react"
@@ -136,7 +137,7 @@ export default function LoginForm() {
                                             </button>
                                         </div>
                                         <div className="flex justify-end mt-2">
-                                            <a href="/forgot-password" className="text-xs font-bold text-slate-500 hover:text-accent-green transition-colors">Forgot password?</a>
+                                            <Link href="/forgot-password" className="text-xs font-bold text-slate-500 hover:text-accent-green transition-colors">Forgot password?</Link>
                                         </div>
                                     </div>
                                 </>

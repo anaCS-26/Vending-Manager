@@ -22,3 +22,22 @@ export const pinChangeRateLimit = new Ratelimit({
   analytics: true,
   prefix: "vms_ratelimit_pin_change",
 });
+
+// Password-reset request. Keyed twice per call — by IP (spray defence) and by
+// email (so nobody can flood one admin's mailbox from a botnet). Deliberately
+// tight: a real admin needs one link, not ten.
+export const passwordResetRequestRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, "60 m"),
+  analytics: true,
+  prefix: "vms_ratelimit_pwreset_request",
+});
+
+// Reset-link redemption, per IP. The token is 256 bits of entropy so guessing
+// is not the threat; this caps the damage of a scripted replay/probe loop.
+export const passwordResetConfirmRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(10, "15 m"),
+  analytics: true,
+  prefix: "vms_ratelimit_pwreset_confirm",
+});

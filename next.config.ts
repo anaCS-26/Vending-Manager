@@ -16,6 +16,17 @@ const nextConfig: NextConfig = {
     },
   },
   turbopack: {},
+  async headers() {
+    return [
+      {
+        // The reset token rides in the query string. Suppress the Referer so it
+        // cannot leak to any third-party origin the page happens to talk to.
+        // (ResetPasswordForm also strips it from the address bar on mount.)
+        source: "/reset-password",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+    ];
+  },
 };
 
 export default withSerwist(nextConfig);

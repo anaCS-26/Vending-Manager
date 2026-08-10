@@ -25,6 +25,27 @@ Routing guard lives in `src/proxy.ts` (NextAuth edge middleware). Middleware doe
 
 A few actions guard inline (`auth()` + role + ownership) instead of calling `auth-utils`: `changeDriverPin`, `updateMyProfile`, `acknowledgeAssignment`/`denyAssignment`, and `super.ts`'s private `verifySuperAdmin()`. They're correct, but prefer the shared guards — three idioms is how the two gaps above went unnoticed.
 
+`src/actions/password-reset.ts` is the **only** file whose exports are deliberately unauthenticated (see below). Nothing else may be.
+
+## Admin password reset
+
+Self-service reset for **admins only** — drivers log in with phone + PIN, have no email on record, and are reset by an admin. `requestPasswordReset` / `resetPassword` in `src/actions/password-reset.ts` are the app's only unauthenticated mutations, by necessity: a locked-out admin has no session. The RBAC guard is replaced by a *capability* — a 256-bit single-use token mailed to the registered address. Four invariants, each pinned by a test in `tests/actions/password-reset.test.ts`:
+
+1. **Enumeration-safe** — `requestPasswordReset` returns a byte-identical result whether or not the email exists, *including* when the mail transport fails (logged server-side, generic success to the caller). Never branch the response on the lookup.
+2. **Hashed at rest** — `Admin.resetToken` holds `SHA-256(token)`, never the token; redemption looks up by hash. A DB dump yields no usable links.
+3. **Single-use + 30-min TTL** — the token and expiry are cleared in the same `update` that sets the password; issuing a new token overwrites the old one. "Unknown token" and "expired token" return the same string.
+4. **Rate limited before any DB work** — request: per-IP *and* per-email (`passwordResetRequestRateLimit`, 5/hr); redemption: per-IP (`passwordResetConfirmRateLimit`, 10/15min).
+
+Password policy on reset: ≥10 chars, ≤72 **bytes** (bcrypt silently truncates past that), must differ from the current one. Audit rows (`REQUEST_PASSWORD_RESET` / `RESET_PASSWORD`) are attributed to the admin via a synthetic session object — `writeAuditLog` needs a session and there isn't one; an unattributed password change is precisely what an audit trail exists for.
+
+Email goes through **Resend** (`src/lib/email.ts`) — Vercel blocks outbound SMTP, so there is no self-hosted path. `getAppOrigin()` reads `APP_URL`/`NEXT_PUBLIC_APP_URL`/`VERCEL_PROJECT_PRODUCTION_URL` and **never the request Host header**: an attacker who could set `Host:` would otherwise be mailed a valid link pointed at their own domain. With no `RESEND_API_KEY` the dev server logs the link to the console; in production the missing key is reported as an explicit error *before* the account lookup (a deployment fault is account-independent, so saying so leaks nothing).
+
+The token rides in `?token=` on `/reset-password`. `ResetPasswordForm` strips it from the address bar on mount (`history.replaceState`) and `next.config.ts` sets `Referrer-Policy: no-referrer` on that route.
+
+**Known gap:** sessions use JWT with a 30-day `maxAge`, so a stolen session survives a password reset. Closing it needs a `passwordChangedAt` column checked in the `jwt` callback — a DB read on every request. Deliberately not done.
+
+`/forgot-password` and `/reset-password` share chrome via `src/components/AuthShell.tsx`, which **mirrors** `/login`'s panel by hand — `LoginForm` still inlines its own copy (its header sits inside the client component, so hoisting it is a separate refactor). Keep the two in sync or fold login into `AuthShell`. All three routes are public because `src/proxy.ts` only guards the `/admin`, `/driver` and `/super` prefixes.
+
 ## Realtime
 
 `notifyClients()` in `src/lib/notify.ts` bumps a single-row `SystemMeta`; browsers subscribe over Supabase Realtime WS and `router.refresh()` on change. Mounted **once at the root** via `<RealtimeRefresher />` in `src/app/layout.tsx` — do NOT call `useRealtimeRefresh()` in pages (opens a 2nd WS).
