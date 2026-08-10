@@ -14,7 +14,7 @@ NexGen Vending Management System — Next.js 16 (App Router, React 19, Turbopack
 
 ## Server Actions are the backend
 
-All mutations live in `src/actions/*` by domain. Only real REST routes are `api/auth/[...nextauth]` and `api/export-zatca` (stubbed 503 — don't extend). Every action:
+All mutations live in `src/actions/*` by domain. The only REST route is `api/auth/[...nextauth]` — don't add more. Every action:
 
 1. RBAC guard from `src/lib/auth-utils.ts` — `requireAdmin()`, `requireSuperAdmin()`, `requireDriver()`, or `requireAdminOrDriverOwner(driverId)`. **Mandatory first line.**
 2. Prisma transaction for multi-write changes.
