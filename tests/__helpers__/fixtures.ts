@@ -84,6 +84,11 @@ export function makeStockAssignment(overrides: Partial<any> = {}) {
     acknowledged_at: null,
     acknowledged_qty: null,
     status: 'PENDING_ACK',
+    // denyAssignment reads these to name the driver and item in the dispute
+    // notification it pushes to admins, so the fixture carries the same
+    // relations its `include` selects.
+    item: { name: 'Aquafina 600ml' },
+    driver: { name: 'Test Driver' },
     ...overrides,
   };
 }

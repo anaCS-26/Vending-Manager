@@ -67,6 +67,19 @@ vi.mock('@/lib/rate-limit', () => ({
   pinChangeRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
   passwordResetRequestRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
   passwordResetConfirmRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
+  pushTestRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
+}));
+
+// Web Push transport. Mocked globally for the same reason as @/lib/email: it
+// reaches the network, and the actions that trigger it (assignToDriver,
+// denyAssignment) are tested for their inventory behavior, not their delivery.
+// tests/lib/push.test.ts pulls the real module in via vi.importActual.
+vi.mock('@/lib/push', () => ({
+  isPushConfigured: vi.fn(() => true),
+  getVapidPublicKeyOrNull: vi.fn(() => 'test-vapid-public-key'),
+  sendToSubscriptions: vi.fn(async () => ({ sent: 1, failed: 0, pruned: 0 })),
+  sendPushToDriver: vi.fn(async () => ({ sent: 1, failed: 0, pruned: 0 })),
+  sendPushToAdmins: vi.fn(async () => ({ sent: 1, failed: 0, pruned: 0 })),
 }));
 
 // Transactional email. Tests assert on the token handed to the transport —

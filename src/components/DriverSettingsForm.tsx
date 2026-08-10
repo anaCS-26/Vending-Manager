@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, KeyRound, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { changeDriverPin } from "@/actions/auth";
+import { PushNotificationToggle } from "@/components/PushNotificationToggle";
 
 type Props = { driverName: string };
 
@@ -58,46 +59,55 @@ export default function DriverSettingsForm({ driverName }: Props) {
                     {driverName}
                 </h1>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-                    Change the 4–12 digit PIN you use to sign in.
+                    Manage notifications and the PIN you use to sign in.
                 </p>
             </div>
 
-            {/* Form */}
-            <div className="flex-1 px-6 py-8 space-y-5">
-                <PinField
-                    label="Current PIN"
-                    value={currentPin}
-                    onChange={setCurrentPin}
-                    show={showPins}
-                    onToggle={() => setShowPins(s => !s)}
-                />
-                <PinField
-                    label="New PIN"
-                    value={newPin}
-                    onChange={setNewPin}
-                    show={showPins}
-                    onToggle={() => setShowPins(s => !s)}
-                />
-                <PinField
-                    label="Confirm new PIN"
-                    value={confirmPin}
-                    onChange={setConfirmPin}
-                    show={showPins}
-                    onToggle={() => setShowPins(s => !s)}
-                />
+            <div className="flex-1 px-6 py-8 space-y-8">
+                {/* Notifications — first because it's the control a driver
+                    actually returns to; PINs get changed roughly never. */}
+                <PushNotificationToggle audience="driver" />
 
-                <button
-                    onClick={submit}
-                    disabled={isPending}
-                    className="w-full mt-2 flex items-center justify-center gap-2 bg-accent-blue text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-accent-blue/20 hover:bg-accent-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <KeyRound className="w-5 h-5" />}
-                    {isPending ? "Updating..." : "Update PIN"}
-                </button>
+                {/* PIN */}
+                <div className="space-y-5">
+                    <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                        Change PIN
+                    </h2>
+                    <PinField
+                        label="Current PIN"
+                        value={currentPin}
+                        onChange={setCurrentPin}
+                        show={showPins}
+                        onToggle={() => setShowPins(s => !s)}
+                    />
+                    <PinField
+                        label="New PIN"
+                        value={newPin}
+                        onChange={setNewPin}
+                        show={showPins}
+                        onToggle={() => setShowPins(s => !s)}
+                    />
+                    <PinField
+                        label="Confirm new PIN"
+                        value={confirmPin}
+                        onChange={setConfirmPin}
+                        show={showPins}
+                        onToggle={() => setShowPins(s => !s)}
+                    />
 
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center pt-2 leading-relaxed">
-                    For your safety, you'll be asked to use the new PIN on your next sign-in.
-                </p>
+                    <button
+                        onClick={submit}
+                        disabled={isPending}
+                        className="w-full mt-2 flex items-center justify-center gap-2 bg-accent-blue text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-accent-blue/20 hover:bg-accent-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <KeyRound className="w-5 h-5" />}
+                        {isPending ? "Updating..." : "Update PIN"}
+                    </button>
+
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center pt-2 leading-relaxed">
+                        For your safety, you'll be asked to use the new PIN on your next sign-in.
+                    </p>
+                </div>
             </div>
         </div>
     );
