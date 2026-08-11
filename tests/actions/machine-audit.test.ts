@@ -259,6 +259,26 @@ describe('editDispatchReturn', () => {
         expect(prismaMock.$executeRaw).not.toHaveBeenCalled();
     });
 
+    it('leaves both stock ledgers alone when the dispatch has no warehouse', async () => {
+        setAdminSession(1);
+        wireDispatch([{ id: 1, itemId: 4, quantity_given: 20, quantity_returned: 5 }]);
+        prismaMock.dispatch.findUnique.mockResolvedValue({
+            id: 77, driverId: 10, warehouseId: null, DispatchItems: [
+                { id: 1, itemId: 4, quantity_given: 20, quantity_returned: 5 },
+            ],
+        } as any);
+
+        const res = await editDispatchReturn(77, [{ dispatchItemId: 1, new_quantity_returned: 8 }]);
+        expect(res.success).toBe(true);
+
+        // The recorded return is still corrected...
+        expect(rawValues(stmtWith('UPDATE "DispatchItem"'))).toEqual([1, 8]);
+        // ...but neither stock side moves. Preserved from the original loop,
+        // whose `continue` on a null warehouseId skipped the bag update too.
+        expect(stmtIndex('UPDATE "WarehouseStock"')).toBe(-1);
+        expect(stmtIndex('UPDATE "DriverStock"')).toBe(-1);
+    });
+
     it('rejects a line belonging to a different dispatch', async () => {
         setAdminSession(1);
         wireDispatch([{ id: 1, itemId: 4, quantity_given: 20, quantity_returned: 5 }]);

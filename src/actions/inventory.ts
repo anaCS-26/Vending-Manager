@@ -1029,6 +1029,11 @@ export async function editDispatchReturn(
                 WHERE di.id = v.id
             `
 
+            // Dispatch.warehouseId is nullable, and when it is null the original
+            // loop `continue`d — skipping the DriverStock correction below as
+            // well as the warehouse one. That reads like an accident of layout
+            // rather than a decision, but this is a batching change, so the
+            // behaviour is preserved exactly. Fix it deliberately or not at all.
             if (dispatch.warehouseId) {
                 // Only rows that already exist are touched, matching the old
                 // findFirst-then-update (a missing row was silently skipped).
@@ -1039,20 +1044,20 @@ export async function editDispatchReturn(
                     WHERE ws."warehouseId" = ${dispatch.warehouseId}
                       AND ws."itemId" = v."itemId"
                 `
-            }
 
-            // Delta is > 0 if they returned MORE than previously recorded.
-            // This means what went to DriverStock was TOO MUCH by `delta`. So we must decrement `DriverStock`.
-            // If delta < 0, they returned LESS, so we increment DriverStock.
-            if (dispatch.driverId) {
-                await tx.$executeRaw`
-                    UPDATE "DriverStock" AS ds
-                    SET quantity_on_hand = ds.quantity_on_hand - v.delta,
-                        "updatedAt" = now()
-                    FROM (VALUES ${Prisma.join(stockDeltas.map((d) => Prisma.sql`(${d.itemId}::int, ${d.delta}::int)`))}) AS v("itemId", delta)
-                    WHERE ds."driverId" = ${dispatch.driverId}
-                      AND ds."itemId" = v."itemId"
-                `
+                // Delta is > 0 if they returned MORE than previously recorded.
+                // This means what went to DriverStock was TOO MUCH by `delta`. So we must decrement `DriverStock`.
+                // If delta < 0, they returned LESS, so we increment DriverStock.
+                if (dispatch.driverId) {
+                    await tx.$executeRaw`
+                        UPDATE "DriverStock" AS ds
+                        SET quantity_on_hand = ds.quantity_on_hand - v.delta,
+                            "updatedAt" = now()
+                        FROM (VALUES ${Prisma.join(stockDeltas.map((d) => Prisma.sql`(${d.itemId}::int, ${d.delta}::int)`))}) AS v("itemId", delta)
+                        WHERE ds."driverId" = ${dispatch.driverId}
+                          AND ds."itemId" = v."itemId"
+                    `
+                }
             }
         }, { timeout: 15_000, maxWait: 5_000 })
 
