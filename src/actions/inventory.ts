@@ -253,40 +253,54 @@ export async function dispatchToDriver(
             })
             createdDispatchId = createdDispatch.id;
 
-            // Deduct stock: 1. Try Driver's existing bag (DriverStock), 2. Take remainder from Warehouse.
-            for (const item of normalizedItems) {
-                // 1. Check DriverStock first
-                const driverStock = await (tx as any).driverStock.findUnique({
-                    where: { driverId_itemId: { driverId, itemId: item.itemId } }
-                });
+            // Deduct stock: 1. Try Driver's existing bag (DriverStock), 2. Take
+            // remainder from Warehouse. Both legs are single set-based statements
+            // — the old per-item loop ran 2-3 sequential queries per line and hit
+            // the same P2028 that broke PO receiving on a large dispatch.
+            const bagRows = await tx.driverStock.findMany({
+                where: { driverId, itemId: { in: itemIds }, quantity_on_hand: { gt: 0 } },
+                select: { itemId: true, quantity_on_hand: true },
+            });
+            const bagQty = new Map(bagRows.map((r) => [r.itemId, r.quantity_on_hand]));
 
-                let qtyToTakeFromWarehouse = item.quantity;
+            const split = normalizedItems.map((item) => {
+                const fromBag = Math.min(bagQty.get(item.itemId) ?? 0, item.quantity);
+                return { itemId: item.itemId, fromBag, fromWarehouse: item.quantity - fromBag };
+            });
+            const bagTakes = split.filter((s) => s.fromBag > 0);
+            const warehouseTakes = split.filter((s) => s.fromWarehouse > 0);
 
-                if (driverStock && driverStock.quantity_on_hand > 0) {
-                    const takeFromDriver = Math.min(driverStock.quantity_on_hand, item.quantity);
-                    await (tx as any).driverStock.update({
-                        where: { id: driverStock.id },
-                        data: { quantity_on_hand: { decrement: takeFromDriver } }
-                    });
-                    qtyToTakeFromWarehouse -= takeFromDriver;
-                }
+            if (bagTakes.length > 0) {
+                await tx.$executeRaw`
+                    UPDATE "DriverStock" AS ds
+                    SET quantity_on_hand = ds.quantity_on_hand - v.qty,
+                        "updatedAt" = now()
+                    FROM (VALUES ${Prisma.join(bagTakes.map((s) => Prisma.sql`(${s.itemId}::int, ${s.fromBag}::int)`))}) AS v("itemId", qty)
+                    WHERE ds."driverId" = ${driverId}
+                      AND ds."itemId" = v."itemId"
+                `;
+            }
 
-                // 2. Take remainder from Warehouse
-                if (qtyToTakeFromWarehouse > 0) {
-                    const updated = await tx.warehouseStock.updateMany({
-                        where: {
-                            itemId: item.itemId,
-                            warehouseId,
-                            quantity_on_hand: { gte: qtyToTakeFromWarehouse }
-                        },
-                        data: { quantity_on_hand: { decrement: qtyToTakeFromWarehouse } }
-                    })
-                    if (updated.count === 0) {
-                        throw new Error(`Insufficient stock for item ${item.itemId} at selected warehouse. Missing: ${qtyToTakeFromWarehouse}`)
-                    }
+            if (warehouseTakes.length > 0) {
+                // Each row keeps its own gte guard: a short row simply doesn't
+                // match, drops out of RETURNING, and fails the count check —
+                // same contract as the old per-item updateMany.
+                const decremented = await tx.$queryRaw<{ itemId: number }[]>`
+                    UPDATE "WarehouseStock" AS ws
+                    SET quantity_on_hand = ws.quantity_on_hand - v.qty
+                    FROM (VALUES ${Prisma.join(warehouseTakes.map((s) => Prisma.sql`(${s.itemId}::int, ${s.fromWarehouse}::int)`))}) AS v("itemId", qty)
+                    WHERE ws."warehouseId" = ${warehouseId}
+                      AND ws."itemId" = v."itemId"
+                      AND ws.quantity_on_hand >= v.qty
+                    RETURNING ws."itemId"
+                `;
+                if (decremented.length !== warehouseTakes.length) {
+                    const covered = new Set(decremented.map((r) => r.itemId));
+                    const short = warehouseTakes.find((s) => !covered.has(s.itemId))!;
+                    throw new Error(`Insufficient stock for item ${short.itemId} at selected warehouse. Missing: ${short.fromWarehouse}`)
                 }
             }
-        })
+        }, { timeout: 15_000, maxWait: 5_000 })
 
         revalidatePath('/admin')
         revalidatePath('/driver')
@@ -940,92 +954,107 @@ export async function returnDispatch(
     }
 }
 
-/** Administrative tool to correct errors in a driver's submitted return. */
+/**
+ * Administrative tool to correct errors in a driver's submitted return.
+ *
+ * Reference reads run before the transaction and the writes are set-based; the
+ * old loop issued ~5 sequential queries per edited line and shared the P2028
+ * failure that broke PO receiving.
+ */
 export async function editDispatchReturn(
     dispatchId: number,
     edits: { dispatchItemId: number, new_quantity_returned: number }[]
 ): Promise<ActionResult> {
     const session = await requireAdmin();
     try {
-        await prisma.$transaction(async (tx) => {
-            const dispatch = await tx.dispatch.findUnique({
-                where: { id: dispatchId },
-                include: { DispatchItems: true }
-            })
-            if (!dispatch) throw new Error("Dispatch not found")
+        for (const edit of edits) {
+            if (edit.new_quantity_returned < 0) throw new Error("Return quantity cannot be negative")
+            if (!Number.isInteger(edit.new_quantity_returned)) throw new Error("Return quantity must be a whole number")
+        }
 
-            for (const edit of edits) {
-                if (edit.new_quantity_returned < 0) {
-                    throw new Error("Return quantity cannot be negative")
-                }
+        // Last edit wins for a repeated line; duplicate rows would otherwise hit
+        // the same target row twice in one set-based UPDATE.
+        const deduped = [...new Map(edits.map((e) => [e.dispatchItemId, e])).values()]
 
-                const dispatchItem = await tx.dispatchItem.findUnique({
-                    where: { id: edit.dispatchItemId }
-                })
-
-                if (!dispatchItem) {
-                    throw new Error(`DispatchItem ${edit.dispatchItemId} not found`)
-                }
-                if (dispatchItem.dispatchId !== dispatchId) {
-                    throw new Error(`Dispatch item ${edit.dispatchItemId} does not belong to dispatch ${dispatchId}`)
-                }
-
-                const refillAgg = await tx.refillLog.aggregate({
-                    where: { dispatchId, itemId: dispatchItem.itemId },
-                    _sum: {
-                        quantity_refilled: true,
-                        expired_quantity: true,
-                        damaged_quantity: true
-                    }
-                })
-                const usedInRoute =
-                    (refillAgg._sum.quantity_refilled || 0) +
-                    (refillAgg._sum.expired_quantity || 0) +
-                    (refillAgg._sum.damaged_quantity || 0)
-                const maxReturnable = Math.max(0, dispatchItem.quantity_given - usedInRoute)
-                if (edit.new_quantity_returned > maxReturnable) {
-                    throw new Error(`Edited return exceeds remaining dispatch stock for item ${dispatchItem.itemId}`)
-                }
-
-                const delta = edit.new_quantity_returned - dispatchItem.quantity_returned;
-
-                if (delta !== 0) {
-                    await tx.dispatchItem.update({
-                        where: { id: edit.dispatchItemId },
-                        data: { quantity_returned: edit.new_quantity_returned }
-                    })
-
-                    if (!dispatch || !dispatch.warehouseId) continue;
-
-                    const warehouseStock = await tx.warehouseStock.findFirst({
-                        where: { itemId: dispatchItem.itemId, warehouseId: dispatch.warehouseId }
-                    })
-
-                    if (warehouseStock) {
-                        await tx.warehouseStock.update({
-                            where: { id: warehouseStock.id },
-                            data: { quantity_on_hand: { increment: delta } }
-                        })
-                    }
-
-                    // Delta is > 0 if they returned MORE than previously recorded.
-                    // This means what went to DriverStock was TOO MUCH by `delta`. So we must decrement `DriverStock`.
-                    // If delta < 0, they returned LESS, so we increment DriverStock.
-                    if (dispatch.driverId) {
-                        const existingDriverStock = await (tx as any).driverStock.findUnique({
-                            where: { driverId_itemId: { driverId: dispatch.driverId, itemId: dispatchItem.itemId } }
-                        });
-                        
-                        if (existingDriverStock) {
-                            await (tx as any).driverStock.update({
-                                where: { id: existingDriverStock.id },
-                                data: { quantity_on_hand: { decrement: delta } }
-                            });
-                        }
-                    }
-                }
-            }
+        const dispatch = await prisma.dispatch.findUnique({
+            where: { id: dispatchId },
+            include: { DispatchItems: true }
         })
+        if (!dispatch) throw new Error("Dispatch not found")
+
+        const itemById = new Map(dispatch.DispatchItems.map((di) => [di.id, di]))
+        for (const edit of deduped) {
+            // The include above is already scoped to this dispatch, so a miss here
+            // is exactly the old "not found" / "does not belong" pair of errors.
+            if (!itemById.has(edit.dispatchItemId)) {
+                throw new Error(`DispatchItem ${edit.dispatchItemId} not found on dispatch ${dispatchId}`)
+            }
+        }
+
+        // How much of each item was consumed on the route — one grouped query for
+        // the whole dispatch instead of an aggregate per edited line.
+        const usage = await prisma.refillLog.groupBy({
+            by: ["itemId"],
+            where: { dispatchId, itemId: { in: deduped.map((e) => itemById.get(e.dispatchItemId)!.itemId) } },
+            _sum: { quantity_refilled: true, expired_quantity: true, damaged_quantity: true },
+        })
+        const usedByItem = new Map(usage.map((u) => [
+            u.itemId,
+            (u._sum.quantity_refilled || 0) + (u._sum.expired_quantity || 0) + (u._sum.damaged_quantity || 0),
+        ]))
+
+        const changes: { dispatchItemId: number; itemId: number; newQty: number; delta: number }[] = []
+        for (const edit of deduped) {
+            const dispatchItem = itemById.get(edit.dispatchItemId)!
+            const maxReturnable = Math.max(0, dispatchItem.quantity_given - (usedByItem.get(dispatchItem.itemId) || 0))
+            if (edit.new_quantity_returned > maxReturnable) {
+                throw new Error(`Edited return exceeds remaining dispatch stock for item ${dispatchItem.itemId}`)
+            }
+            const delta = edit.new_quantity_returned - dispatchItem.quantity_returned
+            if (delta === 0) continue
+            changes.push({ dispatchItemId: edit.dispatchItemId, itemId: dispatchItem.itemId, newQty: edit.new_quantity_returned, delta })
+        }
+
+        // Two edited lines can name the same item, so the stock deltas are summed
+        // per item before they reach SQL.
+        const deltaByItem = new Map<number, number>()
+        for (const c of changes) deltaByItem.set(c.itemId, (deltaByItem.get(c.itemId) || 0) + c.delta)
+        const stockDeltas = [...deltaByItem.entries()].map(([itemId, delta]) => ({ itemId, delta }))
+
+        if (changes.length > 0) await prisma.$transaction(async (tx) => {
+            await tx.$executeRaw`
+                UPDATE "DispatchItem" AS di
+                SET quantity_returned = v.qty
+                FROM (VALUES ${Prisma.join(changes.map((c) => Prisma.sql`(${c.dispatchItemId}::int, ${c.newQty}::int)`))}) AS v(id, qty)
+                WHERE di.id = v.id
+            `
+
+            if (dispatch.warehouseId) {
+                // Only rows that already exist are touched, matching the old
+                // findFirst-then-update (a missing row was silently skipped).
+                await tx.$executeRaw`
+                    UPDATE "WarehouseStock" AS ws
+                    SET quantity_on_hand = ws.quantity_on_hand + v.delta
+                    FROM (VALUES ${Prisma.join(stockDeltas.map((d) => Prisma.sql`(${d.itemId}::int, ${d.delta}::int)`))}) AS v("itemId", delta)
+                    WHERE ws."warehouseId" = ${dispatch.warehouseId}
+                      AND ws."itemId" = v."itemId"
+                `
+            }
+
+            // Delta is > 0 if they returned MORE than previously recorded.
+            // This means what went to DriverStock was TOO MUCH by `delta`. So we must decrement `DriverStock`.
+            // If delta < 0, they returned LESS, so we increment DriverStock.
+            if (dispatch.driverId) {
+                await tx.$executeRaw`
+                    UPDATE "DriverStock" AS ds
+                    SET quantity_on_hand = ds.quantity_on_hand - v.delta,
+                        "updatedAt" = now()
+                    FROM (VALUES ${Prisma.join(stockDeltas.map((d) => Prisma.sql`(${d.itemId}::int, ${d.delta}::int)`))}) AS v("itemId", delta)
+                    WHERE ds."driverId" = ${dispatch.driverId}
+                      AND ds."itemId" = v."itemId"
+                `
+            }
+        }, { timeout: 15_000, maxWait: 5_000 })
 
         revalidatePath('/admin')
         revalidatePath('/driver')
@@ -1574,9 +1603,14 @@ export async function getRecentDispatchForDriver(driverId: number): Promise<Acti
     }
 }
 
-/** 
+/**
  * Admin utility to manually adjust driver stock to fix "ghost inventory".
  * Creates InventoryAdjustments for any positive or negative deltas.
+ *
+ * Reference reads run before the transaction and the writes are set-based —
+ * the old per-edit loop issued 5 sequential queries per item (one of them a
+ * re-read of the same driver row every pass) and shared the P2028 failure that
+ * broke PO receiving.
  */
 export async function editDriverBagStock(
     driverId: number,
@@ -1584,47 +1618,72 @@ export async function editDriverBagStock(
 ): Promise<ActionResult> {
     await requireAdmin();
     try {
-        await prisma.$transaction(async (tx) => {
-            for (const edit of edits) {
-                if (edit.new_quantity < 0) {
-                    throw new Error("Quantity cannot be negative");
+        for (const edit of edits) {
+            if (edit.new_quantity < 0) throw new Error("Quantity cannot be negative");
+            if (!Number.isInteger(edit.new_quantity)) throw new Error("Quantity must be a whole number");
+        }
+
+        // Absolute set per item — a repeated itemId is last-wins, and duplicate
+        // rows in `UPDATE … FROM (VALUES …)` are undefined behaviour.
+        const deduped = [...new Map(edits.map((e) => [e.itemId, e])).values()];
+        const itemIds = deduped.map((e) => e.itemId);
+
+        const [bagRows, itemRows, driverData] = await Promise.all([
+            prisma.driverStock.findMany({
+                where: { driverId, itemId: { in: itemIds } },
+                select: { itemId: true, quantity_on_hand: true },
+            }),
+            prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, price_standard: true } }),
+            prisma.driver.findUnique({ where: { id: driverId }, select: { name: true } }),
+        ]);
+
+        const onHand = new Map(bagRows.map((r) => [r.itemId, r.quantity_on_hand]));
+        const priceById = new Map(itemRows.map((r) => [r.id, r.price_standard]));
+
+        const changes: { itemId: number; newQty: number; delta: number; priceAtAdjustment: number }[] = [];
+        for (const edit of deduped) {
+            const current = onHand.get(edit.itemId);
+            if (current === undefined) {
+                // No bag row: there is nothing to decrement, and creating one here
+                // would invent stock the driver never received.
+                if (edit.new_quantity > 0) {
+                    throw new Error(`Cannot add to nonexistent driver stock for item ${edit.itemId}`);
                 }
-
-                const driverStock = await (tx as any).driverStock.findUnique({
-                    where: { driverId_itemId: { driverId, itemId: edit.itemId } }
-                });
-
-                if (!driverStock) {
-                    if (edit.new_quantity > 0) {
-                         throw new Error(`Cannot add to nonexistent driver stock for item ${edit.itemId}`);
-                    }
-                    continue; // Nothing to change
-                }
-
-                const delta = edit.new_quantity - driverStock.quantity_on_hand;
-                if (delta === 0) continue;
-
-                await (tx as any).driverStock.update({
-                    where: { id: driverStock.id },
-                    data: { quantity_on_hand: edit.new_quantity }
-                });
-
-                const itemData = await tx.item.findUnique({ where: { id: edit.itemId } });
-                const priceAtAdjustment = itemData?.price_standard || 0;
-                const driverData = await tx.driver.findUnique({ where: { id: driverId } });
-
-                await tx.inventoryAdjustment.create({
-                    data: {
-                        itemId: edit.itemId,
-                        quantity: delta,
-                        reason: `Driver Bag Correction (${delta > 0 ? '+' : ''}${delta})`,
-                        locationName: `Driver: ${driverData?.name || driverId}`,
-                        priceAtAdjustment
-                    }
-                });
+                continue;
             }
-        });
-        
+            const delta = edit.new_quantity - current;
+            if (delta === 0) continue;
+            changes.push({
+                itemId: edit.itemId,
+                newQty: edit.new_quantity,
+                delta,
+                priceAtAdjustment: priceById.get(edit.itemId) || 0,
+            });
+        }
+
+        if (changes.length > 0) await prisma.$transaction(async (tx) => {
+            // "updatedAt" is set manually — Prisma's @updatedAt is client-side and
+            // does not apply to raw SQL.
+            await tx.$executeRaw`
+                UPDATE "DriverStock" AS ds
+                SET quantity_on_hand = v.qty,
+                    "updatedAt" = now()
+                FROM (VALUES ${Prisma.join(changes.map((c) => Prisma.sql`(${c.itemId}::int, ${c.newQty}::int)`))}) AS v("itemId", qty)
+                WHERE ds."driverId" = ${driverId}
+                  AND ds."itemId" = v."itemId"
+            `;
+
+            await tx.inventoryAdjustment.createMany({
+                data: changes.map((c) => ({
+                    itemId: c.itemId,
+                    quantity: c.delta,
+                    reason: `Driver Bag Correction (${c.delta > 0 ? '+' : ''}${c.delta})`,
+                    locationName: `Driver: ${driverData?.name || driverId}`,
+                    priceAtAdjustment: c.priceAtAdjustment,
+                })),
+            });
+        }, { timeout: 15_000, maxWait: 5_000 });
+
         revalidatePath('/admin');
         notifyClients('driverStock');
         return { success: true, data: undefined };
@@ -1640,6 +1699,15 @@ export async function editDriverBagStock(
  * ============================================================================
  */
 
+/**
+ * Recount a machine to its physical count. Unlike the warehouse recount, a
+ * machine shortage IS a sale — product leaves a machine by being vended — so
+ * every shortage books a dispatch-less RefillLog carrying revenue and COGS.
+ *
+ * Reference reads run BEFORE the transaction and the writes are constant
+ * set-based statements; see calibrateWarehouseStock / completePurchaseOrder for
+ * why (P2028 on anything but a tiny recount).
+ */
 export async function reconcileMachineAudit(
     machineId: number,
     itemAudits: { itemId: number, physicalCount: number }[]
@@ -1649,91 +1717,94 @@ export async function reconcileMachineAudit(
     const actorRole = session.user ? (session.user as any).role : "SYSTEM";
 
     try {
-        await prisma.$transaction(async (tx) => {
-            const currentStock = await tx.machineStock.findMany({
-                where: { machineId },
-                include: { item: true }
-            });
+        for (const audit of itemAudits) {
+            if (audit.physicalCount < 0) throw new Error("Physical count cannot be negative");
+            if (!Number.isInteger(audit.physicalCount)) throw new Error("Physical count must be a whole number");
+        }
 
-            // Map existing stock for fast lookup
-            const stockMap = new Map(currentStock.map(s => [s.itemId, s]));
-            
-            const machineData = await tx.machine.findUnique({ where: { id: machineId }});
+        // Absolute set per item, so a repeated itemId is last-wins — and it has to
+        // be collapsed anyway, since `INSERT … ON CONFLICT` cannot touch the same
+        // row twice in one statement.
+        const audits = [...new Map(itemAudits.map((a) => [a.itemId, a])).values()];
+        const itemIds = audits.map((a) => a.itemId);
 
-            const auditLogChanges: {itemId: number, expected: number, actual: number, sold: number}[] = [];
+        // ── Reference reads (outside the tx, batched) ────────────────────────
+        const [currentStock, machineData, itemRows] = await Promise.all([
+            prisma.machineStock.findMany({ where: { machineId }, include: { item: true } }),
+            prisma.machine.findUnique({ where: { id: machineId } }),
+            prisma.item.findMany({
+                where: { id: { in: itemIds } },
+                select: { id: true, price_standard: true, price_hospital: true, price_hotel: true, cost: true },
+            }),
+        ]);
 
-            for (const audit of itemAudits) {
-                const stock = stockMap.get(audit.itemId);
-                const expected = stock ? stock.estimated_stock : 0;
-                
-                // If there's a discrepancy
-                if (expected !== audit.physicalCount) {
-                    const diff = expected - audit.physicalCount;
+        const stockMap = new Map(currentStock.map(s => [s.itemId, s]));
+        const itemById = new Map(itemRows.map(i => [i.id, i]));
 
-                    // If physical is LESS than expected, missing items were SOLD or LOST.
-                    // We log this as sales to maintain financial continuity.
-                    if (diff > 0) {
-                        const itemData = await tx.item.findUnique({ where: { id: audit.itemId } });
-                        let priceToUse = itemData?.price_standard || 0;
-                        if (machineData?.tier === 'HOSPITAL') priceToUse = itemData?.price_hospital || 0;
-                        else if (machineData?.tier === 'HOTEL') priceToUse = itemData?.price_hotel || 0;
+        const auditLogChanges = audits
+            .map((audit) => {
+                const expected = stockMap.get(audit.itemId)?.estimated_stock ?? 0;
+                return { itemId: audit.itemId, expected, actual: audit.physicalCount, diff: expected - audit.physicalCount };
+            })
+            .filter((c) => c.expected !== c.actual)
+            .map((c) => ({ itemId: c.itemId, expected: c.expected, actual: c.actual, sold: c.diff > 0 ? c.diff : 0 }));
 
-                        // Create a Dispatch-less RefillLog to push it to the financials as sales revenue
-                        await tx.refillLog.create({
-                            data: {
-                                dispatchId: null, // Critical: this enables standalone sales logging!
-                                machineId: machineId,
-                                itemId: audit.itemId,
-                                quantity_refilled: 0,
-                                items_sold_since_last_refill: diff,
-                                price_at_refill: priceToUse,
-                                cost_at_refill: (itemData as any)?.cost || 0,
-                                damaged_quantity: 0,
-                                expired_quantity: 0
-                            } as any
-                        });
-                    }
-                    
-                    // Update actual machine stock to the physical count
-                    await tx.machineStock.upsert({
-                        where: { machineId_itemId: { machineId, itemId: audit.itemId } },
-                        update: {
-                            estimated_stock: audit.physicalCount,
-                            last_refilled_at: new Date()
-                        },
-                        create: {
-                            machineId,
-                            itemId: audit.itemId,
-                            estimated_stock: audit.physicalCount,
-                            last_refilled_at: new Date()
-                        }
-                    });
+        // A shortage is booked as a sale at the machine's tier price.
+        const shortages = auditLogChanges.filter((c) => c.sold > 0).map((c) => {
+            const itemData = itemById.get(c.itemId);
+            let priceToUse = itemData?.price_standard || 0;
+            if (machineData?.tier === 'HOSPITAL') priceToUse = itemData?.price_hospital || 0;
+            else if (machineData?.tier === 'HOTEL') priceToUse = itemData?.price_hotel || 0;
+            return { itemId: c.itemId, sold: c.sold, priceToUse, cost: itemData?.cost || 0 };
+        });
 
-                    auditLogChanges.push({
-                        itemId: audit.itemId,
-                        expected,
-                        actual: audit.physicalCount,
-                        sold: diff > 0 ? diff : 0
-                    });
-                }
-            }
-
-            // Centralized Ledger Record
-            if (auditLogChanges.length > 0) {
-                await tx.systemAuditLog.create({
-                    data: {
-                        actorId,
-                        actorRole,
-                        actionType: "MACHINE_AUDIT",
-                        entityType: "MACHINE_STOCK",
-                        entityId: machineId,
-                        oldState: JSON.parse(JSON.stringify(currentStock.filter(s => auditLogChanges.find(a => a.itemId === s.itemId)))),
-                        newState: JSON.parse(JSON.stringify(auditLogChanges)),
-                        message: `Auditor reconciled ${auditLogChanges.length} items. Total missing/sold: ${auditLogChanges.reduce((acc, curr) => acc + curr.sold, 0)}`
-                    }
+        // ── Writes (inside the tx, constant statement count) ─────────────────
+        // A recount that matches every slot writes nothing, as before — but it
+        // still falls through to the revalidate below.
+        if (auditLogChanges.length > 0) await prisma.$transaction(async (tx) => {
+            if (shortages.length > 0) {
+                // Dispatch-less RefillLogs — this is what pushes the missing units
+                // through to the financials as sales revenue.
+                await tx.refillLog.createMany({
+                    data: shortages.map((s) => ({
+                        dispatchId: null, // Critical: this enables standalone sales logging!
+                        machineId,
+                        itemId: s.itemId,
+                        quantity_refilled: 0,
+                        items_sold_since_last_refill: s.sold,
+                        price_at_refill: s.priceToUse,
+                        cost_at_refill: s.cost,
+                        damaged_quantity: 0,
+                        expired_quantity: 0,
+                    })),
                 });
             }
-        });
+
+            // Set every changed slot to its physical count. `last_refilled_at` is
+            // bumped because a recount is a service visit (the stock-alert dedupe
+            // in src/lib/stock-alerts.ts reads it as one).
+            await tx.$executeRaw`
+                INSERT INTO "MachineStock" ("machineId", "itemId", estimated_stock, last_refilled_at)
+                VALUES ${Prisma.join(auditLogChanges.map((c) => Prisma.sql`(${machineId}::int, ${c.itemId}::int, ${c.actual}::int, now())`))}
+                ON CONFLICT ("machineId", "itemId") DO UPDATE
+                SET estimated_stock = EXCLUDED.estimated_stock,
+                    last_refilled_at = EXCLUDED.last_refilled_at
+            `;
+
+            // Centralized Ledger Record
+            await tx.systemAuditLog.create({
+                data: {
+                    actorId,
+                    actorRole,
+                    actionType: "MACHINE_AUDIT",
+                    entityType: "MACHINE_STOCK",
+                    entityId: machineId,
+                    oldState: JSON.parse(JSON.stringify(currentStock.filter(s => auditLogChanges.find(a => a.itemId === s.itemId)))),
+                    newState: JSON.parse(JSON.stringify(auditLogChanges)),
+                    message: `Auditor reconciled ${auditLogChanges.length} items. Total missing/sold: ${auditLogChanges.reduce((acc, curr) => acc + curr.sold, 0)}`
+                }
+            });
+        }, { timeout: 15_000, maxWait: 5_000 });
 
         revalidatePath('/admin');
         revalidatePath('/admin/financials');
@@ -1768,6 +1839,12 @@ export async function reconcileMachineAudit(
  *    average — adding qty at the current WAC is a mathematical no-op).
  *  - delta > 0 with foundUnitCost: re-blend WAC exactly like a PO receipt,
  *    aggregating qty across Warehouse + Machine + Driver (see completePurchaseOrder).
+ *
+ * Reference reads run BEFORE the transaction and the writes are constant
+ * set-based statements, for the same reason completePurchaseOrder is: this used
+ * to issue 4-8 sequential queries per line inside the transaction, which at the
+ * Supavisor pooler's ~70-100ms per round trip exhausted Prisma's window and
+ * failed a full-warehouse recount with P2028 ("Transaction not found").
  */
 export async function calibrateWarehouseStock(
     warehouseId: number,
@@ -1779,64 +1856,111 @@ export async function calibrateWarehouseStock(
     const actorRole = session.user ? (session.user as any).role : "SYSTEM";
 
     try {
+        for (const entry of items) {
+            if (entry.physicalCount < 0) throw new Error("Physical count cannot be negative");
+            if (!Number.isInteger(entry.physicalCount)) throw new Error("Physical count must be a whole number");
+        }
+
+        // A recount is an absolute SET, so a repeated itemId is last-wins. It must
+        // be collapsed here regardless: both `INSERT … ON CONFLICT` and
+        // `UPDATE … FROM (VALUES …)` are undefined when two value rows hit the
+        // same target row.
+        const entries = [...new Map(items.map((e) => [e.itemId, e])).values()];
+        const itemIds = entries.map((e) => e.itemId);
+
+        // ── Reference reads (outside the tx, batched) ────────────────────────
+        const [warehouse, existingRows, itemRows] = await Promise.all([
+            prisma.warehouse.findUnique({ where: { id: warehouseId } }),
+            prisma.warehouseStock.findMany({
+                where: { warehouseId, itemId: { in: itemIds } },
+                select: { itemId: true, quantity_on_hand: true },
+            }),
+            prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, cost: true } }),
+        ]);
+        if (!warehouse) throw new Error("Warehouse not found");
+
+        const currentQty = new Map(existingRows.map((r) => [r.itemId, r.quantity_on_hand]));
+        const currentCostById = new Map(itemRows.map((r) => [r.id, r.cost]));
+
+        const moved = entries
+            .map((entry) => {
+                const current = currentQty.get(entry.itemId) ?? 0;
+                return { entry, current, delta: entry.physicalCount - current, currentCost: currentCostById.get(entry.itemId) ?? 0 };
+            })
+            .filter((m) => m.delta !== 0);
+
+        if (moved.length === 0) {
+            throw new Error("No changes to apply — all counts already match.");
+        }
+
+        // Only found units carrying a DIFFERENT cost re-blend WAC, so only those
+        // items need the Warehouse + Machine + Driver totals — 3 grouped queries
+        // for the whole recount instead of 3 per line.
+        const reblendIds = moved
+            .filter((m) => m.delta > 0 && m.entry.foundUnitCost != null && m.entry.foundUnitCost >= 0 && m.entry.foundUnitCost !== m.currentCost)
+            .map((m) => m.entry.itemId);
+
+        const priorQty = new Map<number, number>();
+        if (reblendIds.length > 0) {
+            const [wSums, mSums, dSums] = await Promise.all([
+                prisma.warehouseStock.groupBy({ by: ["itemId"], where: { itemId: { in: reblendIds } }, _sum: { quantity_on_hand: true } }),
+                prisma.machineStock.groupBy({ by: ["itemId"], where: { itemId: { in: reblendIds } }, _sum: { estimated_stock: true } }),
+                prisma.driverStock.groupBy({ by: ["itemId"], where: { itemId: { in: reblendIds } }, _sum: { quantity_on_hand: true } }),
+            ]);
+            for (const id of reblendIds) priorQty.set(id, 0);
+            for (const r of wSums) priorQty.set(r.itemId, (priorQty.get(r.itemId) ?? 0) + (r._sum.quantity_on_hand ?? 0));
+            for (const r of mSums) priorQty.set(r.itemId, (priorQty.get(r.itemId) ?? 0) + (r._sum.estimated_stock ?? 0));
+            for (const r of dSums) priorQty.set(r.itemId, (priorQty.get(r.itemId) ?? 0) + (r._sum.quantity_on_hand ?? 0));
+        }
+        const reblendSet = new Set(reblendIds);
+
+        const changes = moved.map(({ entry, current, delta, currentCost }) => {
+            const foundCost = entry.foundUnitCost;
+            const newCost = reblendSet.has(entry.itemId)
+                ? computeWeightedCost(priorQty.get(entry.itemId) ?? 0, currentCost, delta, foundCost as number)
+                : currentCost;
+            return {
+                itemId: entry.itemId,
+                from: current,
+                to: entry.physicalCount,
+                delta,
+                wacFrom: currentCost,
+                wacTo: newCost,
+                // Snapshot the cost basis these units were valued at.
+                priceAtAdjustment: delta > 0 ? (foundCost ?? currentCost) : currentCost,
+            };
+        });
+        const repriced = changes.filter((c) => c.wacTo !== c.wacFrom);
+
+        // ── Writes (inside the tx, constant statement count) ─────────────────
         await prisma.$transaction(async (tx) => {
-            const warehouse = await tx.warehouse.findUnique({ where: { id: warehouseId } });
-            if (!warehouse) throw new Error("Warehouse not found");
+            // Absolute set, so EXCLUDED carries the new count directly.
+            await tx.$executeRaw`
+                INSERT INTO "WarehouseStock" ("warehouseId", "itemId", quantity_on_hand)
+                VALUES ${Prisma.join(changes.map((c) => Prisma.sql`(${warehouseId}::int, ${c.itemId}::int, ${c.to}::int)`))}
+                ON CONFLICT ("warehouseId", "itemId") DO UPDATE
+                SET quantity_on_hand = EXCLUDED.quantity_on_hand
+            `;
 
-            const changes: { itemId: number; from: number; to: number; delta: number; wacFrom: number; wacTo: number }[] = [];
-
-            for (const entry of items) {
-                if (entry.physicalCount < 0) throw new Error("Physical count cannot be negative");
-
-                const existing = await tx.warehouseStock.findUnique({
-                    where: { warehouseId_itemId: { warehouseId, itemId: entry.itemId } },
-                });
-                const current = existing?.quantity_on_hand ?? 0;
-                const delta = entry.physicalCount - current;
-                if (delta === 0) continue;
-
-                const itemData = await tx.item.findUnique({ where: { id: entry.itemId }, select: { cost: true } });
-                const currentCost = itemData?.cost ?? 0;
-                let newCost = currentCost;
-
-                // Re-blend WAC only when adding found units that carry a DIFFERENT cost.
-                const foundCost = entry.foundUnitCost;
-                if (delta > 0 && foundCost != null && foundCost >= 0 && foundCost !== currentCost) {
-                    const wStock = await tx.warehouseStock.aggregate({ where: { itemId: entry.itemId }, _sum: { quantity_on_hand: true } });
-                    const mStock = await tx.machineStock.aggregate({ where: { itemId: entry.itemId }, _sum: { estimated_stock: true } });
-                    const dStock = await (tx as any).driverStock.aggregate({ where: { itemId: entry.itemId }, _sum: { quantity_on_hand: true } });
-                    const totalCurrentQty = (wStock._sum.quantity_on_hand || 0) + (mStock._sum.estimated_stock || 0) + (dStock._sum.quantity_on_hand || 0);
-                    newCost = computeWeightedCost(totalCurrentQty, currentCost, delta, foundCost);
-                }
-
-                // Apply the absolute physical count.
-                await tx.warehouseStock.upsert({
-                    where: { warehouseId_itemId: { warehouseId, itemId: entry.itemId } },
-                    update: { quantity_on_hand: entry.physicalCount },
-                    create: { warehouseId, itemId: entry.itemId, quantity_on_hand: entry.physicalCount },
-                });
-
-                if (newCost !== currentCost) {
-                    await tx.item.update({ where: { id: entry.itemId }, data: { cost: newCost } });
-                }
-
-                // Inventory ledger entry (snapshot the cost basis used for these units).
-                await tx.inventoryAdjustment.create({
-                    data: {
-                        itemId: entry.itemId,
-                        quantity: delta,
-                        reason: `Warehouse Recount (${delta > 0 ? '+' : ''}${delta})${note && note.trim() ? `: ${note.trim()}` : ''}`,
-                        locationName: warehouse.name,
-                        priceAtAdjustment: delta > 0 ? (foundCost ?? currentCost) : currentCost,
-                    },
-                });
-
-                changes.push({ itemId: entry.itemId, from: current, to: entry.physicalCount, delta, wacFrom: currentCost, wacTo: newCost });
+            if (repriced.length > 0) {
+                await tx.$executeRaw`
+                    UPDATE "Item" AS i
+                    SET cost = v.cost
+                    FROM (VALUES ${Prisma.join(repriced.map((c) => Prisma.sql`(${c.itemId}::int, ${c.wacTo}::double precision)`))}) AS v("itemId", cost)
+                    WHERE i.id = v."itemId"
+                `;
             }
 
-            if (changes.length === 0) {
-                throw new Error("No changes to apply — all counts already match.");
-            }
+            // Inventory ledger entries.
+            await tx.inventoryAdjustment.createMany({
+                data: changes.map((c) => ({
+                    itemId: c.itemId,
+                    quantity: c.delta,
+                    reason: `Warehouse Recount (${c.delta > 0 ? '+' : ''}${c.delta})${note && note.trim() ? `: ${note.trim()}` : ''}`,
+                    locationName: warehouse.name,
+                    priceAtAdjustment: c.priceAtAdjustment,
+                })),
+            });
 
             await tx.systemAuditLog.create({
                 data: {
@@ -1850,11 +1974,6 @@ export async function calibrateWarehouseStock(
                     message: `Recounted ${changes.length} item(s) in ${warehouse.name}. Net qty delta: ${changes.reduce((a, c) => a + c.delta, 0)}.${note && note.trim() ? ` Note: ${note.trim()}` : ''}`,
                 },
             });
-            // Partial mitigation for the same P2028 that broke PO receiving: this
-            // loop still runs 4-8 sequential queries per item, so at the pooler's
-            // ~70-100ms per round trip a recount of ~12 items blew the default 5s
-            // window. 15s buys roughly 35 items. The real fix is the set-based
-            // rewrite completePurchaseOrder got — NOT done here yet.
         }, { timeout: 15_000, maxWait: 5_000 });
 
         revalidatePath('/admin/warehouse');
