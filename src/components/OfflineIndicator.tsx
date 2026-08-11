@@ -14,9 +14,15 @@ import { useDriverStore } from "@/stores/useDriverStore";
  * sitting in IndexedDB. Queued work that is invisible is queued work a driver
  * assumes was saved.
  *
- * `sticky`, not `fixed`: it takes real space at the top of the page instead of
- * painting over the header beneath it, and still follows the driver down the
- * item list. It renders nothing at all when online with an empty queue.
+ * Deliberately in normal flow — not `sticky` and not `fixed`. `DriverRefillUI`'s
+ * machine selector is already `sticky top-0`, so a second pinned bar would land
+ * on top of it and hide half the control the driver needs *while offline*, which
+ * is the one moment this banner exists for. Persistent visibility isn't needed
+ * anyway: the Submit button reads "Save Offline" the whole time the connection
+ * is down, so the refill screen states it where it matters. This carries the
+ * state on arrival and on every other driver route.
+ *
+ * Renders nothing at all when online with an empty queue.
  */
 export function OfflineIndicator() {
     const offlineLogs = useDriverStore((s) => s.offlineLogs);
@@ -51,7 +57,7 @@ export function OfflineIndicator() {
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="sticky top-0 z-50 overflow-hidden"
+                    className="relative z-30 overflow-hidden"
                     role="status"
                     aria-live="polite"
                 >
