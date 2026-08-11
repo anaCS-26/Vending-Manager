@@ -41,13 +41,14 @@ export default function DriverSettingsForm({ driverName }: Props) {
     };
 
     return (
-        <div className="bg-slate-50 dark:bg-[#121214] min-h-[90vh] sm:rounded-[2.5rem] shadow-2xl shadow-black/50 overflow-hidden relative flex flex-col border-0 sm:border border-slate-200 dark:border-white/10">
+        <div className="bg-slate-50 dark:bg-[#121214] min-h-[100dvh] sm:min-h-[90vh] sm:rounded-[2.5rem] shadow-2xl shadow-black/50 overflow-visible sm:overflow-hidden relative flex flex-col border-0 sm:border border-slate-200 dark:border-white/10">
 
-            {/* Header */}
-            <div className="bg-white/80 dark:bg-black/40 backdrop-blur-3xl pt-10 pb-8 px-8 rounded-b-[2rem] border-b border-slate-200 dark:border-white/10 shrink-0 relative">
+            {/* Header — same status-bar inset treatment as the refill screen, so
+                the two driver routes line up when installed to the home screen. */}
+            <div className="bg-white/80 dark:bg-black/40 backdrop-blur-3xl pt-[calc(env(safe-area-inset-top,0px)+3.25rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+2.5rem)] pb-6 sm:pb-8 px-5 sm:px-8 rounded-b-[2rem] border-b border-slate-200 dark:border-white/10 shrink-0 relative">
                 <Link
                     href="/driver"
-                    className="absolute top-4 left-4 p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10"
+                    className="absolute top-[calc(env(safe-area-inset-top,0px)+0.75rem)] left-3 sm:left-4 p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10"
                     title="Back"
                 >
                     <ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400" />
@@ -55,7 +56,7 @@ export default function DriverSettingsForm({ driverName }: Props) {
                 <p className="text-accent-blue text-xs font-semibold mb-2 flex items-center gap-2 uppercase tracking-wider">
                     <ShieldCheck className="w-3 h-3 text-accent-blue" /> Account
                 </p>
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight leading-none">
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight leading-none truncate">
                     {driverName}
                 </h1>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
@@ -63,7 +64,7 @@ export default function DriverSettingsForm({ driverName }: Props) {
                 </p>
             </div>
 
-            <div className="flex-1 px-6 py-8 space-y-8">
+            <div className="flex-1 px-5 sm:px-6 py-6 sm:py-8 space-y-8 pb-safe" style={{ ["--safe-extra" as string]: "1.5rem" }}>
                 {/* Notifications — first because it's the control a driver
                     actually returns to; PINs get changed roughly never. */}
                 <PushNotificationToggle audience="driver" />

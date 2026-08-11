@@ -78,7 +78,10 @@ export default async function DriverPortal() {
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-neo-bg sm:p-4 text-slate-900 dark:text-white">
-            <div className="max-w-md mx-auto h-full pt-4 sm:pt-0">
+            {/* No top padding below `sm`: the refill card is edge-to-edge there and
+                supplies its own status-bar inset, so a gap here only exposed a
+                strip of page background above the header. */}
+            <div className="max-w-md mx-auto h-full">
                 {role === 'driver' && driverBag.pendingAssignments.length > 0 && (
                     <AssignmentAckBanner pending={driverBag.pendingAssignments} />
                 )}

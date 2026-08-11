@@ -94,6 +94,43 @@
     @apply antialiased selection:bg-accent-blue selection:text-white transition-colors duration-300;
   }
 
+  /* `background-attachment: fixed` forces the compositor to repaint the whole
+     gradient on every scroll frame; on mobile GPUs that is the single most
+     expensive thing on an otherwise static page, and the effect is invisible
+     on a 390px viewport anyway. Scroll it with the content there. */
+  @media (max-width: 1023px) {
+    body {
+      background-attachment: scroll;
+    }
+  }
+
+  /* A tap on mobile Safari/Chrome waits ~300ms for a possible double-tap-to-zoom
+     and paints a grey flash while it waits. Drivers hit the +/- steppers dozens
+     of times per machine, so both are worth removing on controls specifically
+     (not globally — `manipulation` on the body would kill pinch-zoom). */
+  button,
+  [role="button"],
+  a,
+  label,
+  select,
+  input[type="checkbox"],
+  input[type="radio"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS zooms the viewport when a focused field's font-size is under 16px and
+     never zooms back out. Several controls in this app are `text-sm` (14px) by
+     design; keep the rendered size honest on small screens instead. */
+  @media (max-width: 640px) {
+
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      font-size: max(16px, 1em);
+    }
+  }
+
   /* Remove default arrows for numeric inputs globally */
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {
@@ -145,6 +182,47 @@
 
   .scroll-fade-right {
     /* Removed the mask-image effect because it fades out critical table data on small screens */
+  }
+
+  /* Safe-area padding. These are additive to whatever padding the element
+     already carries, so they compose: `p-4 pb-safe` = 1rem plus the home
+     indicator. On anything that isn't a notched device the inset is 0 and
+     these are no-ops, so they're safe to apply unconditionally. */
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--safe-extra, 0px));
+  }
+
+  .pt-safe {
+    padding-top: calc(env(safe-area-inset-top, 0px) + var(--safe-extra, 0px));
+  }
+
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Clears the mobile bottom nav (h-16) plus the home indicator, so a page's
+     last row is never parked underneath it. */
+  .pb-nav {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Horizontally scrollable strip that still bleeds to the screen edge inside a
+     padded container — the edge bleed is the affordance that tells a thumb
+     there is more to the right. */
+  .edge-bleed {
+    margin-left: calc(-1 * var(--edge, 1rem));
+    margin-right: calc(-1 * var(--edge, 1rem));
+    padding-left: var(--edge, 1rem);
+    padding-right: var(--edge, 1rem);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }
 

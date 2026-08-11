@@ -27,6 +27,7 @@ import Link from "next/link";
 import prisma from "@/lib/prisma";
 import MapVisualWrapper from "@/components/MapVisualWrapper";
 import KpiCard from "@/components/KpiCard";
+import { Money } from "@/components/RiyalSymbol";
 import { formatSaudiDate, formatSaudiTime, startOfRiyadhDay } from "@/lib/utils";
 import type { OverviewSnapshot, AttentionAssignment, AttentionReturn, AtRiskMachine } from "@/actions/overview";
 
@@ -504,30 +505,32 @@ export default async function AdminDashboard() {
     const adminName = (session?.user?.name as string | undefined)?.split(" ")[0] ?? "Admin";
 
     return (
-        <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
+        <div className="space-y-6 md:space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-6 md:pb-20">
 
-            {/* Header — orientation, not data */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 py-4">
-                <div>
-                    <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
+            {/* Header — orientation, not data. On a phone the greeting and the
+                clock sit on one row: stacked at the old sizes they burned ~180px
+                of a 780px viewport to say nothing the user didn't know. */}
+            <div className="flex flex-row items-end justify-between gap-3 md:gap-4 py-1 md:py-4">
+                <div className="min-w-0">
+                    <h1 className="text-2xl md:text-4xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
                         {greeting},{" "}
                         <span className="text-accent-blue">{adminName}</span>
                     </h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+                    <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-1 md:mt-2 truncate">
                         {today}
                     </p>
                 </div>
-                <div className="md:text-right">
+                <div className="md:text-right shrink-0">
                     <LiveClock />
                 </div>
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
                 <KpiCard
                     href="/admin/analytics"
                     title="REVENUE TODAY"
-                    value={`⃁ ${revenueToday.toLocaleString()}`}
+                    value={<Money amount={revenueToday} decimals={0} />}
                     subtitle="Sales reported today"
                     icon={<Activity className="w-7 h-7 text-accent-green" />}
                     color="text-accent-green"
@@ -564,13 +567,17 @@ export default async function AdminDashboard() {
                 />
             </div>
 
-            {/* Main grid: Map + Velocity (2/3) | Attention + Activity (1/3) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Main grid: Map + Velocity (2/3) | Attention + Activity (1/3).
+                The columns swap order below `lg`: on a phone the work queue is
+                what the admin opened the page for, and the fleet map — the least
+                useful thing on a 390px screen — shouldn't be the wall they scroll
+                past to reach it. */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
 
                 {/* Left: 2/3 */}
-                <div className="lg:col-span-2 space-y-6">
+                <div className="lg:col-span-2 space-y-4 sm:space-y-6 order-2 lg:order-1">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                        <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
                             <MapPin className="w-5 h-5 text-accent-blue" />
                             Live Fleet Map
                         </h2>
@@ -581,8 +588,8 @@ export default async function AdminDashboard() {
                         warehouses={warehousesWithStats}
                     />
 
-                    <div className="glass-panel p-6 rounded-[2rem] border-slate-200 dark:border-white/5 bg-gradient-to-br from-slate-100 dark:from-black/40 to-white/5">
-                        <h3 className="font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase text-xs flex items-center gap-2 mb-6">
+                    <div className="glass-panel p-4 sm:p-6 rounded-3xl sm:rounded-[2rem] border-slate-200 dark:border-white/5 bg-gradient-to-br from-slate-100 dark:from-black/40 to-white/5">
+                        <h3 className="font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase text-xs flex items-center gap-2 mb-4 sm:mb-6">
                             <TrendingUp className="w-4 h-4 text-emerald-400" />
                             Product Velocity (7D)
                         </h3>
@@ -626,7 +633,7 @@ export default async function AdminDashboard() {
                 </div>
 
                 {/* Right: 1/3 */}
-                <div className="space-y-8">
+                <div className="space-y-6 lg:space-y-8 order-1 lg:order-2">
 
                     {/* Needs your attention */}
                     <AttentionPanel
@@ -639,8 +646,8 @@ export default async function AdminDashboard() {
                     />
 
                     {/* Today's Activity */}
-                    <div className="glass-panel border-slate-200 dark:border-white/5 p-6 rounded-[2rem] shadow-xl flex-1 flex flex-col bg-gradient-to-t from-white/5 to-transparent">
-                        <h3 className="font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase text-xs flex items-center gap-2 mb-6">
+                    <div className="glass-panel border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-3xl sm:rounded-[2rem] shadow-xl flex-1 flex flex-col bg-gradient-to-t from-white/5 to-transparent">
+                        <h3 className="font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase text-xs flex items-center gap-2 mb-4 sm:mb-6">
                             <Clock className="w-4 h-4 text-accent-purple" />
                             Today&apos;s Activity
                         </h3>
@@ -689,7 +696,7 @@ export default async function AdminDashboard() {
                             </div>
                         </div>
 
-                        <Link href="/admin/history" className="mt-8 w-full block">
+                        <Link href="/admin/history" className="mt-6 sm:mt-8 w-full block">
                             <button className="w-full py-3 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-xl text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest transition-all border border-slate-200 dark:border-white/5">
                                 View Full Audit Log
                             </button>
@@ -732,8 +739,8 @@ function AttentionPanel({
     const total = assignmentsTotal + returnsTotal + atRiskTotal;
 
     return (
-        <div className="glass-panel border-slate-200 dark:border-white/5 p-6 rounded-[2rem] shadow-xl bg-gradient-to-b from-white/5 to-transparent">
-            <h3 className="font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase text-xs flex items-center gap-2 mb-6">
+        <div className="glass-panel border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-3xl sm:rounded-[2rem] shadow-xl bg-gradient-to-b from-white/5 to-transparent">
+            <h3 className="font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase text-xs flex items-center gap-2 mb-4 sm:mb-6">
                 <Inbox className="w-4 h-4 text-accent-pink" />
                 Needs your attention
                 {total > 0 && (

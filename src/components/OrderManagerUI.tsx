@@ -9,6 +9,7 @@ import { formatCurrency, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { computeReceiptTotals } from "@/lib/receipt-totals";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { NumericInput } from "@/components/NumericInput";
+import { DataCard } from "@/components/DataCard";
 import type { Item, Warehouse, PurchaseOrder, PurchaseOrderItem } from "@prisma/client";
 
 type OrderWithRelations = PurchaseOrder & {
@@ -775,7 +776,49 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                             />
                         </div>
 
-                        <div className="glass-panel border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden relative">
+                        {/* Phone: cards. The panel below is `hidden sm:block`. */}
+                        <div className="sm:hidden space-y-3">
+                            {filteredHistory.length === 0 ? (
+                                <div className="py-12 text-center text-slate-600 dark:text-slate-400 text-xs">
+                                    No past orders or invoices found.
+                                </div>
+                            ) : (
+                                filteredHistory.map(o => {
+                                    const totalItems = o.Items.reduce((a: number, c: any) => a + c.quantityReceived, 0);
+                                    return (
+                                        <button
+                                            key={o.id}
+                                            type="button"
+                                            onClick={() => setSelectedHistoryOrder(o)}
+                                            className="block w-full text-left"
+                                        >
+                                            <DataCard
+                                                title={`PO-${o.id.toString().padStart(4, '0')}`}
+                                                meta={
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-widest border ${o.status === "COMPLETED" ? "bg-accent-green/10 text-accent-green border-accent-green/20" : "bg-accent-pink/10 text-accent-pink border-accent-pink/20"}`}>
+                                                        {o.status}
+                                                    </span>
+                                                }
+                                                highlight={{ label: "Units received", value: totalItems.toLocaleString() }}
+                                                fields={[
+                                                    { label: "Destination", value: o.warehouse.name, wide: true },
+                                                    {
+                                                        label: "Completed",
+                                                        value: o.completedAt
+                                                            ? `${formatSaudiDate(o.completedAt)} ${formatSaudiTime(o.completedAt, { hour: '2-digit', minute: '2-digit' })}`
+                                                            : "--",
+                                                        tone: "muted",
+                                                        wide: true,
+                                                    },
+                                                ]}
+                                            />
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        <div className="hidden sm:block glass-panel border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden relative">
                             <div className="overflow-x-auto scroll-fade-right custom-scrollbar">
                                 <table className="w-full text-left border-collapse min-w-[900px]">
                                     <thead>

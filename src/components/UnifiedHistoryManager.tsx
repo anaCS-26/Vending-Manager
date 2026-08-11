@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { formatID, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { getRefillLogsPaginated, type RefillLogRow } from "@/actions/history";
 import { EditLogModal } from "./EditLogModal";
+import { DataCard } from "@/components/DataCard";
 import type { PaginatedResult } from "@/types";
 
 type DriverOption = { id: number; name: string };
@@ -198,9 +199,20 @@ export default function UnifiedHistoryManager({ initialEvents, drivers, machines
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className="glass-panel border-slate-200 dark:border-white/5 rounded-[2rem] p-6 lg:p-8 relative"
+                        className="glass-panel border-slate-200 dark:border-white/5 rounded-3xl sm:rounded-[2rem] p-4 sm:p-6 lg:p-8 relative"
                     >
-                        <div className="overflow-x-auto scroll-fade-right custom-scrollbar">
+                        {/* Phone: cards. The table below is `hidden sm:block`. */}
+                        <div className="sm:hidden space-y-3">
+                            {paginatedLogs.length === 0 ? (
+                                <div className="py-12 text-center text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest text-xs">
+                                    No matching events recorded
+                                </div>
+                            ) : (
+                                paginatedLogs.map((log) => <EventCard key={log.id} log={log} />)
+                            )}
+                        </div>
+
+                        <div className="hidden sm:block overflow-x-auto scroll-fade-right custom-scrollbar">
                             <table className="w-full text-left border-collapse min-w-[1000px]">
                                 <thead>
                                     <tr className="border-b border-slate-200 dark:border-white/5 text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
@@ -289,13 +301,16 @@ export default function UnifiedHistoryManager({ initialEvents, drivers, machines
 
 // --- Sub-Components ---
 
-function EventRow({ log }: { log: any }) {
+/**
+ * Shared by the desktop row and the phone card so the two can't disagree about
+ * how many units are verified vs still pending on the same event.
+ */
+function deriveEventFacts(log: any) {
     const driverName = log.dispatch?.driver?.name || log.driver?.name || "System/Unknown";
-    const driverInitials = driverName !== "System/Unknown" ? driverName.charAt(0) : "?";
-    
+
     let verifiedLoss = 0;
     let pendingCount = 0;
-    
+
     if (log.isSurplusReturn) {
         verifiedLoss = log._customVerifiedCount || 0;
         pendingCount = log._customPendingCount || 0;
@@ -306,6 +321,52 @@ function EventRow({ log }: { log: any }) {
         verifiedLoss = approved.reduce((s: number, v: any) => s + v.quantity, 0);
         pendingCount = pending.reduce((s: number, v: any) => s + v.quantity, 0);
     }
+
+    return {
+        driverName,
+        driverInitials: driverName !== "System/Unknown" ? driverName.charAt(0) : "?",
+        verifiedLoss,
+        pendingCount,
+        source: log.isSurplusReturn ? `${driverName}'s Stock` : (log.machine?.location_name || "Unknown"),
+    };
+}
+
+function EventCard({ log }: { log: any }) {
+    const { driverName, verifiedLoss, pendingCount, source } = deriveEventFacts(log);
+
+    return (
+        <DataCard
+            title={log.item.name}
+            meta={
+                <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest px-1.5 py-0.5 border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 rounded-md">
+                    {log.item.category}
+                </span>
+            }
+            highlight={{
+                label: formatSaudiTime(log.refilled_at, { hour: "2-digit", minute: "2-digit", hour12: false }),
+                value: <span className="text-sm">{formatSaudiDate(log.refilled_at)}</span>,
+                tone: "muted",
+            }}
+            fields={[
+                { label: "Personnel", value: driverName },
+                {
+                    label: log.dispatchId ? "Route" : "Origin",
+                    value: log.dispatchId ? `#${formatID(log.dispatchId)}` : "Direct action",
+                    tone: "muted",
+                },
+                { label: "Source", value: source, wide: true },
+            ]}
+            footer={
+                <div className="flex justify-end">
+                    <EditLogModal log={log} verifiedCount={verifiedLoss} pendingCount={pendingCount} />
+                </div>
+            }
+        />
+    );
+}
+
+function EventRow({ log }: { log: any }) {
+    const { driverName, driverInitials, verifiedLoss, pendingCount } = deriveEventFacts(log);
 
     return (
         <tr className="hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 border-l-[3px] border-l-transparent hover:border-l-brand-500 group flex-row">
