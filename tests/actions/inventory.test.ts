@@ -96,8 +96,9 @@ describe('dispatchToDriver', () => {
     setAdminSession(1);
     prismaMock.item.findMany.mockResolvedValue([makeItem({ id: 1 })]);
     prismaMock.dispatch.create.mockResolvedValue(makeDispatch());
-    prismaMock.driverStock.findUnique.mockResolvedValue(null);
-    prismaMock.warehouseStock.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.driverStock.findMany.mockResolvedValue([]);
+    // The guarded set-based decrement returns no row for a short item.
+    prismaMock.$queryRaw.mockResolvedValue([]);
 
     const r = await dispatchToDriver(10, 1, [{ itemId: 1, quantity: 10 }]);
     expect(r.success).toBe(false);
@@ -110,8 +111,8 @@ describe('dispatchToDriver', () => {
       makeItem({ id: 1, price_standard: 7.5, price_hospital: 9, price_hotel: 12 }),
     ]);
     prismaMock.dispatch.create.mockResolvedValue(makeDispatch({ id: 555 }));
-    prismaMock.driverStock.findUnique.mockResolvedValue(null);
-    prismaMock.warehouseStock.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.driverStock.findMany.mockResolvedValue([]);
+    prismaMock.$queryRaw.mockResolvedValue([{ itemId: 1 }]);
 
     const r = await dispatchToDriver(10, 1, [{ itemId: 1, quantity: 5 }]);
     expect(r.success).toBe(true);
@@ -136,22 +137,47 @@ describe('dispatchToDriver', () => {
     prismaMock.item.findMany.mockResolvedValue([makeItem({ id: 1 })]);
     prismaMock.dispatch.create.mockResolvedValue(makeDispatch());
     // Driver already has 3 in their bag, dispatch 10 → 3 from driver, 7 from warehouse.
-    prismaMock.driverStock.findUnique.mockResolvedValue(
-      makeDriverStock({ id: 9, quantity_on_hand: 3 }),
-    );
-    prismaMock.driverStock.update.mockResolvedValue({} as any);
-    prismaMock.warehouseStock.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.driverStock.findMany.mockResolvedValue([{ itemId: 1, quantity_on_hand: 3 } as any]);
+    prismaMock.$executeRaw.mockResolvedValue(1);
+    prismaMock.$queryRaw.mockResolvedValue([{ itemId: 1 }]);
 
     await dispatchToDriver(10, 1, [{ itemId: 1, quantity: 10 }]);
 
-    expect(prismaMock.driverStock.update).toHaveBeenCalledWith({
-      where: { id: 9 },
-      data: { quantity_on_hand: { decrement: 3 } },
-    });
-    expect(prismaMock.warehouseStock.updateMany).toHaveBeenCalledWith({
-      where: { itemId: 1, warehouseId: 1, quantity_on_hand: { gte: 7 } },
-      data: { quantity_on_hand: { decrement: 7 } },
-    });
+    // Bag leg: one set-based decrement bound to (itemId, 3).
+    const bagSql = (prismaMock.$executeRaw.mock.calls[0][0] as unknown as string[]).join('?');
+    expect(bagSql).toContain('UPDATE "DriverStock"');
+    expect((prismaMock.$executeRaw.mock.calls[0][1] as any).values).toEqual([1, 3]);
+
+    // Warehouse leg: the remaining 7, still guarded per row.
+    const whSql = (prismaMock.$queryRaw.mock.calls[0][0] as unknown as string[]).join('?');
+    expect(whSql).toContain('UPDATE "WarehouseStock"');
+    expect(whSql).toContain('quantity_on_hand >= v.qty');
+    expect((prismaMock.$queryRaw.mock.calls[0][1] as any).values).toEqual([1, 7]);
+  });
+
+  it('issues a constant number of statements regardless of line count', async () => {
+    setAdminSession(1);
+    const n = 30;
+    prismaMock.item.findMany.mockResolvedValue(
+      Array.from({ length: n }, (_, i) => makeItem({ id: i + 1 })),
+    );
+    prismaMock.dispatch.create.mockResolvedValue(makeDispatch());
+    prismaMock.driverStock.findMany.mockResolvedValue([]);
+    prismaMock.$queryRaw.mockResolvedValue(
+      Array.from({ length: n }, (_, i) => ({ itemId: i + 1 })),
+    );
+
+    const r = await dispatchToDriver(10, 1,
+      Array.from({ length: n }, (_, i) => ({ itemId: i + 1, quantity: 2 })));
+    expect(r.success).toBe(true);
+
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prismaMock.driverStock.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.warehouseStock.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ timeout: 15_000 }),
+    );
   });
 });
 
