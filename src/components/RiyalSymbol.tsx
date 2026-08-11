@@ -1,57 +1,79 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+/** U+20C1 SAUDI RIYAL SIGN — the same literal `formatCurrency` emits. */
+const RIYAL = "⃁";
+
+/** U+FFFF: a permanent noncharacter, so no font may ever map it. */
+const NONCHARACTER = "￿";
+
 /**
- * The Saudi Riyal mark, drawn rather than typed.
+ * Renders the real riyal character, falling back to `SAR` only on devices whose
+ * fonts can't draw it.
  *
- * The character form (U+20C1) is a 2025 Unicode addition. Most Android builds
- * and any iOS older than the current major have no glyph for it, so on the
- * phones this app is actually read from it renders as tofu — which is what the
- * admin dashboard's revenue KPI was doing. An inline SVG has no font dependency
- * and renders identically everywhere.
- *
- * `formatCurrency` in src/lib/utils.ts deliberately keeps the character: it
- * returns a `string` that the Excel export depends on, and a component can't go
- * in a spreadsheet cell. Use this for *display* figures — KPI values, headline
- * totals, anything set large enough that a missing glyph is the first thing you
- * see. Small tabular figures can keep the string form.
- *
- * ⚠️ This path is a hand-built rendition in the stroke idiom of the lucide icons
- * used everywhere else, not the official artwork. If brand exactness matters,
- * replace the path with SAMA's published asset — nothing else needs to change.
+ * U+20C1 is a 2025 Unicode addition, so coverage is good on current iOS and
+ * absent on most Android builds — where it renders as tofu. An SVG rendition
+ * fixes that everywhere but looks like a drawing sitting in a line of type, so
+ * this keeps the character wherever the device can actually show it and swaps in
+ * the ISO code only where it can't.
  */
-export function RiyalSymbol({
-    className = "",
-    label,
-}: {
-    className?: string;
-    /** Set when the symbol appears without adjacent context naming the currency. */
-    label?: string;
-}) {
+
+// Measured once per page load; every instance reads the same answer.
+let cachedSupport: boolean | null = null;
+
+function detectRiyalGlyph(): boolean {
+    if (cachedSupport !== null) return cachedSupport;
+
+    try {
+        const ctx = document.createElement("canvas").getContext("2d");
+        if (!ctx) return (cachedSupport = true);
+
+        // Measured against U+FFFF, a permanent noncharacter that no font may map,
+        // so its width is by definition the .notdef box. A character that
+        // measures the same width is being drawn as that same box — i.e. tofu.
+        // `sans-serif` rather than the app's stack because the browser resolves a
+        // glyph missing from a webfont through the system fonts anyway.
+        ctx.font = "72px sans-serif";
+        const riyal = ctx.measureText(RIYAL).width;
+        const notdef = ctx.measureText(NONCHARACTER).width;
+
+        cachedSupport = riyal > 0 && Math.abs(riyal - notdef) > 0.01;
+    } catch {
+        // Canvas blocked (privacy settings, some embedded webviews). Assume the
+        // glyph works: a wrong "supported" shows tofu, a wrong "missing" shows
+        // SAR to everyone, and the first is the smaller regression.
+        cachedSupport = true;
+    }
+
+    return cachedSupport;
+}
+
+function useRiyalGlyph(): boolean {
+    // Optimistic: server render and first paint both emit the character, so
+    // hydration matches and devices that can draw it never flicker. The swap to
+    // SAR happens on mount, on the minority of devices that can't.
+    const [supported, setSupported] = useState(true);
+
+    useEffect(() => {
+        setSupported(detectRiyalGlyph());
+    }, []);
+
+    return supported;
+}
+
+export function RiyalSymbol({ className = "" }: { className?: string }) {
+    const supported = useRiyalGlyph();
+
     return (
-        <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.25}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            // 1em square and baseline-nudged so it sits in a line of text like a
-            // glyph would, at whatever size the surrounding type happens to be.
-            className={`inline-block w-[1em] h-[1em] -mb-[0.08em] shrink-0 ${className}`}
-            role={label ? "img" : "presentation"}
-            aria-label={label}
-            aria-hidden={label ? undefined : true}
-        >
-            {/* Two uprights descending from the top, joined low — the reh form. */}
-            <path d="M8 4v9.5a3.5 3.5 0 0 0 3.5 3.5H16" />
-            <path d="M16 4v8" />
-            {/* The pair of horizontal bars that mark it as a currency sign. */}
-            <path d="M4 17.5 20 15" />
-            <path d="M4 21 20 18.5" />
-        </svg>
+        <span className={className} aria-label="Saudi riyal" role="img">
+            {supported ? RIYAL : "SAR"}
+        </span>
     );
 }
 
 /**
- * A currency figure for display: the drawn mark plus a grouped number.
+ * A currency figure for display: the mark plus a grouped number.
  *
  * Unlike `formatCurrency` this groups thousands, because the figures it's used
  * on are the big ones — a seven-digit inventory value is unreadable unbroken.
@@ -66,9 +88,15 @@ export function Money({
     decimals?: number;
     className?: string;
 }) {
+    const supported = useRiyalGlyph();
+
     return (
         <span className={`inline-flex items-baseline gap-1.5 ${className}`}>
-            <RiyalSymbol className="opacity-70" label="Saudi riyal" />
+            {/* The ISO code is a word, so it needs to sit back from the number the
+                way a symbol does — hence the size step-down when it's in use. */}
+            <span className={supported ? "opacity-80" : "text-[0.5em] font-mono font-bold opacity-70"}>
+                {supported ? RIYAL : "SAR"}
+            </span>
             <span>
                 {amount.toLocaleString("en-US", {
                     minimumFractionDigits: decimals,
