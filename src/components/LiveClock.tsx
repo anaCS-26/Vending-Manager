@@ -29,12 +29,16 @@ export default function LiveClock() {
         : "--";
 
     return (
-        <div className="flex items-baseline gap-1 font-mono tabular-nums">
-            <span className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
-                {timeStr}
-            </span>
-            <span className="text-sm text-slate-400 dark:text-slate-500">:{seconds}</span>
-            <span className="ml-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+        <div className="flex flex-col items-end md:flex-row md:items-baseline gap-0 md:gap-1 font-mono tabular-nums leading-none">
+            <div className="flex items-baseline gap-1">
+                <span className="text-xl md:text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
+                    {timeStr}
+                </span>
+                {/* Seconds are ambient detail; at phone width they cost a line of
+                    the header that the greeting needs more. */}
+                <span className="hidden md:inline text-sm text-slate-400 dark:text-slate-500">:{seconds}</span>
+            </div>
+            <span className="md:ml-2 text-[9px] md:text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 Riyadh
             </span>
         </div>

@@ -4,8 +4,9 @@
   "description": "Vending Management System for Route Drivers and Admins",
   "start_url": "/driver",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0ea5e9",
+  "orientation": "portrait",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
   "icons": [
     {
       "src": "/favicon.ico",

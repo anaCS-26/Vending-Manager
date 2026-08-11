@@ -3,31 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { ShieldAlert, Users, LayoutDashboard, Eye, ScrollText, Activity, LogOut, ArrowLeft, FlaskConical } from "lucide-react";
+import { ShieldAlert, LogOut, ArrowLeft } from "lucide-react";
 import { signOut } from "next-auth/react";
-import { ENABLE_AI_LAB } from "@/lib/feature-flags";
-
-type NavItem = { name: string; href: string; icon: typeof LayoutDashboard; exact?: boolean };
-
-const consoleNav: NavItem[] = [
-    { name: 'Overview', href: '/super', icon: LayoutDashboard, exact: true },
-    { name: 'Oversight', href: '/super/oversight', icon: Eye },
-    { name: 'Audit Trail', href: '/super/audit', icon: ScrollText },
-    { name: 'Integrity', href: '/super/integrity', icon: ShieldAlert },
-    { name: 'System Health', href: '/super/system', icon: Activity },
-    // Experimental — only when NEXT_PUBLIC_ENABLE_AI_LAB=true.
-    ...(ENABLE_AI_LAB ? [{ name: 'AI Lab', href: '/super/lab', icon: FlaskConical }] : []),
-];
-
-const accessNav: NavItem[] = [
-    { name: 'Admin Accounts', href: '/super/admins', icon: Users },
-];
+import { superNavSections, isNavItemActive, type NavItem } from "@/lib/nav-config";
 
 function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
-    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + '/');
+    const isActive = isNavItemActive(item, pathname);
     return (
         <Link
             href={item.href}
+            aria-current={isActive ? "page" : undefined}
             className={cn(
                 "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all relative group",
                 isActive
@@ -41,11 +26,16 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
     );
 }
 
+/**
+ * Desktop only — `hidden lg:flex`. This was a hard `w-72` at every width, so on
+ * a 390px phone it took 288px of the viewport and left the console itself in a
+ * 100px gutter. `MobileNav` covers the small breakpoint.
+ */
 export function SuperSidebar() {
     const pathname = usePathname();
 
     return (
-        <div className="w-72 bg-neo-surface backdrop-blur-xl border-r border-neo-border flex flex-col relative z-20">
+        <div className="hidden lg:flex w-72 bg-neo-surface backdrop-blur-xl border-r border-neo-border flex-col relative z-20">
             <div className="p-8 pb-6 border-b border-neo-border">
                 <Link href="/super" className="flex items-center gap-3 group">
                     <div className="w-10 h-10 bg-accent-blue/15 rounded-xl flex items-center justify-center border border-accent-blue/30 group-hover:bg-accent-blue/25 transition-colors">
@@ -59,15 +49,14 @@ export function SuperSidebar() {
             </div>
 
             <nav className="flex-1 px-4 py-6 space-y-8 overflow-y-auto custom-scrollbar">
-                <div className="space-y-1">
-                    <p className="px-4 text-[10px] font-bold tracking-widest text-slate-400 dark:text-slate-500 uppercase mb-3">Console</p>
-                    {consoleNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
-                </div>
-
-                <div className="space-y-1">
-                    <p className="px-4 text-[10px] font-bold tracking-widest text-slate-400 dark:text-slate-500 uppercase mb-3">Access</p>
-                    {accessNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
-                </div>
+                {superNavSections.map((section) => (
+                    <div key={section.label} className="space-y-1">
+                        <p className="px-4 text-[10px] font-bold tracking-widest text-slate-400 dark:text-slate-500 uppercase mb-3">
+                            {section.label}
+                        </p>
+                        {section.items.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
+                    </div>
+                ))}
             </nav>
 
             <div className="p-4 border-t border-neo-border space-y-2">

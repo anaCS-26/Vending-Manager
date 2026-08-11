@@ -279,8 +279,8 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
 
     if (!currentDispatch) {
         return (
-            <div className="flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-neo-bg rounded-3xl min-h-[50vh] relative overflow-hidden border border-slate-200 dark:border-white/5">
-                <div className="absolute top-4 right-4 flex items-center gap-2">
+            <div className="flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-neo-bg rounded-3xl min-h-[70dvh] sm:min-h-[50vh] relative overflow-hidden border border-slate-200 dark:border-white/5">
+                <div className="absolute top-[calc(env(safe-area-inset-top,0px)+1rem)] right-4 flex items-center gap-2">
                     {userRole === 'admin' || userRole === 'super_admin' ? (
                         <Link href="/admin" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
                             <ShieldCheck className="w-5 h-5 text-accent-green" />
@@ -407,12 +407,38 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
 
     const activeMachineDetails = machines.find(m => m.id.toString() === selectedMachine);
 
+    // Totals for the submit bar. Both view tabs contribute, so a driver who
+    // counted returns on the Machine tab and refills on the Bag tab still sees
+    // everything that is about to be written.
+    const stagedSummary = Object.values(machineItems).reduce(
+        (acc, row) => {
+            if (row.refilled > 0 || row.returned > 0 || row.bag_returned > 0) acc.items += 1;
+            acc.refilled += row.refilled;
+            acc.returned += row.returned;
+            acc.bagReturned += row.bag_returned;
+            return acc;
+        },
+        { items: 0, refilled: 0, returned: 0, bagReturned: 0 },
+    );
+
     return (
-        <div className="bg-slate-50 dark:bg-[#121214] min-h-[90vh] sm:rounded-[2.5rem] shadow-2xl shadow-black/50 overflow-hidden relative flex flex-col border-0 sm:border border-slate-200 dark:border-white/10 pb-24">
+        /* `overflow-visible` below `sm` is load-bearing, not cosmetic: an
+           `overflow-hidden` ancestor makes itself the scrollport for any
+           `position: sticky` descendant, and this box never scrolls (it's sized
+           by `min-h`), so the machine-selector bar below silently stopped
+           sticking. Letting the phone scroll the page instead reinstates it —
+           and gives back pull-to-refresh and address-bar collapse, which a
+           nested scroller also eats. `dvh` over `vh` for the same reason: `vh`
+           is the *expanded* chrome height, so a `90vh` box overflows the real
+           viewport on mobile Safari. */
+        <div className="bg-slate-50 dark:bg-[#121214] min-h-[100dvh] sm:min-h-[90vh] sm:rounded-[2.5rem] shadow-2xl shadow-black/50 overflow-visible sm:overflow-hidden relative flex flex-col border-0 sm:border border-slate-200 dark:border-white/10 pb-28">
 
             {/* Top Header Section */}
-            <div className="bg-white/80 dark:bg-black/40 backdrop-blur-3xl pt-10 pb-10 px-8 rounded-b-[2rem] relative z-20 border-b border-slate-200 dark:border-white/10 shrink-0">
-                <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+            {/* The inset is folded into the header's own padding rather than added
+                to a wrapper, so the header's background — not the page's — is what
+                paints behind the status bar in the installed PWA. */}
+            <div className="bg-white/80 dark:bg-black/40 backdrop-blur-3xl pt-[calc(env(safe-area-inset-top,0px)+1.25rem)] pb-6 px-5 sm:pt-[calc(env(safe-area-inset-top,0px)+2.5rem)] sm:pb-10 sm:px-8 rounded-b-[2rem] relative z-20 border-b border-slate-200 dark:border-white/10 shrink-0">
+                <div className="absolute top-[calc(env(safe-area-inset-top,0px)+0.75rem)] right-3 sm:right-4 z-50 flex items-center gap-2">
                     {userRole === 'admin' || userRole === 'super_admin' ? (
                         <Link href="/admin" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10" title="Return to Admin HQ">
                             <ShieldCheck className="w-5 h-5 text-accent-green" />
@@ -443,7 +469,8 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
 
                 {(userRole === 'admin' || userRole === 'super_admin') && activeDispatches.length > 1 ? (
                     <select
-                        className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight leading-none mb-4 bg-transparent border-b border-slate-300 dark:border-slate-600 focus:outline-none focus:border-accent-blue cursor-pointer"
+                        aria-label="Select driver"
+                        className="max-w-full text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight leading-none mt-6 sm:mt-0 mb-1 sm:mb-4 bg-transparent border-b border-slate-300 dark:border-slate-600 focus:outline-none focus:border-accent-blue cursor-pointer"
                         value={selectedDispatchIndex}
                         onChange={(e) => setSelectedDispatchIndex(Number(e.target.value))}
                     >
@@ -454,14 +481,17 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                         ))}
                     </select>
                 ) : (
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight leading-none mb-4">{currentDispatch.driver.name}</h1>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight leading-none mb-1 sm:mb-4 pr-28 truncate">
+                        {currentDispatch.driver.name}
+                    </h1>
                 )}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 py-6 relative z-10 custom-scrollbar">
+            {/* No `overflow-y-auto` below `sm` — see the container comment above. */}
+            <div className="flex-1 sm:overflow-y-auto px-4 py-4 sm:py-6 relative z-10 custom-scrollbar">
 
                 {/* Machine Selection Bar */}
-                <div className="mb-6 relative z-40 sticky top-0 bg-slate-50/90 dark:bg-[#121214]/90 backdrop-blur-md pb-2 pt-2">
+                <div className="mb-4 sm:mb-6 relative z-40 sticky top-0 bg-slate-50/95 dark:bg-[#121214]/95 backdrop-blur-md pb-2 pt-2">
                     <div className="relative group mb-3">
                         <select
                             value={selectedMachine}
@@ -544,13 +574,13 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                         <div className="flex bg-slate-100 dark:bg-black/40 p-1 rounded-xl border border-slate-200 dark:border-white/10 w-full mb-4">
                             <button
                                 onClick={() => setViewMode("BAG")}
-                                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${viewMode === "BAG" ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${viewMode === "BAG" ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
                             >
                                 Bag Inventory
                             </button>
                             <button
                                 onClick={() => setViewMode("MACHINE")}
-                                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${viewMode === "MACHINE" ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${viewMode === "MACHINE" ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
                             >
                                 Machine Stock
                             </button>
@@ -670,79 +700,53 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-white/5 w-full">
+                                            <div className="flex items-start justify-between gap-2 pt-3 border-t border-slate-100 dark:border-white/5 w-full">
 
                                                 {/* Returned Counter (Machine View Only) */}
                                                 {viewMode === "MACHINE" && (
-                                                    <div className="flex flex-col flex-1 pl-1">
-                                                        <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1 text-center block">Returned (From Machine)</span>
-                                                        <div className="mx-auto flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                            <button onClick={() => updateItem(row.itemId, 'returned', Math.max(0, row.returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                            <NumericInput
-                                                                autoComplete="off"
-                                                                value={row.returned}
-                                                                onChange={(n) => updateItem(row.itemId, 'returned', n)}
-                                                                aria-label="Returned quantity"
-                                                                className="flex-1 min-w-0 text-center font-bold text-slate-900 dark:text-white bg-transparent border-none outline-none"
-                                                            />
-                                                            <button onClick={() => {
-                                                                const newVal = row.returned + 1;
-                                                                updateItem(row.itemId, 'returned', Math.max(0, newVal));
-                                                            }} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
-                                                        </div>
-                                                    </div>
+                                                    <QtyStepper
+                                                        label="Returned (From Machine)"
+                                                        labelClass="text-accent-orange"
+                                                        value={row.returned}
+                                                        ariaLabel="Returned quantity"
+                                                        onChange={(n) => updateItem(row.itemId, 'returned', n)}
+                                                    />
                                                 )}
 
                                                 {/* Refilled & Bag Returned Counters (Bag View Only) */}
                                                 {viewMode === "BAG" && (
                                                     <>
-                                                        <div className="flex flex-col flex-1 pl-1 pr-2">
-                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green mb-1 text-center block">Refilled (Machine)</span>
-                                                            <div className="mx-auto flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                                <button onClick={() => updateItem(row.itemId, 'refilled', Math.max(0, row.refilled - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                                <NumericInput
-                                                                    autoComplete="off"
-                                                                    value={row.refilled}
-                                                                    onChange={(n) => updateItem(row.itemId, 'refilled', n)}
-                                                                    onBlur={() => {
-                                                                        if (row.refilled + row.bag_returned > row.bagQuantity) {
-                                                                            updateItem(row.itemId, 'refilled', Math.max(0, row.bagQuantity - row.bag_returned));
-                                                                            toast.warning(`Capped to bag size (${row.bagQuantity}).`);
-                                                                        }
-                                                                    }}
-                                                                    aria-label="Refilled quantity"
-                                                                    className={`flex-1 min-w-0 text-center font-bold bg-transparent border-none outline-none ${row.refilled + row.bag_returned > row.bagQuantity ? 'text-accent-pink' : 'text-slate-900 dark:text-white'}`}
-                                                                />
-                                                                <button onClick={() => {
-                                                                    const newVal = Math.min(row.bagQuantity - row.bag_returned, row.refilled + 1);
-                                                                    updateItem(row.itemId, 'refilled', newVal);
-                                                                }} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
-                                                            </div>
-                                                        </div>
+                                                        <QtyStepper
+                                                            label="Refilled (Machine)"
+                                                            labelClass="text-accent-green"
+                                                            value={row.refilled}
+                                                            ariaLabel="Refilled quantity"
+                                                            max={row.bagQuantity - row.bag_returned}
+                                                            overBudget={row.refilled + row.bag_returned > row.bagQuantity}
+                                                            onChange={(n) => updateItem(row.itemId, 'refilled', n)}
+                                                            onBlur={() => {
+                                                                if (row.refilled + row.bag_returned > row.bagQuantity) {
+                                                                    updateItem(row.itemId, 'refilled', Math.max(0, row.bagQuantity - row.bag_returned));
+                                                                    toast.warning(`Capped to bag size (${row.bagQuantity}).`);
+                                                                }
+                                                            }}
+                                                        />
 
-                                                        <div className="flex flex-col flex-1 pl-1">
-                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-accent-orange mb-1 whitespace-nowrap text-center block">Return (Warehouse)</span>
-                                                            <div className="mx-auto flex items-center h-10 w-full max-w-[140px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
-                                                                <button onClick={() => updateItem(row.itemId, 'bag_returned', Math.max(0, row.bag_returned - 1))} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300">-</button>
-                                                                <NumericInput
-                                                                    autoComplete="off"
-                                                                    value={row.bag_returned}
-                                                                    onChange={(n) => updateItem(row.itemId, 'bag_returned', n)}
-                                                                    onBlur={() => {
-                                                                        if (row.refilled + row.bag_returned > row.bagQuantity) {
-                                                                            updateItem(row.itemId, 'bag_returned', Math.max(0, row.bagQuantity - row.refilled));
-                                                                            toast.warning(`Capped to bag size (${row.bagQuantity}).`);
-                                                                        }
-                                                                    }}
-                                                                    aria-label="Bag returned quantity"
-                                                                    className={`flex-1 min-w-0 text-center font-bold bg-transparent border-none outline-none ${row.refilled + row.bag_returned > row.bagQuantity ? 'text-accent-pink' : 'text-slate-900 dark:text-white'}`}
-                                                                />
-                                                                <button onClick={() => {
-                                                                    const newVal = Math.min(row.bagQuantity - row.refilled, row.bag_returned + 1);
-                                                                    updateItem(row.itemId, 'bag_returned', newVal);
-                                                                }} className="w-10 h-full flex items-center justify-center text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 text-lg">+</button>
-                                                            </div>
-                                                        </div>
+                                                        <QtyStepper
+                                                            label="Return (Warehouse)"
+                                                            labelClass="text-accent-orange"
+                                                            value={row.bag_returned}
+                                                            ariaLabel="Bag returned quantity"
+                                                            max={row.bagQuantity - row.refilled}
+                                                            overBudget={row.refilled + row.bag_returned > row.bagQuantity}
+                                                            onChange={(n) => updateItem(row.itemId, 'bag_returned', n)}
+                                                            onBlur={() => {
+                                                                if (row.refilled + row.bag_returned > row.bagQuantity) {
+                                                                    updateItem(row.itemId, 'bag_returned', Math.max(0, row.bagQuantity - row.refilled));
+                                                                    toast.warning(`Capped to bag size (${row.bagQuantity}).`);
+                                                                }
+                                                            }}
+                                                        />
                                                     </>
                                                 )}
 
@@ -768,34 +772,133 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 )}
             </div>
 
-            {/* Bottom Sticky Action Bar */}
+            {/* Bottom Action Bar.
+                `fixed` below `sm`, `absolute` from `sm` up. It was `absolute` at
+                every width inside a box whose height is its content, so on a
+                phone the Submit button sat at the bottom of the *item list* —
+                a driver with 20 items had to scroll past all of them to reach
+                the only button on the screen. It's now pinned to the viewport
+                and lifted clear of the home indicator. */}
             {selectedMachine && (
-                <div className="absolute bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-[#121214]/90 backdrop-blur-xl border-t border-slate-200 dark:border-white/10 z-50">
-                    <motion.button
-                        whileTap={{ scale: 0.98 }}
-                        onClick={handleBatchSubmit}
-                        disabled={isSuccess || isPending}
-                        className={`w-full flex items-center justify-center gap-3 h-14 rounded-[1rem] font-bold text-lg transition-all shadow-xl ${isSuccess ? 'bg-accent-green text-black shadow-accent-green/20' : 'bg-accent-blue text-black hover:bg-accent-blue/90 shadow-accent-blue/20 disabled:opacity-50'}`}
-                    >
-                        {isSuccess ? (
-                            <>
-                                <CheckCircle2 className="w-6 h-6" />
-                                Synced Successfully
-                            </>
-                        ) : isPending ? (
-                            <>
-                                <Loader2 className="w-6 h-6 animate-spin" />
-                                Saving Data...
-                            </>
-                        ) : (
-                            <>
-                                <Save className="w-5 h-5" />
-                                Submit Inventory
-                            </>
-                        )}
-                    </motion.button>
+                <div className="fixed sm:absolute bottom-0 left-0 right-0 p-3 sm:p-4 pb-safe sm:pb-4 bg-white/95 dark:bg-[#121214]/95 backdrop-blur-xl border-t border-slate-200 dark:border-white/10 z-50" style={{ ["--safe-extra" as string]: "0.75rem" }}>
+                    <div className="max-w-md mx-auto">
+                        {/* What is actually about to be submitted. Without this the
+                            driver's only confirmation of a 15-item count is the
+                            toast *after* it has already been written. */}
+                        <div className="flex items-center justify-between gap-2 px-1 pb-2 font-mono text-[10px] font-bold uppercase tracking-widest">
+                            {stagedSummary.items === 0 ? (
+                                <span className="text-slate-400 dark:text-slate-500">Nothing counted yet</span>
+                            ) : (
+                                <>
+                                    <span className="text-slate-500 dark:text-slate-400">
+                                        {stagedSummary.items} item{stagedSummary.items === 1 ? "" : "s"} staged
+                                    </span>
+                                    <span className="flex items-center gap-2 shrink-0">
+                                        {stagedSummary.refilled > 0 && (
+                                            <span className="text-accent-green">+{stagedSummary.refilled} in</span>
+                                        )}
+                                        {stagedSummary.returned > 0 && (
+                                            <span className="text-accent-orange">{stagedSummary.returned} out</span>
+                                        )}
+                                        {stagedSummary.bagReturned > 0 && (
+                                            <span className="text-accent-orange">{stagedSummary.bagReturned} to WH</span>
+                                        )}
+                                    </span>
+                                </>
+                            )}
+                        </div>
+
+                        <motion.button
+                            whileTap={{ scale: 0.98 }}
+                            onClick={handleBatchSubmit}
+                            disabled={isSuccess || isPending}
+                            className={`w-full flex items-center justify-center gap-3 h-14 rounded-[1rem] font-bold text-lg transition-all shadow-xl ${isSuccess ? 'bg-accent-green text-black shadow-accent-green/20' : 'bg-accent-blue text-black hover:bg-accent-blue/90 shadow-accent-blue/20 disabled:opacity-50'}`}
+                        >
+                            {isSuccess ? (
+                                <>
+                                    <CheckCircle2 className="w-6 h-6" />
+                                    Synced Successfully
+                                </>
+                            ) : isPending ? (
+                                <>
+                                    <Loader2 className="w-6 h-6 animate-spin" />
+                                    Saving Data...
+                                </>
+                            ) : (
+                                <>
+                                    <Save className="w-5 h-5" />
+                                    {isOffline ? "Save Offline" : "Submit Inventory"}
+                                </>
+                            )}
+                        </motion.button>
+                    </div>
                 </div>
             )}
         </div>
     )
+}
+
+/**
+ * One quantity control. All three counters on the refill sheet were separate
+ * 20-line copies of the same markup with 40px hit targets; this is the single
+ * version, at 44px — the minimum comfortable target — with the label wired to
+ * the input so a tap on the caption focuses the box.
+ *
+ * `max` bounds the "+" button only. Typing is deliberately left unbounded so the
+ * caller's `onBlur` can explain the cap with a toast instead of silently
+ * rewriting digits under the driver's finger.
+ */
+function QtyStepper({
+    label,
+    labelClass,
+    value,
+    onChange,
+    onBlur,
+    ariaLabel,
+    max,
+    overBudget = false,
+}: {
+    label: string;
+    labelClass: string;
+    value: number;
+    onChange: (n: number) => void;
+    onBlur?: () => void;
+    ariaLabel: string;
+    max?: number;
+    overBudget?: boolean;
+}) {
+    return (
+        <div className="flex flex-col flex-1 min-w-0">
+            <span className={`text-[10px] font-bold uppercase tracking-widest mb-1.5 text-center block truncate ${labelClass}`}>
+                {label}
+            </span>
+            <div className="mx-auto flex items-center h-11 w-full max-w-[150px] bg-slate-50 dark:bg-black/30 rounded-full border border-slate-200 dark:border-white/5 shrink-0 overflow-hidden">
+                <button
+                    type="button"
+                    aria-label={`Decrease ${ariaLabel}`}
+                    onClick={() => onChange(Math.max(0, value - 1))}
+                    className="w-11 h-full flex items-center justify-center text-xl leading-none text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 dark:active:bg-white/10 disabled:opacity-30"
+                    disabled={value <= 0}
+                >
+                    −
+                </button>
+                <NumericInput
+                    autoComplete="off"
+                    value={value}
+                    onChange={onChange}
+                    onBlur={onBlur}
+                    aria-label={ariaLabel}
+                    className={`flex-1 min-w-0 w-full text-center font-bold bg-transparent border-none outline-none ${overBudget ? 'text-accent-pink' : 'text-slate-900 dark:text-white'}`}
+                />
+                <button
+                    type="button"
+                    aria-label={`Increase ${ariaLabel}`}
+                    onClick={() => onChange(max === undefined ? value + 1 : Math.max(0, Math.min(max, value + 1)))}
+                    className="w-11 h-full flex items-center justify-center text-xl leading-none text-slate-500 hover:bg-slate-200 dark:hover:bg-white/5 active:bg-slate-300 dark:active:bg-white/10"
+                >
+                    +
+                </button>
+            </div>
+        </div>
+    );
 }
