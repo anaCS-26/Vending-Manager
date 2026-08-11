@@ -8,6 +8,7 @@ import SystemHealthPanel from "@/components/super/SystemHealthPanel";
 import SensitiveFeed from "@/components/super/SensitiveFeed";
 import { getExecutiveKpis, getSystemHealth, getIntegrityAlerts, getOversightSummary, type ExecutiveRange } from "@/actions/super-insights";
 import { formatCurrency, cn } from "@/lib/utils";
+import { Money } from "@/components/RiyalSymbol";
 
 const RANGES: { value: ExecutiveRange; label: string }[] = [
     { value: "7days", label: "7D" },
@@ -70,7 +71,7 @@ export default async function SuperOverviewPage(props: { searchParams: Promise<{
                 <KpiCard
                     href="/admin/financials"
                     title="Revenue"
-                    value={formatCurrency(kpis.revenue)}
+                    value={<Money amount={kpis.revenue} />}
                     subtitle={sub}
                     icon={<TrendingUp className="w-6 h-6 text-accent-green" />}
                     color="text-accent-green"
@@ -79,7 +80,7 @@ export default async function SuperOverviewPage(props: { searchParams: Promise<{
                 <KpiCard
                     href="/admin/financials"
                     title="Net Profit"
-                    value={formatCurrency(kpis.netProfit)}
+                    value={<Money amount={kpis.netProfit} />}
                     subtitle={sub}
                     icon={<Wallet className="w-6 h-6 text-accent-blue" />}
                     color={kpis.netProfit >= 0 ? "text-accent-blue" : "text-accent-pink"}
@@ -98,7 +99,7 @@ export default async function SuperOverviewPage(props: { searchParams: Promise<{
                 <KpiCard
                     href="/admin/warehouse"
                     title="Inventory Value"
-                    value={formatCurrency(kpis.inventoryValue)}
+                    value={<Money amount={kpis.inventoryValue} />}
                     subtitle="Warehouse on-hand at WAC"
                     icon={<Package className="w-6 h-6 text-accent-orange" />}
                     color="text-accent-orange"

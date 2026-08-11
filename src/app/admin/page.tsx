@@ -27,6 +27,7 @@ import Link from "next/link";
 import prisma from "@/lib/prisma";
 import MapVisualWrapper from "@/components/MapVisualWrapper";
 import KpiCard from "@/components/KpiCard";
+import { Money } from "@/components/RiyalSymbol";
 import { formatSaudiDate, formatSaudiTime, startOfRiyadhDay } from "@/lib/utils";
 import type { OverviewSnapshot, AttentionAssignment, AttentionReturn, AtRiskMachine } from "@/actions/overview";
 
@@ -529,17 +530,7 @@ export default async function AdminDashboard() {
                 <KpiCard
                     href="/admin/analytics"
                     title="REVENUE TODAY"
-                    value={
-                        <span className="flex items-baseline gap-1.5 min-w-0">
-                            {/* The Saudi Riyal sign (U+20C1) is a 2025 Unicode addition
-                                that most Android builds and older iOS versions have no
-                                glyph for — on the phone this dashboard is read from, it
-                                renders as tofu or a wrong mark next to the day's revenue.
-                                The ISO code always renders. */}
-                            <span className="font-mono text-sm sm:text-lg font-bold opacity-70 shrink-0">SAR</span>
-                            <span className="truncate">{revenueToday.toLocaleString()}</span>
-                        </span>
-                    }
+                    value={<Money amount={revenueToday} decimals={0} />}
                     subtitle="Sales reported today"
                     icon={<Activity className="w-7 h-7 text-accent-green" />}
                     color="text-accent-green"

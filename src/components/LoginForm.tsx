@@ -4,27 +4,25 @@ import { useState } from "react"
 import Link from "next/link"
 import { authenticate } from "@/actions/auth"
 import { useActionState } from "react"
-import { MapPin, KeyRound, Phone, Mail, Eye, EyeOff, KeySquare, Loader2, ShieldCheck, Truck } from "lucide-react"
+import { KeyRound, Phone, Mail, Eye, EyeOff, KeySquare, Loader2, ShieldCheck, Truck } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 
+/**
+ * Form only — the surrounding panel, heading and glow come from <AuthShell>,
+ * which /forgot-password and /reset-password already use. This component used
+ * to carry its own hand-copied version of that chrome, and it had already
+ * drifted: raw `emerald-*` instead of the `accent-green` token, and `font-black`
+ * on a face that caps at 800 (so the browser synthesised the weight).
+ */
 export default function LoginForm() {
     const [errorMessage, formAction, isPending] = useActionState(authenticate, undefined)
     const [loginMode, setLoginMode] = useState<"driver" | "admin">("driver")
     const [showPassword, setShowPassword] = useState(false)
 
     return (
-        <div className="w-full max-w-md mx-auto relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center p-4 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 mb-6 shadow-[0_0_30px_rgba(52,211,153,0.15)] glow-effect">
-                    <MapPin className="w-10 h-10 text-emerald-400" />
-                </div>
-                <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter mb-2">Vending Core</h1>
-            </div>
-
-            <div className="glass-panel border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 relative overflow-hidden shadow-2xl bg-gradient-to-b from-white/5 to-transparent backdrop-blur-xl">
-
+        <>
                 {/* Mode Toggles */}
-                <div className="flex bg-slate-100 dark:bg-black/40 p-1.5 rounded-2xl mb-8 border border-slate-200 dark:border-white/5 relative">
+                <div className="flex bg-slate-100 dark:bg-black/40 p-1.5 rounded-2xl mb-6 sm:mb-8 border border-slate-200 dark:border-white/5 relative">
                     <button
                         onClick={() => { setLoginMode("driver"); setShowPassword(false); }}
                         className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-[1rem] transition-all text-xs font-bold uppercase tracking-widest ${loginMode === "driver" ? "bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm" : "hover:bg-slate-200 dark:hover:bg-white/5 text-slate-500 dark:text-slate-400"}`}
@@ -166,7 +164,6 @@ export default function LoginForm() {
                         )}
                     </button>
                 </form>
-            </div>
-        </div>
+        </>
     )
 }

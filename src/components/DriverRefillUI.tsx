@@ -1,6 +1,6 @@
 "use client"
 import { useState, useTransition, useEffect } from "react"
-import { CheckCircle2, ChevronDown, Package, Plus, MapPin, Zap, Search, Loader2, Save, Camera, Navigation, FileText, WifiOff, Wifi } from "lucide-react"
+import { CheckCircle2, ChevronDown, Package, Plus, MapPin, Zap, Search, Loader2, Save, Camera, Navigation, FileText } from "lucide-react"
 import { logBatchRefills, getMachineInventoryDetails, getItems, uploadItemImage } from "@/actions/inventory"
 import imageCompression from 'browser-image-compression';
 import { motion, AnimatePresence } from "framer-motion"
@@ -102,7 +102,6 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
     }, [])
 
     const [isOffline, setIsOffline] = useState(false);
-    const pendingSyncCount = offlineLogs.length;
 
     const autoSyncQueue = async () => {
         if (offlineLogs.length === 0) return;
@@ -456,16 +455,9 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                     <ThemeToggle />
                 </div>
 
-                <AnimatePresence>
-                    {isOffline && (
-                        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-white px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-lg shadow-amber-500/20 whitespace-nowrap">
-                            <WifiOff className="w-3.5 h-3.5" />
-                            Offline Mode - Saving Locally
-                            {pendingSyncCount > 0 && <span className="bg-white/20 px-2 py-0.5 rounded-full">{pendingSyncCount} pending</span>}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
+                {/* Offline/queue state lives in <OfflineIndicator/> (driver layout)
+                    now — it was a pill in this header, which meant the driver lost
+                    sight of a pending queue the moment they left this screen. */}
 
                 {(userRole === 'admin' || userRole === 'super_admin') && activeDispatches.length > 1 ? (
                     <select

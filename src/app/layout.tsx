@@ -39,6 +39,13 @@ export const metadata: Metadata = {
     title: "NexGen VMS",
     statusBarStyle: "black-translucent",
   },
+  // iOS ignores the manifest's icon list entirely and reads only this. The file
+  // isn't in the repo yet — see public/icons/README.md for the spec. Until it
+  // lands the browser falls back to /favicon.ico, exactly as it does today.
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 /**

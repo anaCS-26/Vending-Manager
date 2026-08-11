@@ -5,6 +5,7 @@ import { formatCurrency } from "@/lib/utils";
 import { ArrowUp, ArrowDown, Search } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import { SortIcon } from "@/components/SortIcon";
+import { DataCard, MobileSortSelect } from "@/components/DataCard";
 
 export type FinancialRowData = {
     id: string | number;
@@ -17,6 +18,16 @@ export type FinancialRowData = {
     baseExpenses?: number;
     netProfit: number;
 };
+
+// Same keys as the sortable column headers, so both views drive one `handleSort`.
+const MOBILE_SORT_OPTIONS: { key: keyof FinancialRowData; label: string }[] = [
+    { key: "revenue", label: "Revenue" },
+    { key: "netProfit", label: "Net benefit" },
+    { key: "cogs", label: "Est. COGS" },
+    { key: "shrinkage", label: "Shrinkage" },
+    { key: "expenses", label: "Operating exp" },
+    { key: "label", label: "Segment" },
+];
 
 export default function SortableFinancialTable({ data }: { data: FinancialRowData[] }) {
     const topScrollRef = useRef<HTMLDivElement>(null);
@@ -122,20 +133,71 @@ export default function SortableFinancialTable({ data }: { data: FinancialRowDat
                 </div>
             </div>
 
-            <div className="relative">
+            {/* Phone: cards. The table below is `hidden sm:block`. */}
+            <div className="sm:hidden space-y-3">
+                <MobileSortSelect
+                    options={MOBILE_SORT_OPTIONS}
+                    sortKey={sortConfig.key}
+                    direction={sortConfig.direction}
+                    onSort={handleSort}
+                />
+                {paginatedData.length === 0 ? (
+                    <div className="py-12 text-center text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest text-xs">
+                        No telemetry matches selected segment filters.
+                    </div>
+                ) : (
+                    paginatedData.map((item) => (
+                        <DataCard
+                            key={item.id}
+                            title={<span className="uppercase">{item.label}</span>}
+                            meta={
+                                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                                    {item.subLabel}
+                                </span>
+                            }
+                            highlight={{
+                                label: "Net benefit",
+                                value: formatCurrency(item.netProfit),
+                                tone: item.netProfit < 0 ? "danger" : "good",
+                            }}
+                            fields={[
+                                { label: "Revenue", value: formatCurrency(item.revenue) },
+                                { label: "Est. COGS", value: formatCurrency(item.cogs), tone: "muted" },
+                                { label: "Shrinkage", value: `-${formatCurrency(item.shrinkage)}`, tone: "warn" },
+                                {
+                                    label: "Operating exp",
+                                    value: (
+                                        <>
+                                            {formatCurrency(item.expenses)}
+                                            {item.baseExpenses ? (
+                                                <span className="block text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-normal">
+                                                    ({formatCurrency(item.baseExpenses)}/mo)
+                                                </span>
+                                            ) : null}
+                                        </>
+                                    ),
+                                    tone: "muted",
+                                },
+                            ]}
+                        />
+                    ))
+                )}
+            </div>
+
+            <div className="relative hidden sm:block">
             {/* Top Synchronized Scrollbar */}
             {isScrollable && (
-                <div 
-                    className="overflow-x-auto custom-scrollbar w-full border-b border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]" 
-                    ref={topScrollRef} 
+                <div
+                    className="overflow-x-auto custom-scrollbar w-full border-b border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]"
+                    ref={topScrollRef}
                     style={{ height: '14px' }}
                     onScroll={handleTopScroll}
                 >
                     <div style={{ width: `${tableWidth}px`, height: '1px' }}></div>
                 </div>
             )}
-            
-            <div 
+
+            <div
                 className="overflow-x-auto custom-scrollbar"
                 ref={tableScrollRef}
                 onScroll={handleTableScroll}
