@@ -1850,7 +1850,12 @@ export async function calibrateWarehouseStock(
                     message: `Recounted ${changes.length} item(s) in ${warehouse.name}. Net qty delta: ${changes.reduce((a, c) => a + c.delta, 0)}.${note && note.trim() ? ` Note: ${note.trim()}` : ''}`,
                 },
             });
-        });
+            // Partial mitigation for the same P2028 that broke PO receiving: this
+            // loop still runs 4-8 sequential queries per item, so at the pooler's
+            // ~70-100ms per round trip a recount of ~12 items blew the default 5s
+            // window. 15s buys roughly 35 items. The real fix is the set-based
+            // rewrite completePurchaseOrder got — NOT done here yet.
+        }, { timeout: 15_000, maxWait: 5_000 });
 
         revalidatePath('/admin/warehouse');
         revalidatePath('/admin/financials');
