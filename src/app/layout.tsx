@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Geist, Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
@@ -32,6 +32,40 @@ export const metadata: Metadata = {
   title: "Vending Manager Pro",
   description: "A professional inventory management system for vending routes.",
   manifest: "/manifest.json",
+  // Drivers run this from the home screen on iOS, where the tab-bar chrome is
+  // gone and the status bar overlaps the page unless it's declared translucent.
+  appleWebApp: {
+    capable: true,
+    title: "NexGen VMS",
+    statusBarStyle: "black-translucent",
+  },
+  // iOS ignores the manifest's icon list entirely and reads only this. The file
+  // isn't in the repo yet — see public/icons/README.md for the spec. Until it
+  // lands the browser falls back to /favicon.ico, exactly as it does today.
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/icons/apple-touch-icon.png",
+  },
+};
+
+/**
+ * `viewportFit: "cover"` lets the app paint under the notch and the iOS home
+ * indicator; everything that sits at a screen edge then pays that back with the
+ * `pb-safe` / `pt-safe` utilities in globals.css. Without it, `env(safe-area-inset-*)`
+ * resolves to 0 and the driver's Submit bar sits under the home indicator.
+ *
+ * `maximumScale` is deliberately left unset — pinch-zoom is an accessibility
+ * affordance, and the iOS focus-zoom it's usually suppressed for is already
+ * handled by keeping every input at >=16px.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
 };
 
 export default function RootLayout({

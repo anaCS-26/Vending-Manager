@@ -6,6 +6,7 @@ import { SortIcon } from "@/components/SortIcon";
 import type { WarehouseWithItem, WarehouseType } from "@/types";
 import type { Item } from "@prisma/client";
 import { formatCurrency } from "@/lib/utils";
+import { DataCard, MobileSortSelect } from "@/components/DataCard";
 import WarehouseAuditModal from "./WarehouseAuditModal";
 import CostCorrectionModal from "./CostCorrectionModal";
 
@@ -17,6 +18,18 @@ type Props = {
 };
 
 type SortKey = "name" | "quantity_on_hand" | "pending_deficit" | "cost" | "price_standard" | "price_hospital" | "price_hotel" | "total_amount" | "location";
+
+// Mirrors the sortable column headers, minus the two tier prices that nobody
+// sorts a phone list by. Same keys, so both views drive one `handleSort`.
+const MOBILE_SORT_OPTIONS: { key: SortKey; label: string }[] = [
+    { key: "name", label: "Item name" },
+    { key: "quantity_on_hand", label: "Stock remaining" },
+    { key: "total_amount", label: "Total value" },
+    { key: "cost", label: "Unit cost" },
+    { key: "price_standard", label: "Std price" },
+    { key: "pending_deficit", label: "Due / owed" },
+    { key: "location", label: "Location" },
+];
 
 export default function WarehouseInventoryTable({ inventory, warehouses, existingItems, isSuperAdmin = false }: Props) {
     const topScrollRef = useRef<HTMLDivElement>(null);
@@ -143,7 +156,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
     return (
         <>
             <div className="glass-panel border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden relative space-y-4 shadow-xl">
-                <div className="px-6 py-5 border-b border-slate-200 dark:border-white/5 flex flex-col lg:flex-row items-start lg:items-center justify-between bg-white/[0.02] gap-4">
+                <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-200 dark:border-white/5 flex flex-col lg:flex-row items-start lg:items-center justify-between bg-white/[0.02] gap-4">
                     <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2 tracking-tight whitespace-nowrap">
                         <Package className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                         Inventory Tracker
@@ -198,10 +211,84 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                     </div>
                 </div>
 
+                {/* Phone: cards. The table below is `hidden sm:block`. */}
+                <div className="sm:hidden px-4 pb-4 space-y-3">
+                    <MobileSortSelect
+                        options={MOBILE_SORT_OPTIONS}
+                        sortKey={sortConfig.key}
+                        direction={sortConfig.direction}
+                        onSort={handleSort}
+                    />
+                    {paginatedData.map((stock, index) => {
+                        const item = stock.item as any;
+                        const totalAmount = stock.quantity_on_hand * (item.cost || 0);
+                        const isZero = stock.quantity_on_hand === 0;
+                        const globalIndex = (currentPage - 1) * PAGE_SIZE + index + 1;
+
+                        return (
+                            <DataCard
+                                key={`${stock.warehouseId}-${stock.itemId}`}
+                                accentBorder={stock.pending_deficit > 0}
+                                title={
+                                    <span className="uppercase">
+                                        <span className="font-mono text-[10px] text-slate-400 mr-1.5">{globalIndex}</span>
+                                        {stock.item.name}
+                                    </span>
+                                }
+                                meta={
+                                    <>
+                                        <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 uppercase">
+                                            #{stock.item.sku}
+                                        </span>
+                                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">
+                                            {stock.item.category}
+                                        </span>
+                                        {item.bulk_format && (
+                                            <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/5 uppercase tracking-wide">
+                                                {item.bulk_format}
+                                            </span>
+                                        )}
+                                        {selectedWarehouseId === "all" && (
+                                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                                                {stock.warehouse?.name || "Unknown"}
+                                            </span>
+                                        )}
+                                    </>
+                                }
+                                highlight={{
+                                    label: "In stock",
+                                    value: stock.quantity_on_hand.toLocaleString(),
+                                    tone: isZero ? "warn" : "default",
+                                }}
+                                fields={[
+                                    { label: "Unit cost", value: formatCurrency(item.cost || 0), tone: "muted" },
+                                    { label: "Std price", value: formatCurrency(item.price_standard) },
+                                    { label: "Hosp price", value: formatCurrency(item.price_hospital || 0), tone: "muted" },
+                                    { label: "Hotel price", value: formatCurrency(item.price_hotel || 0), tone: "muted" },
+                                    {
+                                        label: "Total value",
+                                        value: formatCurrency(totalAmount),
+                                        tone: isZero ? "warn" : "default",
+                                    },
+                                    // Only worth a slot when there is one — a column of
+                                    // zeroes is what made the table too wide to read.
+                                    ...(stock.pending_deficit > 0
+                                        ? [{
+                                            label: "Owed by supplier",
+                                            value: `+${stock.pending_deficit.toLocaleString()}`,
+                                            tone: "warn" as const,
+                                        }]
+                                        : []),
+                                ]}
+                            />
+                        );
+                    })}
+                </div>
+
                 {isScrollable && (
-                    <div 
-                        className="overflow-x-auto custom-scrollbar w-full border-b border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]" 
-                        ref={topScrollRef} 
+                    <div
+                        className="hidden sm:block overflow-x-auto custom-scrollbar w-full border-b border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]"
+                        ref={topScrollRef}
                         style={{ height: '14px' }}
                         onScroll={(e) => {
                             if (tableScrollRef.current && topScrollRef.current) {
@@ -213,8 +300,8 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                     </div>
                 )}
                 
-                <div 
-                    className="overflow-x-auto custom-scrollbar"
+                <div
+                    className="hidden sm:block overflow-x-auto custom-scrollbar"
                     ref={tableScrollRef}
                     onScroll={(e) => {
                         if (tableScrollRef.current && topScrollRef.current) {
@@ -345,7 +432,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                 </div>
 
                 {sortedInventory.length === 0 && (
-                    <div className="p-16 text-center flex flex-col items-center justify-center">
+                    <div className="p-8 sm:p-16 text-center flex flex-col items-center justify-center">
                         <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/5 flex items-center justify-center border border-slate-200 dark:border-white/10 mb-4">
                             <Package className="w-8 h-8 text-slate-500 dark:text-slate-400 opacity-50" />
                         </div>

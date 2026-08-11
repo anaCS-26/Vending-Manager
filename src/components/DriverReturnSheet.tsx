@@ -95,7 +95,7 @@ export function DriverReturnSheet({
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 40, opacity: 0 }}
                         onClick={(e) => e.stopPropagation()}
-                        className="bg-white dark:bg-[#121214] w-full sm:max-w-md sm:mx-4 sm:rounded-3xl rounded-t-3xl shadow-2xl border border-slate-200 dark:border-white/10 max-h-[90vh] flex flex-col overflow-hidden"
+                        className="bg-white dark:bg-[#121214] w-full sm:max-w-md sm:mx-4 sm:rounded-3xl rounded-t-3xl shadow-2xl border border-slate-200 dark:border-white/10 max-h-[90dvh] sm:max-h-[90vh] flex flex-col overflow-hidden"
                     >
                         <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-white/10">
                             <div className="flex items-center gap-3">
@@ -201,7 +201,9 @@ export function DriverReturnSheet({
                             )}
                         </div>
 
-                        <div className="p-5 border-t border-slate-200 dark:border-white/10 flex items-center gap-2">
+                        {/* pb-safe: this sheet is flush with the bottom edge on a
+                            phone, so its buttons land on the home indicator. */}
+                        <div className="p-5 pb-safe border-t border-slate-200 dark:border-white/10 flex items-center gap-2" style={{ ["--safe-extra" as string]: "1.25rem" }}>
                             <button
                                 onClick={onClose}
                                 disabled={isPending}
