@@ -10,7 +10,11 @@ type Props = {
     allRefillsData: { name: string, category: string, totalRefilled: number }[];
 };
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+// One per category, cycled by index. The catalogue carries 10 categories
+// (9 + Uncategorized) and this list held 7, so the pie handed two pairs of
+// slices the same colour — which is the one thing a category breakdown must
+// not do. Extend this if the catalogue grows past 10.
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#64748b'];
 
 export default function AnalyticsDashboardClient({ machinesData, allRefillsData }: Props) {
     const [selectedMachineId, setSelectedMachineId] = useState<string>("all");
