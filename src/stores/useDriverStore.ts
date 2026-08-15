@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { get, set, del } from 'idb-keyval';
-import type { DispatchWithRelations } from "@/types";
+import type { DispatchWithRelations, RefillEntryMode, RefillHint } from "@/types";
 
 export interface OfflineLog {
   dispatchId: number;
@@ -27,7 +27,18 @@ interface DriverState {
   activeDispatches: DispatchWithRelations[];
   machines: any[];
   offlineLogs: OfflineLog[];
+  /**
+   * Last-visit quantities per machine+item, refreshed whenever the portal loads
+   * online. Persisted with the rest of the store because the driver is often out
+   * of signal at the machine — a suggestion that only works online is missing at
+   * precisely the moment it would save typing.
+   */
+  refillHints: RefillHint[];
+  /** Which entry style the refill sheet uses. Per-device, survives reinstall. */
+  refillMode: RefillEntryMode;
   setServerData: (dispatches: DispatchWithRelations[], machines: any[]) => void;
+  setRefillHints: (hints: RefillHint[]) => void;
+  setRefillMode: (mode: RefillEntryMode) => void;
   addOfflineLog: (log: OfflineLog) => void;
   clearOfflineLogs: () => void;
   removeOfflineLogs: (logTimestamps: string[]) => void;
@@ -52,7 +63,11 @@ export const useDriverStore = create<DriverState>()(
       activeDispatches: [],
       machines: [],
       offlineLogs: [],
+      refillHints: [],
+      refillMode: 'quick',
       setServerData: (dispatches, machines) => setAct({ activeDispatches: dispatches, machines }),
+      setRefillHints: (hints) => setAct({ refillHints: hints }),
+      setRefillMode: (mode) => setAct({ refillMode: mode }),
       addOfflineLog: (log) =>
         setAct((state) => ({ offlineLogs: [...state.offlineLogs, log] })),
       clearOfflineLogs: () => setAct({ offlineLogs: [] }),

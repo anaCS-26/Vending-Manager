@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   getWarehouseInventory,
   getItems,
@@ -9,6 +9,7 @@ import {
   deleteDriver,
   createItem,
   getMachineInventoryDetails,
+  getRefillHints,
 } from '@/actions/inventory';
 import { Prisma } from '@prisma/client';
 import { prismaMock } from '../__helpers__/prisma-mock';
@@ -573,6 +574,48 @@ describe('getMachineInventoryDetails authorization', () => {
     setDriverSession(10);
     prismaMock.machineStock.findMany.mockResolvedValue([]);
     await expect(getMachineInventoryDetails(1)).resolves.toEqual([]);
+  });
+});
+
+describe('getRefillHints', () => {
+  it('throws when no session', async () => {
+    clearSession();
+    await expect(getRefillHints()).rejects.toThrow(/UNAUTHORIZED/);
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('drivers may call it (it feeds their refill sheet)', async () => {
+    setDriverSession(10);
+    prismaMock.$queryRaw.mockResolvedValueOnce([
+      { machineId: 1, itemId: 7, lastQty: 6, lastRefilledAt: new Date('2026-08-01') },
+    ]);
+    await expect(getRefillHints()).resolves.toEqual([
+      { machineId: 1, itemId: 7, lastQty: 6, lastRefilledAt: new Date('2026-08-01') },
+    ]);
+  });
+
+  it('fetches every machine in one query, not one query per machine', async () => {
+    // The driver is regularly out of signal standing at the machine, so the whole
+    // set is pulled once while online and cached in IndexedDB. Per-machine
+    // fetching would leave the hints missing exactly when they are needed.
+    setDriverSession(10);
+    prismaMock.$queryRaw.mockResolvedValueOnce([]);
+    await getRefillHints();
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    const sql = prismaMock.$queryRaw.mock.calls[0][0].join('?');
+    expect(sql).toMatch(/DISTINCT ON \("machineId", "itemId"\)/);
+    expect(sql).not.toMatch(/WHERE "machineId" =/);
+  });
+
+  it('only reads history — a hint must never mutate stock or write an audit row', async () => {
+    setDriverSession(10);
+    // writeAuditLog is a global module mock and isn't reset by resetPrismaMock.
+    vi.mocked(writeAuditLog).mockClear();
+    prismaMock.$queryRaw.mockResolvedValueOnce([]);
+    await getRefillHints();
+    expect(prismaMock.$executeRaw).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(writeAuditLog).not.toHaveBeenCalled();
   });
 });
 

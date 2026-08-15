@@ -11,6 +11,9 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('@/actions/inventory', () => ({
   logBatchRefills: vi.fn(async () => ({ success: true, data: undefined })),
   uploadItemImage: vi.fn(async () => ({ success: true, data: 'mock://blob/x' })),
+  getItems: vi.fn(async () => []),
+  getMachineInventoryDetails: vi.fn(async () => []),
+  getRefillHints: vi.fn(async () => []),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 

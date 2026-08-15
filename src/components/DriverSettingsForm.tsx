@@ -6,6 +6,8 @@ import { ArrowLeft, KeyRound, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-r
 import { toast } from "sonner";
 import { changeDriverPin } from "@/actions/auth";
 import { PushNotificationToggle } from "@/components/PushNotificationToggle";
+import { useDriverStore } from "@/stores/useDriverStore";
+import type { RefillEntryMode } from "@/types";
 
 type Props = { driverName: string };
 
@@ -69,6 +71,8 @@ export default function DriverSettingsForm({ driverName }: Props) {
                     actually returns to; PINs get changed roughly never. */}
                 <PushNotificationToggle audience="driver" />
 
+                <RefillModeChooser />
+
                 {/* PIN */}
                 <div className="space-y-5">
                     <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
@@ -110,6 +114,71 @@ export default function DriverSettingsForm({ driverName }: Props) {
                     </p>
                 </div>
             </div>
+        </div>
+    );
+}
+
+/**
+ * Which way the refill sheet fills its quantity boxes.
+ *
+ * Both styles are shipped and the driver picks — the two disagree about a real
+ * trade-off (fewer taps vs. fewer numbers to read) and the people doing 8 stops
+ * a day are better placed to settle it than anyone reading a spec. Stored on the
+ * device with the offline queue, so it needs no round trip and works in a
+ * basement car park.
+ */
+function RefillModeChooser() {
+    const refillMode = useDriverStore((s) => s.refillMode);
+    const setRefillMode = useDriverStore((s) => s.setRefillMode);
+
+    const options: { value: RefillEntryMode; title: string; blurb: string }[] = [
+        {
+            value: "quick",
+            title: "Quick entry",
+            blurb: "Boxes start empty. Items the machine looks low on come first, and each one offers last visit's amount as a one-tap button.",
+        },
+        {
+            value: "prefill",
+            title: "Prefilled",
+            blurb: "Boxes arrive already holding last visit's amount. You change what's different, then check the list once before saving.",
+        },
+    ];
+
+    return (
+        <div className="space-y-3">
+            <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                Refill screen
+            </h2>
+            <div role="radiogroup" aria-label="Refill entry style" className="space-y-2">
+                {options.map((opt) => {
+                    const active = refillMode === opt.value;
+                    return (
+                        <button
+                            key={opt.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            onClick={() => setRefillMode(opt.value)}
+                            className={`w-full text-left p-4 rounded-2xl border transition-colors ${
+                                active
+                                    ? "bg-accent-blue/5 border-accent-blue/50"
+                                    : "bg-white dark:bg-black/20 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20"
+                            }`}
+                        >
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${active ? "border-accent-blue" : "border-slate-300 dark:border-slate-600"}`}>
+                                    {active && <span className="w-2 h-2 rounded-full bg-accent-blue" />}
+                                </span>
+                                <span className="font-bold text-sm text-slate-900 dark:text-white">{opt.title}</span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-snug pl-6">{opt.blurb}</p>
+                        </button>
+                    );
+                })}
+            </div>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-snug">
+                Either way, what you enter is recorded as sold — so the numbers still have to match what you actually loaded.
+            </p>
         </div>
     );
 }
