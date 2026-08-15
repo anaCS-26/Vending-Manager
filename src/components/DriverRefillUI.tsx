@@ -15,7 +15,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NumericInput } from "@/components/NumericInput";
 import { useDriverStore, OfflineLog } from "@/stores/useDriverStore";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
-import { seedRefillQuantity, splitRefillRows, countUnconfirmed } from "@/lib/refill-entry";
+import { seedRefillQuantity, splitRefillRows, countUnconfirmed, adjustByBatch } from "@/lib/refill-entry";
 
 type DriverRefillUIProps = {
     machines: MachineType[];
@@ -540,9 +540,21 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
         });
     };
 
-    /** One-tap accept of the last-visit suggestion, capped to what's left in the bag. */
-    const applyHint = (id: number, lastQty: number, maxFromBag: number) => {
-        updateItem(id, 'refilled', Math.max(0, Math.min(lastQty, maxFromBag)));
+    /**
+     * One tap of ±batch on the refill sheet. The batch is what this machine took
+     * last visit — deliberately NOT `Item.default_assignment_qty`, which is a
+     * case going into the van: only 3.9% of refill lines are a multiple of a case
+     * pack, and the averages are 5.3 units refilled against a 22.4-unit case.
+     */
+    const adjustRefillByBatch = (id: number, delta: number, maxFromBag: number) => {
+        setMachineItems(prev => {
+            const row = prev[id];
+            if (!row) return prev;
+            return {
+                ...prev,
+                [id]: { ...row, refilled: adjustByBatch(row.refilled, delta, maxFromBag), confirmed: true, prefilled: false },
+            };
+        });
     };
 
     const activeMachineDetails = machines.find(m => m.id.toString() === selectedMachine);
@@ -744,7 +756,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                     row={row}
                                     viewMode={viewMode}
                                     updateItem={updateItem}
-                                    applyHint={applyHint}
+                                    adjustRefillByBatch={adjustRefillByBatch}
                                 />
                             ))}
 
@@ -771,7 +783,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                             row={row}
                                             viewMode={viewMode}
                                             updateItem={updateItem}
-                                            applyHint={applyHint}
+                                            adjustRefillByBatch={adjustRefillByBatch}
                                         />
                                     ))}
                                 </>
@@ -989,12 +1001,12 @@ function RefillRow({
     row,
     viewMode,
     updateItem,
-    applyHint,
+    adjustRefillByBatch,
 }: {
     row: ItemFormState;
     viewMode: "BAG" | "MACHINE";
     updateItem: (id: number, field: keyof ItemFormState, val: any) => void;
-    applyHint: (id: number, lastQty: number, maxFromBag: number) => void;
+    adjustRefillByBatch: (id: number, delta: number, maxFromBag: number) => void;
 }) {
     const isModified = row.refilled > 0 || row.returned > 0;
     const needsCheck = row.prefilled && !row.confirmed;
@@ -1073,25 +1085,39 @@ function RefillRow({
                 </div>
             </div>
 
-            {/* Suggestion chip. One tap lands within ±2 of the right answer about
-                70% of the time on this fleet's history — good enough to save the
-                keyboard, not good enough to apply on the driver's behalf. */}
+            {/* ±batch, sized to what this machine took last visit. One tap from
+                zero lands within ±2 of the right answer about 70% of the time on
+                this fleet's history — enough to save the keyboard, not enough to
+                apply on the driver's behalf. The "−" half is what makes it safe
+                to tap at all: a batch added by mistake comes back off in one
+                press instead of six on the −1 stepper. */}
             {showHint && (
-                <button
-                    type="button"
-                    onClick={() => applyHint(row.itemId, row.lastQty!, bagBudget)}
-                    disabled={hintApplied}
-                    className={`w-full min-h-[44px] mb-1 flex items-center justify-center gap-2 rounded-2xl px-3 text-xs font-bold border transition-colors ${
-                        hintApplied
-                            ? 'bg-accent-green/10 border-accent-green/40 text-accent-green'
-                            : 'bg-slate-50 dark:bg-black/30 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-accent-blue/60 active:bg-slate-100 dark:active:bg-white/5'
-                    }`}
-                >
-                    {hintApplied ? <CheckCircle2 className="w-3.5 h-3.5" /> : <History className="w-3.5 h-3.5" />}
-                    {hintApplied
-                        ? `Matches last visit (${row.lastQty})`
-                        : `Last visit: ${row.lastQty}${hintCapped ? ` — bag has ${bagBudget}` : ""}`}
-                </button>
+                <div className="mb-1 flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => adjustRefillByBatch(row.itemId, -row.lastQty!, bagBudget)}
+                        disabled={row.refilled === 0}
+                        aria-label={`Remove ${row.lastQty}, last visit's amount`}
+                        className="min-w-[64px] min-h-[44px] flex items-center justify-center rounded-2xl px-3 text-xs font-bold font-mono border bg-slate-50 dark:bg-black/30 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-accent-blue/60 active:bg-slate-100 dark:active:bg-white/5 transition-colors disabled:opacity-30"
+                    >
+                        −{row.lastQty}
+                    </button>
+
+                    <span className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${hintApplied ? 'text-accent-green' : 'text-slate-500 dark:text-slate-400'}`}>
+                        {hintApplied ? <CheckCircle2 className="w-3 h-3 shrink-0" /> : <History className="w-3 h-3 shrink-0" />}
+                        <span className="truncate">Last visit {row.lastQty}{hintCapped ? ` · bag ${bagBudget}` : ""}</span>
+                    </span>
+
+                    <button
+                        type="button"
+                        onClick={() => adjustRefillByBatch(row.itemId, row.lastQty!, bagBudget)}
+                        disabled={row.refilled >= bagBudget}
+                        aria-label={`Add ${row.lastQty}, last visit's amount`}
+                        className="min-w-[64px] min-h-[44px] flex items-center justify-center rounded-2xl px-3 text-xs font-bold font-mono border bg-slate-50 dark:bg-black/30 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-accent-blue/60 active:bg-slate-100 dark:active:bg-white/5 transition-colors disabled:opacity-30"
+                    >
+                        +{row.lastQty}
+                    </button>
+                </div>
             )}
 
             <div className="flex items-start justify-between gap-2 pt-3 border-t border-slate-100 dark:border-white/5 w-full">

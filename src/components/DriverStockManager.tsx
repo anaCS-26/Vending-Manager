@@ -23,6 +23,7 @@ import { assignToDriver, dismissAllDisputes } from "@/actions/driver-stock";
 import { createDispatchTemplate } from "@/actions/dispatch-templates";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { formatSaudiDate, formatSaudiTime } from "@/lib/utils";
+import { adjustByBatch } from "@/lib/refill-entry";
 import type { WarehouseWithItem, WarehouseType, DispatchTemplateWithItems } from "@/types";
 
 type StockAssignmentLite = {
@@ -110,8 +111,14 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
         handleQtyChange(itemId, String(currentQty + 1), max);
     };
 
-    const handleAddBatch = (itemId: number, currentQty: number, batchQty: number, max: number) => {
-        handleQtyChange(itemId, String(currentQty + batchQty), max);
+    /**
+     * One tap of ±batch. Clamped both ways rather than disabled: `+14` with 5 on
+     * hand stages 5 instead of going dead, and `−14` from 6 clears the line
+     * instead of leaving −8. Adding a batch by accident used to cost fourteen
+     * presses of "−" or a trip back to the keyboard to undo.
+     */
+    const handleAdjustBatch = (itemId: number, currentQty: number, delta: number, max: number) => {
+        handleQtyChange(itemId, String(adjustByBatch(currentQty, delta, max)), max);
     };
 
     /**
@@ -370,16 +377,36 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
                                                                 <Plus className="w-3 h-3" />
                                                             </button>
                                                         </div>
+                                                        {/* ±batch. The "−" half exists because "+14" was previously
+                                                            a one-way door: a mis-tap left the only ways back as
+                                                            fourteen presses of "−", retyping, or clearing the line
+                                                            and starting again. */}
                                                         {inv.item.default_assignment_qty > 0 && (
-                                                            <button
-                                                                onClick={() => handleAddBatch(inv.itemId, qty, inv.item.default_assignment_qty, inv.quantity_on_hand)}
-                                                                disabled={qty + inv.item.default_assignment_qty > inv.quantity_on_hand}
-                                                                aria-label={`Add a batch of ${inv.item.default_assignment_qty}`}
-                                                                title={`Add a batch of ${inv.item.default_assignment_qty}`}
-                                                                className="px-2 py-1 rounded-md border border-accent-blue/30 bg-accent-blue/5 text-[10px] font-mono font-bold text-accent-blue hover:bg-accent-blue/10 hover:border-accent-blue/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-accent-blue/5 disabled:hover:border-accent-blue/30"
-                                                            >
-                                                                +{inv.item.default_assignment_qty}
-                                                            </button>
+                                                            <div className="flex items-center rounded-md border border-accent-blue/30 bg-accent-blue/5 overflow-hidden">
+                                                                <button
+                                                                    onClick={() => handleAdjustBatch(inv.itemId, qty, -inv.item.default_assignment_qty, inv.quantity_on_hand)}
+                                                                    disabled={qty === 0}
+                                                                    aria-label={`Remove a batch of ${inv.item.default_assignment_qty}`}
+                                                                    title={`Remove a batch of ${inv.item.default_assignment_qty}`}
+                                                                    className="px-2 py-1 text-[10px] font-mono font-bold text-accent-blue hover:bg-accent-blue/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                >
+                                                                    −{inv.item.default_assignment_qty}
+                                                                </button>
+                                                                <span className="w-px self-stretch bg-accent-blue/20" aria-hidden="true" />
+                                                                <button
+                                                                    onClick={() => handleAdjustBatch(inv.itemId, qty, inv.item.default_assignment_qty, inv.quantity_on_hand)}
+                                                                    disabled={qty >= inv.quantity_on_hand}
+                                                                    aria-label={`Add a batch of ${inv.item.default_assignment_qty}`}
+                                                                    title={
+                                                                        qty + inv.item.default_assignment_qty > inv.quantity_on_hand
+                                                                            ? `Add a batch of ${inv.item.default_assignment_qty} — only ${inv.quantity_on_hand - qty} left, so that is what will be added`
+                                                                            : `Add a batch of ${inv.item.default_assignment_qty}`
+                                                                    }
+                                                                    className="px-2 py-1 text-[10px] font-mono font-bold text-accent-blue hover:bg-accent-blue/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                >
+                                                                    +{inv.item.default_assignment_qty}
+                                                                </button>
+                                                            </div>
                                                         )}
                                                         <button
                                                             onClick={() => handleQtyChange(inv.itemId, "0", inv.quantity_on_hand)}

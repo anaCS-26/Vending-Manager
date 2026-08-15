@@ -100,3 +100,20 @@ export function splitRefillRows<T extends RefillRowLike>(
 export function countUnconfirmed(rows: RefillRowLike[]): number {
     return rows.filter((r) => r.refilled > 0 && !r.confirmed).length;
 }
+
+/**
+ * One tap of a ±batch button, clamped to [0, max].
+ *
+ * Shared by the two screens that stage quantities in batches rather than units:
+ * the admin's assignment grid (batch = the item's case pack) and the driver's
+ * refill sheet (batch = what this machine took last visit — a case pack is the
+ * wrong unit there, since only 3.9% of refill lines are a multiple of one).
+ *
+ * Both directions clamp rather than refuse. A batch button that goes dead near
+ * the ceiling is the thing that sends people back to the keyboard, and one that
+ * can only add makes an accidental tap cost fourteen presses of "−" to undo.
+ */
+export function adjustByBatch(current: number, delta: number, max: number): number {
+    if (!Number.isFinite(current) || !Number.isFinite(delta)) return 0;
+    return Math.max(0, Math.min(current + delta, Math.max(0, max)));
+}

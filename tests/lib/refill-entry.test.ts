@@ -4,6 +4,7 @@ import {
     needsStock,
     splitRefillRows,
     countUnconfirmed,
+    adjustByBatch,
     type RefillRowLike,
 } from '@/lib/refill-entry';
 
@@ -125,5 +126,47 @@ describe('countUnconfirmed', () => {
     it('reports every line of a freshly prefilled sheet', () => {
         const prefilled = [6, 4, 9].map(last => row(seedRefillQuantity('prefill', last, 20)));
         expect(countUnconfirmed(prefilled)).toBe(3);
+    });
+});
+
+describe('adjustByBatch', () => {
+    it('adds a batch from zero', () => {
+        expect(adjustByBatch(0, 14, 100)).toBe(14);
+    });
+
+    it('stacks batches', () => {
+        expect(adjustByBatch(14, 14, 100)).toBe(28);
+    });
+
+    it('takes the same batch back off — the whole point of the "−" half', () => {
+        // A mis-tapped "+14" used to cost fourteen presses of "−1", retyping, or
+        // clearing the line and starting again.
+        expect(adjustByBatch(28, -14, 100)).toBe(14);
+        expect(adjustByBatch(14, -14, 100)).toBe(0);
+    });
+
+    it('floors at zero instead of going negative', () => {
+        expect(adjustByBatch(6, -14, 100)).toBe(0);
+    });
+
+    it('clamps up to the ceiling instead of refusing the tap', () => {
+        // "+14" with 5 on hand stages 5. A button that goes dead near the ceiling
+        // is what sends people back to the keyboard.
+        expect(adjustByBatch(0, 14, 5)).toBe(5);
+        expect(adjustByBatch(3, 14, 5)).toBe(5);
+    });
+
+    it('never exceeds the ceiling even when already at it', () => {
+        expect(adjustByBatch(5, 14, 5)).toBe(5);
+    });
+
+    it('treats a zero or negative ceiling as nothing available', () => {
+        expect(adjustByBatch(0, 14, 0)).toBe(0);
+        expect(adjustByBatch(0, 14, -3)).toBe(0);
+    });
+
+    it('survives a NaN without writing NaN into a quantity box', () => {
+        expect(adjustByBatch(NaN, 14, 100)).toBe(0);
+        expect(adjustByBatch(6, NaN, 100)).toBe(0);
     });
 });
