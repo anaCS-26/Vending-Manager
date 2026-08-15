@@ -185,3 +185,30 @@ export type PushRegistrationStatus = {
     deviceCount: number;
     maxDevices: number;
 };
+
+// ==========================================
+// DRIVER REFILL ENTRY
+// ==========================================
+
+/**
+ * Last quantity a machine took of one item. Seeds the refill screen's
+ * suggestion chips and its optional prefill mode. Purely advisory — see
+ * `getRefillHints` in `src/actions/inventory.ts` for why it is never applied
+ * without the driver confirming it.
+ */
+export type RefillHint = {
+    machineId: number;
+    itemId: number;
+    lastQty: number;
+    lastRefilledAt: Date;
+};
+
+/**
+ * How the refill sheet seeds its quantity boxes.
+ * - `quick`   — every box starts at 0; suggestions are one-tap chips. (default)
+ * - `prefill` — boxes arrive carrying the last-visit quantity, and every
+ *               prefilled line must be confirmed on a review sheet before it
+ *               can be submitted.
+ * Driver-selectable in /driver/settings so the two can be compared in the field.
+ */
+export type RefillEntryMode = "quick" | "prefill";

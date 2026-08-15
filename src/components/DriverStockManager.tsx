@@ -156,9 +156,13 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
         if (adjusted.length || skipped.length) {
             const clip = (list: string[]) => list.slice(0, 6).join(", ") + (list.length > 6 ? ` +${list.length - 6} more` : "");
             const parts = [];
-            if (adjusted.length) parts.push(`Capped to stock: ${clip(adjusted)}`);
-            if (skipped.length) parts.push(`Skipped (no stock here): ${clip(skipped)}`);
-            toast.warning("Template adjusted to warehouse stock", { description: parts.join(" — ") });
+            // Say what happened, not what was blocked. "Capped to stock" left the
+            // loader unsure whether the reduced quantity had been staged at all,
+            // and a driver leaving without the short line is a worse outcome than
+            // a driver leaving with whatever the warehouse had.
+            if (adjusted.length) parts.push(`Short on ${adjusted.length} item(s) — everything the warehouse has left has still been added: ${clip(adjusted)}`);
+            if (skipped.length) parts.push(`Nothing left at this warehouse, so not added: ${clip(skipped)}`);
+            toast.warning("Not enough stock for the full template", { description: parts.join(" — ") });
         }
     };
 

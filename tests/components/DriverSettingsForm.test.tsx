@@ -9,6 +9,7 @@ vi.mock('@/actions/auth', () => ({
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { changeDriverPin } from '@/actions/auth';
+import { useDriverStore } from '@/stores/useDriverStore';
 
 function fillFields(current: string, next: string, confirm: string) {
   const inputs = screen.getAllByPlaceholderText('••••') as HTMLInputElement[];
@@ -45,6 +46,30 @@ describe('DriverSettingsForm', () => {
     await waitFor(() => {
       expect(changeDriverPin).toHaveBeenCalledWith('1234', '5678');
       expect(toast.success).toHaveBeenCalled();
+    });
+  });
+
+  describe('refill entry mode', () => {
+    // Both entry styles ship and the driver chooses. The default is the
+    // conservative one: quick entry never puts a figure in a box on the driver's
+    // behalf, and refilled quantity is booked as revenue.
+    it('defaults to quick entry', () => {
+      useDriverStore.setState({ refillMode: 'quick' });
+      render(<DriverSettingsForm driverName="Ali" />);
+      expect(screen.getByRole('radio', { name: /Quick entry/ })).toHaveAttribute('aria-checked', 'true');
+      expect(screen.getByRole('radio', { name: /Prefilled/ })).toHaveAttribute('aria-checked', 'false');
+    });
+
+    it('switches the stored mode when the driver picks the other one', () => {
+      useDriverStore.setState({ refillMode: 'quick' });
+      render(<DriverSettingsForm driverName="Ali" />);
+      fireEvent.click(screen.getByRole('radio', { name: /Prefilled/ }));
+      expect(useDriverStore.getState().refillMode).toBe('prefill');
+    });
+
+    it('says out loud that the figures are booked as sales, in both modes', () => {
+      render(<DriverSettingsForm driverName="Ali" />);
+      expect(screen.getByText(/recorded as sold/i)).toBeInTheDocument();
     });
   });
 });

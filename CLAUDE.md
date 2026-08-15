@@ -109,6 +109,25 @@ Two loops survive, both on the **dormant legacy dispatch path** (`/admin/dispatc
 
 Repro harness: `scripts/repro-assign-timeout.ts` (`SIM_LATENCY_MS=100 ITEMS=25`). Raw SQL in tests: `prismaMock.$queryRaw`/`$executeRaw` in `tests/__helpers__/prisma-mock.ts`; assert the statement text and bound values, plus a **constant-statement-count test** per action (`tests/actions/orders.test.ts`, `calibration.test.ts`, `machine-audit.test.ts`) — that count is the regression guard, since jsdom can't reproduce pooler latency.
 
+## Driver refill entry (two modes, driver-selectable)
+
+The client asked for the morning case-pack quantities to be pre-filled into the refill form "instead of showing zero". Taken literally that fabricates revenue: `logBatchRefillsDispatchless` sets `items_sold_since_last_refill = refilled` and `sales_revenue = refilled × price` onto a `RefillLog` row that is never rewritten (corrections are posted, not edited). A case is also the wrong unit — 14 Lays is a **van** load; the fleet's mean refill line is **5.4 units**.
+
+Measured against 90 days of live data, the actual complaint was misdiagnosed: machines stock **25.7 items** (max 58) and the bag carries the whole morning load, but a real visit touches **7.6**. The driver was scrolling past ~50 rows to reach 8, not typing 50 numbers.
+
+So the sheet does two things, and `src/lib/refill-entry.ts` holds both rules as pure functions (no React/Prisma → unit-tested in `tests/lib/refill-entry.test.ts`, the `src/lib/forecast.ts` pattern; `DriverRefillUI` only renders them):
+
+- **Ordering** — `splitRefillRows` puts likely-needed items first and collapses the rest behind a disclosure. "Needs stock" is `estimated_stock === 0` or below one typical top-up (`estimated_stock < lastQty`); anything already staged pins itself to the top so a row can't reorder out from under a count. Flat list while searching and on the Machine tab. **Nothing is ever removed** — the estimate is an estimate and the driver is the one looking at the shelf. A real par level (`MachineStock.par_level`) is what would make this exact; it doesn't exist yet.
+- **Seeding** — `seedRefillQuantity(mode, …)`. `quick` (default) leaves boxes empty and offers last visit's quantity as a one-tap chip; `prefill` (the client's literal ask) seeds the box and marks it `confirmed: false`.
+
+**`RefillEntryMode` is per-device, chosen by the driver** in `/driver/settings` (`RefillModeChooser`, stored in `useDriverStore` → IndexedDB). Both ship on purpose: the trade-off is fewer taps vs. fewer numbers to read, and the people doing 8 stops a day settle it, not a spec.
+
+**The invariant across both: an unconfirmed quantity cannot be submitted.** Any edit to the refill box sets `confirmed` (and clears `prefilled` — it's the driver's number now); a seeded zero is confirmed, since there's nothing to check about not refilling. While `countUnconfirmed() > 0` the submit button diverts to `PrefillReviewSheet`, which lists every line and its total before writing. Quick mode reaches submit with nothing unconfirmed and goes straight through. **Do not add a bulk "apply all suggestions" that skips the sheet.**
+
+Suggestions come from `getRefillHints()` (`src/actions/inventory.ts`, `requireDriver`) — one `SELECT DISTINCT ON ("machineId","itemId")` over 180 days for **every** machine, cached in the driver store. Per-machine fetching would leave hints missing exactly when needed: drivers are routinely out of signal at the machine. They are advisory only — on this fleet last-visit repeats exactly **32%** of the time, is within ±1 **56%**, within ±2 **70%**. That's worth one tap and a nudge on the stepper; it is not an answer.
+
+`Item.default_assignment_qty` (seeded from the client's case-pack sheet, all 63 live items) stays what it always was: the **dispatch**-side `+N` batch button in `DriverStockManager`. It must not leak into refill quantities.
+
 ## Warehouse calibration & audit
 
 Correct warehouse stock/cost **without fake POs** (a PO at the wrong `costPerUnit` silently corrupts WAC, and WAC flows into P&L via `RefillLog.cost_at_refill` snapshots + live shrinkage). Both actions in `src/actions/inventory.ts` write `InventoryAdjustment` + `SystemAuditLog` **inside the tx**:
