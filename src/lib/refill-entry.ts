@@ -28,6 +28,9 @@ export type RefillRowLike = {
     confirmed: boolean;
 };
 
+/** Which section of the sheet a row sits in. Decided once per machine, then frozen. */
+export type RefillGroup = "primary" | "secondary";
+
 /**
  * How a row's refill box starts out.
  *
@@ -57,14 +60,34 @@ export function seedRefillQuantity(
  *
  * There is no par level on MachineStock, so "needs stock" is the best available
  * proxy: the system believes the slot is empty, or it holds less than one
- * typical top-up for this machine. Anything the driver has already staged pins
- * itself to the top regardless — a row must not reorder out from under a count
- * in progress.
+ * typical top-up for this machine. Anything already staged counts too — which
+ * matters when prefill mode seeds the sheet before the driver sees it.
+ *
+ * Evaluated exactly once per machine, by `assignRefillGroup`. See there for why
+ * it must never be re-run against live state.
  */
 export function needsStock(row: RefillRowLike): boolean {
     if (row.refilled > 0 || row.bag_returned > 0) return true;
     if (row.estimated_stock === 0) return true;
     return row.lastQty !== null && row.estimated_stock < row.lastQty;
+}
+
+/**
+ * Fixes a row's section when the machine is opened — and it is never
+ * recalculated while the driver works.
+ *
+ * This function existing separately from `needsStock` is the whole point.
+ * Deriving the section live meant a row's first `+` tap made `needsStock` flip
+ * true, so a row the driver had expanded out of the collapsed group jumped to
+ * the top of the sheet and every row below it slid up one position. With the
+ * ±batch buttons that is not cosmetic: the second tap of `+6` lands on whatever
+ * slid under the finger, and a refill quantity is booked as sold.
+ *
+ * Frozen membership costs nothing — a row in the wrong section is still one tap
+ * away, and the sections re-sort on the next machine.
+ */
+export function assignRefillGroup(row: RefillRowLike): RefillGroup {
+    return needsStock(row) ? "primary" : "secondary";
 }
 
 /**
@@ -79,8 +102,11 @@ export function needsStock(row: RefillRowLike): boolean {
  * filter (splitting it again would hide the hit the driver typed to find), and
  * the Machine tab records returns coming *out*, where "needs stock" is
  * meaningless.
+ *
+ * Partitions on the row's frozen `group` rather than re-deriving it, so nothing
+ * on this sheet can change position in response to a tap.
  */
-export function splitRefillRows<T extends RefillRowLike>(
+export function splitRefillRows<T extends { group: RefillGroup }>(
     rows: T[],
     opts: { isSearching: boolean; viewMode: "BAG" | "MACHINE" },
 ): { primary: T[]; secondary: T[] } {
@@ -88,8 +114,8 @@ export function splitRefillRows<T extends RefillRowLike>(
         return { primary: rows, secondary: [] };
     }
     return {
-        primary: rows.filter(needsStock),
-        secondary: rows.filter((r) => !needsStock(r)),
+        primary: rows.filter((r) => r.group === "primary"),
+        secondary: rows.filter((r) => r.group === "secondary"),
     };
 }
 

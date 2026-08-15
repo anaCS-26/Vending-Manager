@@ -5,6 +5,7 @@ import {
     splitRefillRows,
     countUnconfirmed,
     adjustByBatch,
+    assignRefillGroup,
     type RefillRowLike,
 } from '@/lib/refill-entry';
 
@@ -67,12 +68,32 @@ describe('needsStock', () => {
     });
 });
 
+describe('assignRefillGroup', () => {
+    it('sends likely-needed items to the primary section', () => {
+        expect(assignRefillGroup(row({ estimated_stock: 0 }))).toBe('primary');
+        expect(assignRefillGroup(row({ estimated_stock: 2, lastQty: 6 }))).toBe('primary');
+    });
+
+    it('sends the still-stocked remainder to the collapsed section', () => {
+        expect(assignRefillGroup(row({ estimated_stock: 9, lastQty: 6 }))).toBe('secondary');
+        expect(assignRefillGroup(row({ estimated_stock: 4, lastQty: null }))).toBe('secondary');
+    });
+
+    it('puts prefill-seeded rows up front — they are all about to be submitted', () => {
+        const seeded = seedRefillQuantity('prefill', 6, 20);
+        expect(assignRefillGroup(row({ ...seeded, estimated_stock: 30, lastQty: 6 }))).toBe('primary');
+    });
+});
+
 describe('splitRefillRows', () => {
+    /** Group is assigned once, when the machine is opened. */
+    const grouped = <T extends RefillRowLike>(r: T) => ({ ...r, group: assignRefillGroup(r) });
+
     const rows = [
-        row({ estimated_stock: 0 }),                 // empty      → primary
-        row({ estimated_stock: 1, lastQty: 6 }),     // low        → primary
-        row({ estimated_stock: 9, lastQty: 6 }),     // stocked    → secondary
-        row({ estimated_stock: 4, lastQty: null }),  // no history → secondary
+        grouped(row({ estimated_stock: 0 })),                 // empty      → primary
+        grouped(row({ estimated_stock: 1, lastQty: 6 })),     // low        → primary
+        grouped(row({ estimated_stock: 9, lastQty: 6 })),     // stocked    → secondary
+        grouped(row({ estimated_stock: 4, lastQty: null })),  // no history → secondary
     ];
 
     it('puts only the likely-needed rows up front and collapses the rest', () => {
@@ -97,6 +118,38 @@ describe('splitRefillRows', () => {
         const { primary, secondary } = splitRefillRows(rows, { isSearching: false, viewMode: 'MACHINE' });
         expect(primary).toHaveLength(rows.length);
         expect(secondary).toHaveLength(0);
+    });
+
+    // The regression this whole `group` field exists for. Staging a quantity used
+    // to flip needsStock() true, so a row expanded out of the collapsed section
+    // jumped to the top of the sheet and everything below slid up one position —
+    // meaning the second tap of a ±batch button landed on a different item, and
+    // refill quantity is booked as sold.
+    it('does not move a row between sections when it is staged', () => {
+        const collapsed = grouped(row({ estimated_stock: 9, lastQty: 6 }));
+        expect(collapsed.group).toBe('secondary');
+
+        const afterTap = { ...collapsed, refilled: 6, confirmed: true };
+        const { primary, secondary } = splitRefillRows([afterTap], { isSearching: false, viewMode: 'BAG' });
+
+        expect(secondary).toHaveLength(1);
+        expect(primary).toHaveLength(0);
+        // needsStock alone would now say otherwise — which is exactly the trap.
+        expect(needsStock(afterTap)).toBe(true);
+    });
+
+    it('holds every row in its own section across a burst of taps', () => {
+        const sectionOf = (rs: typeof rows) => {
+            const { primary, secondary } = splitRefillRows(rs, { isSearching: false, viewMode: 'BAG' });
+            return rs.map(r => (primary.includes(r) ? 'primary' : secondary.includes(r) ? 'secondary' : 'MISSING'));
+        };
+
+        const before = sectionOf(rows);
+        expect(before).toEqual(['primary', 'primary', 'secondary', 'secondary']);
+
+        // Spam +6 three times on every row, the way a driver does.
+        const tapped = rows.map(r => ({ ...r, refilled: r.refilled + 18 }));
+        expect(sectionOf(tapped)).toEqual(before);
     });
 });
 

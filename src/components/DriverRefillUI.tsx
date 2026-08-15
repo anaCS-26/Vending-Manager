@@ -15,7 +15,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NumericInput } from "@/components/NumericInput";
 import { useDriverStore, OfflineLog } from "@/stores/useDriverStore";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
-import { seedRefillQuantity, splitRefillRows, countUnconfirmed, adjustByBatch } from "@/lib/refill-entry";
+import { seedRefillQuantity, splitRefillRows, countUnconfirmed, adjustByBatch, assignRefillGroup } from "@/lib/refill-entry";
+import type { RefillGroup } from "@/lib/refill-entry";
 
 type DriverRefillUIProps = {
     machines: MachineType[];
@@ -43,6 +44,11 @@ type ItemFormState = {
      * nobody read must not become one.
      */
     confirmed: boolean;
+    /**
+     * Which section the row renders in. Decided once when the machine is opened
+     * and then frozen for as long as it stays open — see `assignRefillGroup`.
+     */
+    group: RefillGroup;
 };
 
 export function DriverRefillUI({ machines: serverMachines, activeDispatches: serverDispatches, userRole = 'driver' }: DriverRefillUIProps) {
@@ -162,6 +168,11 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
             secondaryRows: secondary,
         };
     }, [machineItems, itemSearch, viewMode]);
+
+    /** Staged lines sitting inside the collapsed section, so the header can say so. */
+    const hiddenStagedCount = secondaryRows.filter(
+        r => r.refilled > 0 || r.returned > 0 || r.bag_returned > 0
+    ).length;
 
     /** machineId → itemId → last quantity. Rebuilt only when the cache changes. */
     const hintIndex = useMemo(() => {
@@ -312,7 +323,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                  * machine — and in prefill mode would silently resurrect a number the
                  * driver had deliberately zeroed.
                  */
-                const seed = (itemId: number, bagQuantity: number) => {
+                const seed = (itemId: number, bagQuantity: number, estimated_stock: number) => {
                     const existing = prevState[itemId];
                     const lastQty = machineHints?.get(itemId) ?? null;
                     if (existing) {
@@ -323,13 +334,23 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                             lastQty,
                             prefilled: existing.prefilled,
                             confirmed: existing.confirmed,
+                            // Frozen with the rest of the row: recomputing it here
+                            // would reintroduce the reordering this exists to stop.
+                            group: existing.group,
                         };
                     }
+                    const seeded = seedRefillQuantity(refillMode, lastQty, bagQuantity);
                     return {
                         returned: 0,
                         bag_returned: 0,
                         lastQty,
-                        ...seedRefillQuantity(refillMode, lastQty, bagQuantity),
+                        ...seeded,
+                        group: assignRefillGroup({
+                            ...seeded,
+                            bag_returned: 0,
+                            estimated_stock,
+                            lastQty,
+                        }),
                     };
                 };
 
@@ -338,14 +359,15 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                     const isAvailableToDriver = driverItemIds.has(ms.itemId);
                     const bagRemaining = isAvailableToDriver ? getRemainingStock(ms.itemId) : 0;
                     const sysDelta = getOfflineSysDelta(ms.itemId);
+                    const estimated = Math.max(0, ms.estimated_stock + sysDelta);
 
                     newState[ms.itemId] = {
                         itemId: ms.itemId,
                         item: ms.item,
                         bagQuantity: bagRemaining,
                         inBag: isAvailableToDriver,
-                        estimated_stock: Math.max(0, ms.estimated_stock + sysDelta),
-                        ...seed(ms.itemId, bagRemaining),
+                        estimated_stock: estimated,
+                        ...seed(ms.itemId, bagRemaining, estimated),
                     };
                 });
 
@@ -353,13 +375,14 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                 driverItemIds.forEach(itemId => {
                     if (!newState[itemId]) {
                         const bagRemaining = getRemainingStock(itemId);
+                        const estimated = Math.max(0, getOfflineSysDelta(itemId));
                         newState[itemId] = {
                             itemId: itemId,
                             item: getItemMeta(itemId),
                             bagQuantity: bagRemaining,
                             inBag: true,
-                            estimated_stock: Math.max(0, getOfflineSysDelta(itemId)),
-                            ...seed(itemId, bagRemaining),
+                            estimated_stock: estimated,
+                            ...seed(itemId, bagRemaining, estimated),
                         };
                     }
                 });
@@ -774,7 +797,17 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                                         <span className="text-xs font-bold text-left">
                                             {showAllItems ? "Hide" : "Show"} {secondaryRows.length} item{secondaryRows.length === 1 ? "" : "s"} that should still be stocked
                                         </span>
-                                        <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${showAllItems ? "rotate-180" : ""}`} />
+                                        <span className="flex items-center gap-2 shrink-0">
+                                            {/* Rows stay put once staged, so a count made in here
+                                                stays in here. Surface it on the collapsed header
+                                                rather than letting it hide. */}
+                                            {hiddenStagedCount > 0 && (
+                                                <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-accent-blue/20 text-accent-blue">
+                                                    {hiddenStagedCount} staged
+                                                </span>
+                                            )}
+                                            <ChevronDown className={`w-4 h-4 transition-transform ${showAllItems ? "rotate-180" : ""}`} />
+                                        </span>
                                     </button>
 
                                     {showAllItems && secondaryRows.map((row) => (
