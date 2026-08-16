@@ -143,6 +143,42 @@ UI: "Calibrate Stock" / "Correct Cost" buttons on `/admin/warehouse` (`Warehouse
 
 The explainer is `src/components/CalibrationLegend.tsx` — two colour-coded outcome cards (shortage / surplus) plus one optional caveat line. It enforces exactly that split: the **structure** is shared so the pair stays in sync automatically, but every **string** is a prop, so neither modal can inherit the other's financial claim. Card headings deliberately reuse the row badges' vocabulary ("Shortage"/"Found" for warehouse, "Missing"/"Surplus" for machine) so the legend explains the badges the user sees below it. It replaced a ~45-word prose paragraph in each modal — the rules are a two-branch decision and read far faster as two labelled branches. Use `accent-pink`/`accent-green` tokens, never raw `emerald-*` (both modals were quietly using `emerald-500`, which is the same hex as `accent-green` but bypasses the token).
 
+## Admin analytics
+
+`/admin/analytics` is the **comparison** layer, and the split across the three admin pages is deliberate: `/admin` is *today* (what's happening now, who's out, what's queued), `/admin/financials` is *the books* (P&L per machine/warehouse/item, fixed costs pro-rated, Excel export), and this is *what changed* — against the previous equal-length period, against the fleet median, against each machine's own service cadence. Don't add a P&L table here or a trend chart there.
+
+All arithmetic is pure functions in **`src/lib/analytics.ts`** (no Prisma/React/ambient `Date`), unit-tested in `tests/lib/analytics.test.ts` — the `forecast.ts` / `refill-entry.ts` pattern. The page only queries and composes; the components only render.
+
+**One bounded query, not twenty.** The predecessor pulled every `RefillLog` ever written three ways, including `machine.findMany({ include: { RefillLogs: { include: { item: true } } } })` — the item catalogue joined onto every refill row, shipped into an RSC payload. The page now issues one `findMany` of scalar columns covering the current **and** previous windows and splits them in memory; names come from four small lookup tables. `computeStockoutForecast()` is called directly (it's a plain lib function, not the `ENABLE_AI_LAB`-gated action) so the at-risk queue and the 06:00 stock-alert push can never disagree.
+
+Non-obvious rules the components encode:
+
+- **One filter row, above everything.** `RangeFilter` (7/30/90 days) is a set of `<Link>`s driving `searchParams`, so every figure re-renders on the server against the same slice. No per-card controls — two cards showing different periods while looking identical is the failure mode.
+- **`collapseVisits()` is the unit of service.** One physical stop writes ~7.6 `RefillLog` rows, so counting rows overstates visits ~8x. Same machine + same driver + no gap > `VISIT_GAP_MS` (30 min) = one visit. Greedy over sorted rows, not a fixed time bucket — a bucket boundary landing mid-refill splits one visit in two.
+- **`buildDailySeries` zero-fills.** A day with no refills is a real zero; letting the axis skip it compresses quiet stretches and makes the slope lie.
+- **The Pareto is plotted in share-space.** Per-item share (columns) + cumulative share (line), both percentages on **one** axis. The textbook version puts riyals left and cumulative-% right, and a two-scale chart aligns those scales arbitrarily. **Never add a second y-axis to anything on this page.**
+- **`pctDelta` returns `null`, not 100%,** when the previous window had no basis. The UI prints "No basis to compare" / "new".
+- **Movers rank by absolute riyals, never percentage.** 4 → 12 riyals is +200% and irrelevant; the line that quietly shed 900 is the conversation.
+- **The heatmap is service visits, not sales.** There is no POS feed — the only timestamp is when the driver pressed submit, so a "sales by hour" chart would plot the route dressed as customer behaviour.
+- **The quadrant's medians are computed across the machines *plotted*,** so ~a quarter of the fleet always lands bottom-left. It ranks the fleet against itself; the caveat says so. Fixed rent/operating cost are **not** in that margin (Financials owns those).
+
+Chart colour lives in **`src/components/analytics/palette.ts`** and is validated, not chosen — every set clears the lightness band, chroma floor, CVD separation (ΔE ≥ 8) and normal-vision separation (ΔE ≥ 15) against the surface it paints on. Three things not to "simplify":
+1. **The dark column is a selected set, not a flipped one.** Raw `accent-orange` (#f97316) and `accent-green` (#10b981) sit at OKLCH L≈0.70, outside the 0.48–0.67 band a dark surface needs; dark uses `#ea580c` / `#059669`.
+2. **Slots are assigned in fixed order and never cycled.** The predecessor cycled a 10-colour array by index, so a filter changing the series count repainted the survivors. A 6th series folds into the grey `deemphasis`, it does not get a generated hue.
+3. **Orange↔rose fails the normal-vision floor (ΔE 12.7).** The intuitive "damaged = orange, expired = rose" pairing is unreadable in adjacent stack segments; `LossTrendChart` uses slots 1+2.
+
+**Mobile.** Admins check this from a phone, so the page is built to the same two breakpoints as the rest of the app:
+- **No bottom padding on the page** — the admin layout's `<main>` already carries `pb-nav`. The predecessor added `pb-20` on top of it, parking 80px of dead space under the last card on every phone.
+- **`ChartFrame` (in `ChartCard.tsx`) is how a wide plot survives 360px**: a minimum width below `sm`, released by `min-w-0` from `sm` up, so the card scrolls **horizontally** and the plot stays legible instead of collapsing into overlapping ticks. Squeezing a 30-day stacked column chart or a 13-bar angled-label Pareto into 320px does not make it smaller, it makes it wrong. **Horizontal only** — never wrap a chart in a vertical scroll box.
+- **The table view drops its `max-h` below `sm`** and grows with the page. A 360px-tall inner scroller inside a scrolling page is two scroll surfaces fighting over one thumb — the same trap that cost `DriverRefillUI` its sticky header.
+- **44px tap targets on the range filter and the chart/table toggle** (the toggle loses its text label below `sm`, so it would otherwise be a ~29px bare icon). The heatmap's 24px cells are the deliberate exception: 44px cells would make the grid 660px+ wide, and every value in it is reachable through the table view and each cell's `aria-label`.
+- The heatmap **keeps its scrollbar** (no `no-scrollbar`) because the cut-off column plus the bar are the only cues there is more week to the right, and its tooltip **flips below the cell for Sunday/Monday** — `overflow-x: auto` forces `overflow-y` to `auto` too, so a tooltip drawn above the top row is clipped rather than overhanging.
+- Verified at 390px and 360px: no page-level horizontal scroll, no element overflowing its container outside an intended scroll frame, no clipped text, no sub-44px target outside the heatmap.
+
+Every chart is wrapped in `ChartCard`, which **requires** a `table` prop — there is no path that ships a chart without a table view. That isn't decoration: two categorical slots sit below 3:1 contrast on the light surface, which is only permissible when the values are reachable without the colour, and a tooltip is useless on the phone half of this audience. Lists that are already text (`AtRiskPanel`, `DriverScorecard`) use `Panel` instead, which has no toggle because there is nothing to toggle.
+
+The donut that used to sit here is gone: it was fed the whole 10+ category catalogue through a 7-colour cycling list, and angles are the hardest encoding to compare. `CategoryMixBar` is a horizontal stacked bar, top 4 + grey "Other", figures printed beside the swatches. `AnalyticsDashboardClient.tsx` was deleted with it; **`TabbedContainer` is now unused** — it was only ever mounted here.
+
 ## Super-admin console
 
 The `/super/*` zone (super-admin only via `src/proxy.ts`) is a provider oversight console — theme-aware Neo-Design. `SuperSidebar` nav: Overview `/super`, Oversight `/super/oversight`, Audit Trail `/super/audit`, Integrity `/super/integrity`, System Health `/super/system`, Admin Accounts `/super/admins`. Read-only insight actions live in `src/actions/super-insights.ts` — all `requireSuperAdmin`, **no mutations / no audit rows**:
