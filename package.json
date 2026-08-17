@@ -16,6 +16,8 @@
     "db:seed-stock:prod": "tsx scripts/seed-stock.ts --env=prod",
     "db:seed-default-qty:dev": "tsx scripts/seed-default-assignment-qty.ts --env=dev",
     "db:seed-default-qty:prod": "tsx scripts/seed-default-assignment-qty.ts --env=prod",
+    "db:seed-template:dev": "tsx scripts/seed-dispatch-template.ts --env=dev",
+    "db:seed-template:prod": "tsx scripts/seed-dispatch-template.ts --env=prod",
     "test": "vitest",
     "test:coverage": "vitest run --coverage"
   },
