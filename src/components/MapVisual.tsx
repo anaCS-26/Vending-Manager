@@ -146,6 +146,22 @@ export default function MapVisual({ machines, predictions = [], warehouses = [] 
         ? [allCoords[0][0], allCoords[0][1]]
         : [26.3045, 50.1481];
 
+    const geoapifyKey = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
+    const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+    const isDark = resolvedTheme === 'dark';
+
+    const tileUrl = geoapifyKey
+        ? `https://maps.geoapify.com/v1/tile/${isDark ? 'dark-matter-dark-purple' : 'osm-bright-smooth'}/{z}/{x}/{y}.png?apiKey=${geoapifyKey}`
+        : cartoKey
+            ? `https://{s}.basemaps.cartocdn.com/${isDark ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png?api_key=${cartoKey}`
+            : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+    const tileAttribution = geoapifyKey
+        ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.geoapify.com/">Geoapify</a>'
+        : cartoKey
+            ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
     return (
         <div className="w-full h-[280px] sm:h-[450px] rounded-3xl overflow-hidden relative z-0 border border-slate-200 dark:border-white/10 group shadow-2xl">
             {/* Adding a custom inner shadow overlay using absolute borders to blend map with Dark Mode */}
@@ -193,13 +209,10 @@ export default function MapVisual({ machines, predictions = [], warehouses = [] 
                 {/* Bounds automatically adjust the viewport zoom/center */}
                 <MapBounds coords={allCoords} />
 
-                {/* Custom dark map layer (CartoDB Dark Matter) */}
+                {/* Basemap layer (Geoapify dark/light with CARTO and OSM fallback) */}
                 <TileLayer
-                    url={resolvedTheme === 'dark'
-                        ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                        : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-                    }
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                    url={tileUrl}
+                    attribution={tileAttribution}
                 />
 
                 <MarkerClusterGroup

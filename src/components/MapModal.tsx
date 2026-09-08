@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-lea
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { MapPin, X, Map as MapIcon, Loader2 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 // Fix Leaflet's default icon path issues in Next.js
@@ -58,6 +59,23 @@ export default function MapModal({ onClose, onConfirm }: Props) {
         onClose,
         label: "Drop a pin on the map",
     });
+    const { resolvedTheme } = useTheme();
+
+    const geoapifyKey = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
+    const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+    const isDark = resolvedTheme === 'dark';
+
+    const tileUrl = geoapifyKey
+        ? `https://maps.geoapify.com/v1/tile/${isDark ? 'dark-matter-dark-purple' : 'osm-bright-smooth'}/{z}/{x}/{y}.png?apiKey=${geoapifyKey}`
+        : cartoKey
+            ? `https://{s}.basemaps.cartocdn.com/${isDark ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png?api_key=${cartoKey}`
+            : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+    const tileAttribution = geoapifyKey
+        ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.geoapify.com/">Geoapify</a>'
+        : cartoKey
+            ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
     const locateMe = () => {
         setUserLocating(true);
@@ -124,8 +142,8 @@ export default function MapModal({ onClose, onConfirm }: Props) {
                         zoomControl={false}
                     >
                         <TileLayer
-                            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                            url={tileUrl}
+                            attribution={tileAttribution}
                         />
 
                         <LocationMarker position={mapPosition} setPosition={setMapPosition} setAddressName={setMapAddressName} />
