@@ -150,8 +150,9 @@ export default function MapVisual({ machines, predictions = [], warehouses = [] 
     const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY;
     const isDark = resolvedTheme === 'dark';
 
+    // Neutral dark-matter-dark-grey for site-matched slate/charcoal (no purple hue), positron for clean light slate
     const tileUrl = geoapifyKey
-        ? `https://maps.geoapify.com/v1/tile/${isDark ? 'dark-matter-dark-purple' : 'osm-bright-smooth'}/{z}/{x}/{y}.png?apiKey=${geoapifyKey}`
+        ? `https://maps.geoapify.com/v1/tile/${isDark ? 'dark-matter-dark-grey' : 'positron'}/{z}/{x}/{y}.png?apiKey=${geoapifyKey}`
         : cartoKey
             ? `https://{s}.basemaps.cartocdn.com/${isDark ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png?api_key=${cartoKey}`
             : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -211,6 +212,7 @@ export default function MapVisual({ machines, predictions = [], warehouses = [] 
 
                 {/* Basemap layer (Geoapify dark/light with CARTO and OSM fallback) */}
                 <TileLayer
+                    key={tileUrl}
                     url={tileUrl}
                     attribution={tileAttribution}
                 />
