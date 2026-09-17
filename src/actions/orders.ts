@@ -28,6 +28,19 @@ export async function createPurchaseOrder(data: {
 }) {
     const session = await requireAdmin();
     try {
+        // The action id ships in the client bundle, so the form's own floor of 1
+        // is not a guarantee. A zero or negative line would sit on a pending PO
+        // and be received as-is.
+        if (data.items.length === 0) {
+            return { success: false, error: "Add at least one item to the order." };
+        }
+        if (data.items.some((i) => !Number.isInteger(i.quantityRequested) || i.quantityRequested < 1)) {
+            return { success: false, error: "Every order quantity must be a whole number of at least 1." };
+        }
+        if (new Set(data.items.map((i) => i.itemId)).size !== data.items.length) {
+            return { success: false, error: "An item appears on the order more than once." };
+        }
+
         const itemIds = data.items.map((i) => i.itemId);
         const itemCosts = await prisma.item.findMany({
             where: { id: { in: itemIds } },

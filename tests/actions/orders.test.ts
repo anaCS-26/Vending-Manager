@@ -57,6 +57,22 @@ describe('createPurchaseOrder', () => {
       expect.anything(), 'CREATE_PURCHASE_ORDER', 'PurchaseOrder', 700, null, expect.any(Object),
     );
   });
+
+  // The form floors a line at 1, but the action id ships in the client bundle,
+  // so the form is not the guarantee.
+  it.each([
+    ['an empty order', []],
+    ['a zero quantity', [{ itemId: 1, quantityRequested: 0 }]],
+    ['a negative quantity', [{ itemId: 1, quantityRequested: -24 }]],
+    ['a fractional quantity', [{ itemId: 1, quantityRequested: 2.5 }]],
+    ['the same item twice', [{ itemId: 1, quantityRequested: 24 }, { itemId: 1, quantityRequested: 12 }]],
+  ])('rejects %s before touching the database', async (_label, items) => {
+    setAdminSession(1);
+    const r = await createPurchaseOrder({ warehouseId: 1, items });
+    expect(r.success).toBe(false);
+    expect(prismaMock.item.findMany).not.toHaveBeenCalled();
+    expect(prismaMock.purchaseOrder.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('completePurchaseOrder', () => {

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { CalibrationLegend } from "@/components/CalibrationLegend";
 import { NumericInput } from "@/components/NumericInput";
+import { entryKeyNav } from "@/lib/entry-keys";
 
 type Props = {
     isOpen: boolean;
@@ -206,12 +207,13 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
                             <p className="font-medium text-slate-500">This machine has no tracked inventory</p>
                         </div>
                     ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-3" data-entry-group>
                             <div className="flex px-4 pb-2 mb-2 border-b border-slate-200 dark:border-zinc-800 text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
                                 <div className="flex-1">Item Details</div>
                                 <div className="w-20 text-center">System</div>
                                 <div className="w-28 text-right">Physical Count</div>
                             </div>
+                            <p className="hidden sm:block px-4 -mt-2 text-[11px] text-slate-500 dark:text-zinc-400">Type a count and press Enter to jump to the next item.</p>
 
                             {displayInventory.map(stock => {
                                 const expected = stock.estimated_stock;
@@ -239,6 +241,8 @@ export default function MachineAuditModal({ isOpen, onClose, inventory, machines
 
                                         <div className="w-28 flex justify-end">
                                             <NumericInput
+                                                data-entry
+                                                onKeyDown={entryKeyNav}
                                                 value={physicalCounts[stock.itemId] ?? stock.estimated_stock}
                                                 onChange={(count) => handleCountChange(stock.itemId, count)}
                                                 className={`w-24 text-center font-mono text-base font-bold rounded-lg border ${isDiscrepancy ? 'border-accent-blue bg-accent-blue/5 text-accent-blue focus:ring-accent-blue/50' : 'border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 focus:ring-accent-blue/50'} px-2 py-1.5 focus:outline-none focus:ring-2`}

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Plus, CheckCircle2, History, Package, Clock, Loader2, Search, Store, FileText, X, Trash2, ArrowRight, ChevronDown } from "lucide-react";
+import { Plus, CheckCircle2, History, Package, Clock, Loader2, Search, Store, FileText, X, Trash2, ArrowRight, ChevronDown, RotateCcw, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPurchaseOrder, completePurchaseOrder, cancelPurchaseOrder, createQuickItem } from "@/actions/orders";
 import { formatCurrency, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { computeReceiptTotals } from "@/lib/receipt-totals";
+import { adjustOrderQuantity, defaultOrderQuantity, linesFromDeficits, linesFromPreviousOrder, mergeOrderLines, type OrderLine } from "@/lib/order-entry";
+import { entryKeyNav } from "@/lib/entry-keys";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { NumericInput } from "@/components/NumericInput";
 import { DataCard } from "@/components/DataCard";
@@ -29,15 +31,22 @@ type Props = {
     completedOrders: OrderWithRelations[];
 };
 
+const DRAFT_KEY = "vms:po-draft";
+
 export default function OrderManagerUI({ warehouses, items, pendingOrders, completedOrders }: Props) {
     const [activeTab, setActiveTab] = useState<"NEW" | "PENDING" | "HISTORY">("PENDING");
     const [isPending, startTransition] = useTransition();
 
     // -- Create Order State --
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | "">("");
-    const [orderLines, setOrderLines] = useState<Array<{ itemId: number; quantityRequested: number }>>([]);
+    const [orderLines, setOrderLines] = useState<OrderLine[]>([]);
     const [itemSearchQuery, setItemSearchQuery] = useState("");
     const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const [highlightedIndex, setHighlightedIndex] = useState(0);
+    const [draftLoaded, setDraftLoaded] = useState(false);
+    const [pendingQtyFocus, setPendingQtyFocus] = useState<number | null>(null);
+    const [confirmClear, setConfirmClear] = useState(false);
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     // New Item State
     const [isCreatingItem, setIsCreatingItem] = useState(false);
@@ -71,14 +80,99 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
         }
     }, [printingOrder]);
 
-    const handleAddLine = (itemId: number) => {
-        if (orderLines.find(l => l.itemId === itemId)) return;
+    // A 60-line draft is ten minutes of work; don't lose it to a stray refresh
+    // or a tap on the sidebar. Restored after mount (never during render) so
+    // the server and first client paint agree.
+    useEffect(() => {
+        try {
+            const raw = window.localStorage.getItem(DRAFT_KEY);
+            if (!raw) return;
+            const draft = JSON.parse(raw) as { warehouseId?: number | ""; lines?: OrderLine[] };
+            const orderable = new Set(items.filter(i => i.isActive).map(i => i.id));
+            const lines = (draft.lines ?? []).filter(l => orderable.has(l.itemId) && l.quantityRequested > 0);
+            if (lines.length === 0) return;
+            setOrderLines(lines);
+            if (draft.warehouseId && warehouses.some(w => w.id === draft.warehouseId)) setSelectedWarehouseId(draft.warehouseId);
+            setActiveTab("NEW");
+            toast.info(`Restored your unsent order (${lines.length} items).`);
+        } catch {
+            // A corrupt draft is not worth an error — start clean.
+        } finally {
+            setDraftLoaded(true);
+        }
+    }, []); // mount only: the draft is read once, against the catalogue as loaded
+
+    useEffect(() => {
+        if (!draftLoaded) return;
+        try {
+            if (orderLines.length === 0) window.localStorage.removeItem(DRAFT_KEY);
+            else window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ warehouseId: selectedWarehouseId, lines: orderLines }));
+        } catch {
+            // Private mode / quota: the draft just isn't persisted.
+        }
+    }, [draftLoaded, orderLines, selectedWarehouseId]);
+
+    const focusSearch = () => searchInputRef.current?.focus();
+
+    const focusLineQty = (itemId: number) => {
+        const el = document.getElementById(`po-qty-${itemId}`) as HTMLInputElement | null;
+        el?.focus();
+        el?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    };
+
+    // The new line doesn't exist in the DOM until the state commit lands.
+    useEffect(() => {
+        if (pendingQtyFocus === null) return;
+        const el = document.getElementById(`po-qty-${pendingQtyFocus}`) as HTMLInputElement | null;
+        el?.focus();
+        el?.select();
+        setPendingQtyFocus(null);
+    }, [pendingQtyFocus]);
+
+    /**
+     * Adds a line at one case (`Item.default_assignment_qty`).
+     *
+     * From the keyboard, focus lands in the new line's quantity box with the
+     * case pack selected: Enter accepts it and returns to the search box, typing
+     * replaces it. So a long order is "name, Enter, Enter" per item and the hands
+     * never leave the keys. From a click, focus stays in the search box with the
+     * list open, so several items can be picked in a row.
+     */
+    const handleAddLine = (itemId: number, via: "key" | "click" = "click") => {
+        if (orderLines.find(l => l.itemId === itemId)) {
+            // Already on the order: searching for it again means "take me to it".
+            setItemSearchQuery("");
+            setIsSearchFocused(false);
+            focusLineQty(itemId);
+            return;
+        }
         const item = items.find(i => i.id === itemId);
         if (!item) return;
 
-        setOrderLines([...orderLines, { itemId, quantityRequested: 1 }]);
+        setOrderLines([...orderLines, { itemId, quantityRequested: defaultOrderQuantity(item.default_assignment_qty) }]);
         setItemSearchQuery("");
-        setIsSearchFocused(false);
+        setHighlightedIndex(0);
+        if (via === "key") {
+            setIsSearchFocused(false);
+            setPendingQtyFocus(itemId);
+        } else {
+            focusSearch();
+        }
+    };
+
+    const setLineQuantity = (itemId: number, quantityRequested: number) => {
+        setOrderLines(prev => prev.map(l => (l.itemId === itemId ? { ...l, quantityRequested } : l)));
+    };
+
+    const addLinesInBulk = (incoming: OrderLine[], emptyMessage: string, skipped = 0) => {
+        const { lines, added } = mergeOrderLines(orderLines, incoming);
+        if (added === 0) {
+            toast.info(emptyMessage);
+            return;
+        }
+        setOrderLines(lines);
+        const skippedNote = skipped > 0 ? ` ${skipped} no longer in the catalogue ${skipped === 1 ? "was" : "were"} left out.` : "";
+        toast.success(`Added ${added} item${added === 1 ? "" : "s"}. Check the quantities before submitting.${skippedNote}`);
     };
 
     const handleCreateOrder = () => {
@@ -200,12 +294,19 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
      * 2. Low Stock in selected WH
      * 3. Alphabetical
      */
+    // Deactivated items stay in `items` (pending/history rows still look them
+    // up) but can't be ordered.
+    const orderableItems = items.filter(i => i.isActive);
+    const onOrder = new Set(orderLines.map(l => l.itemId));
+
     const displayedItems = itemSearchQuery
-        ? items.filter(i =>
+        ? orderableItems.filter(i =>
             i.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
             i.sku.toLowerCase().includes(itemSearchQuery.toLowerCase())
-        )
-        : [...items].sort((a, b) => {
+        // Items not yet on the order first, so Enter on the top result adds
+        // something new instead of landing on a line that already exists.
+        ).sort((a, b) => Number(onOrder.has(a.id)) - Number(onOrder.has(b.id)))
+        : orderableItems.filter(i => !onOrder.has(i.id)).sort((a, b) => {
             // Helper function to safely get stock and deficit values purely for the selected warehouse
             const getMetrics = (item: ItemWithDetails) => {
                 const stockRecord = selectedWarehouseId && item.WarehouseStock ? item.WarehouseStock.find(ws => ws.warehouseId === selectedWarehouseId) : null;
@@ -235,6 +336,15 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
             // TIER 3: Global Catalog items not currently in local warehouse (sorted alphabetically A-Z)
             return a.name.localeCompare(b.name);
         }).slice(0, 10);
+
+    // Bulk starting points. Both only ever append (see mergeOrderLines), so
+    // neither can overwrite a quantity the admin has already typed.
+    const lastOrderForWarehouse = selectedWarehouseId
+        ? [...pendingOrders, ...completedOrders]
+            .filter(o => o.warehouseId === selectedWarehouseId && o.status !== "CANCELLED")
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
+        : null;
+    const deficitLines = selectedWarehouseId ? linesFromDeficits(orderableItems, Number(selectedWarehouseId)) : [];
 
     // Estimated PO value while drafting: uses each item's last known cost (the
     // same Item.cost that createPurchaseOrder snapshots server-side), so the
@@ -308,12 +418,9 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                     <WarehouseDropdown
                                         warehouses={warehouses}
                                         selected={selectedWarehouseId}
-                                        onChange={(val) => {
-                                            if (val !== selectedWarehouseId) {
-                                                setOrderLines([]);
-                                                setSelectedWarehouseId(val);
-                                            }
-                                        }}
+                                        // Lines are item + quantity, nothing warehouse-specific —
+                                        // switching used to silently wipe the whole draft.
+                                        onChange={setSelectedWarehouseId}
                                     />
                                 </div>
                             </div>
@@ -327,12 +434,32 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                         <div className="relative flex-1">
                                             <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
                                             <input
+                                                ref={searchInputRef}
                                                 type="text"
+                                                role="combobox"
+                                                aria-expanded={isSearchFocused}
+                                                aria-controls="po-item-results"
+                                                aria-autocomplete="list"
                                                 value={itemSearchQuery}
-                                                onChange={e => setItemSearchQuery(e.target.value)}
+                                                onChange={e => { setItemSearchQuery(e.target.value); setHighlightedIndex(0); setIsSearchFocused(true); }}
                                                 onFocus={() => setIsSearchFocused(true)}
                                                 onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                                                placeholder="Search item to request (shows top 10)..."
+                                                onKeyDown={e => {
+                                                    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                                                        e.preventDefault();
+                                                        if (displayedItems.length === 0) return;
+                                                        setIsSearchFocused(true);
+                                                        const step = e.key === "ArrowDown" ? 1 : -1;
+                                                        setHighlightedIndex(i => (i + step + displayedItems.length) % displayedItems.length);
+                                                    } else if (e.key === "Enter") {
+                                                        e.preventDefault();
+                                                        const pick = displayedItems[Math.min(highlightedIndex, displayedItems.length - 1)];
+                                                        if (pick) handleAddLine(pick.id, "key");
+                                                    } else if (e.key === "Escape") {
+                                                        setIsSearchFocused(false);
+                                                    }
+                                                }}
+                                                placeholder="Type a name or SKU, press Enter to add..."
                                                 className="w-full pl-11 pr-4 py-3 bg-slate-100 dark:bg-black/40 border border-slate-300 dark:border-white/10 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple/50 transition-all"
                                             />
                                         </div>
@@ -353,8 +480,10 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                     </div>
 
                                     {isSearchFocused && (
-                                        <div className="absolute top-14 left-0 right-0 z-50 bg-white dark:bg-[#18181b] border border-slate-300 shadow-xl dark:border-white/10 rounded-xl max-h-[300px] overflow-y-auto p-2">
-                                            {displayedItems.map(item => {
+                                        <div id="po-item-results" role="listbox" className="absolute top-14 left-0 right-0 z-50 bg-white dark:bg-[#18181b] border border-slate-300 shadow-xl dark:border-white/10 rounded-xl max-h-[300px] overflow-y-auto p-2">
+                                            {displayedItems.map((item, resultIndex) => {
+                                                const isHighlighted = resultIndex === Math.min(highlightedIndex, displayedItems.length - 1);
+                                                const alreadyOnOrder = onOrder.has(item.id);
                                                 const currentStock = selectedWarehouseId && item.WarehouseStock
                                                     ? item.WarehouseStock.find(ws => ws.warehouseId === selectedWarehouseId)?.quantity_on_hand || 0
                                                     : 0;
@@ -366,8 +495,16 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                 return (
                                                     <button
                                                         key={item.id}
+                                                        type="button"
+                                                        role="option"
+                                                        aria-selected={isHighlighted}
+                                                        // Keep focus in the search box: a click that blurs it
+                                                        // closes the list and costs a re-click per item.
+                                                        onMouseDown={e => e.preventDefault()}
+                                                        onMouseEnter={() => setHighlightedIndex(resultIndex)}
                                                         onClick={() => handleAddLine(item.id)}
-                                                        className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg flex flex-col group transition-colors border-b border-slate-100 dark:border-white/5 last:border-0"
+                                                        ref={el => { if (isHighlighted) el?.scrollIntoView?.({ block: "nearest" }); }}
+                                                        className={`w-full text-left px-4 py-3 rounded-lg flex flex-col group transition-colors border-b border-slate-100 dark:border-white/5 last:border-0 ${isHighlighted ? "bg-accent-purple/10" : "hover:bg-slate-50 dark:hover:bg-white/5"}`}
                                                     >
                                                         <div className="flex justify-between items-center w-full">
                                                             <div className="flex flex-col items-start text-left">
@@ -382,10 +519,20 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                 <p className="text-xs font-mono text-slate-500 uppercase mt-0.5">#{item.sku}</p>
                                                             </div>
                                                             <div className="flex items-center gap-4">
-                                                                <p className="font-bold text-slate-700 dark:text-slate-300">
-                                                                    {formatCurrency((item as any).price_standard || 0)}
-                                                                </p>
-                                                                <Plus className="w-5 h-5 text-slate-400 group-hover:text-accent-purple transition-all" />
+                                                                {alreadyOnOrder ? (
+                                                                    <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green flex items-center gap-1">
+                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> On this order
+                                                                    </span>
+                                                                ) : (
+                                                                    <>
+                                                                        <p className="font-bold text-slate-700 dark:text-slate-300">
+                                                                            {formatCurrency((item as any).price_standard || 0)}
+                                                                        </p>
+                                                                        <span className="flex items-center gap-1 text-xs font-bold text-slate-400 group-hover:text-accent-purple transition-all">
+                                                                            <Plus className="w-5 h-5" />{defaultOrderQuantity(item.default_assignment_qty)}
+                                                                        </span>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs font-semibold text-slate-500">
@@ -413,11 +560,55 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                     )}
                                 </div>
 
-                                {/* Order Lines */}
-                                <div className="space-y-3">
-                                    {orderLines.map((line, index) => {
+                                {/* Starting points — each appends, never overwrites. */}
+                                {(lastOrderForWarehouse || deficitLines.length > 0 || orderLines.length > 0) && (
+                                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                                        {lastOrderForWarehouse && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const { lines, skipped } = linesFromPreviousOrder(lastOrderForWarehouse.Items, new Set(orderableItems.map(i => i.id)));
+                                                    addLinesInBulk(lines, "Everything from the last order is already here.", skipped);
+                                                }}
+                                                className="min-h-11 flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-900 dark:text-white rounded-xl text-xs font-bold transition-all border border-slate-300 dark:border-white/10"
+                                            >
+                                                <RotateCcw className="w-4 h-4 text-accent-purple" />
+                                                Repeat last order
+                                                <span className="font-normal text-slate-500 dark:text-slate-400">
+                                                    PO-{lastOrderForWarehouse.id.toString().padStart(4, '0')} · {lastOrderForWarehouse.Items.length} items
+                                                </span>
+                                            </button>
+                                        )}
+                                        {deficitLines.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => addLinesInBulk(deficitLines, "All shorted items are already on this order.")}
+                                                className="min-h-11 flex items-center gap-2 px-4 py-2 bg-accent-orange/10 hover:bg-accent-orange/20 text-accent-orange rounded-xl text-xs font-bold transition-all border border-accent-orange/20"
+                                            >
+                                                <AlertTriangle className="w-4 h-4" />
+                                                Add {deficitLines.length} shorted item{deficitLines.length === 1 ? "" : "s"}
+                                            </button>
+                                        )}
+                                        {orderLines.length > 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setConfirmClear(true)}
+                                                className="min-h-11 ml-auto flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-accent-pink hover:bg-accent-pink/10 rounded-xl text-xs font-bold transition-all"
+                                            >
+                                                <Trash2 className="w-4 h-4" /> Clear all
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Order Lines — newest first, so the line just added sits directly
+                                    under the search box instead of 60 rows down. Submission order is
+                                    unchanged (state stays in the order items were added). */}
+                                <div className="space-y-3" data-entry-group>
+                                    {[...orderLines].reverse().map((line) => {
                                         const item = items.find(i => i.id === line.itemId);
                                         if (!item) return null;
+                                        const batch = item.default_assignment_qty;
 
                                         const currentStock = selectedWarehouseId && item.WarehouseStock
                                             ? item.WarehouseStock.find(ws => ws.warehouseId === selectedWarehouseId)?.quantity_on_hand || 0
@@ -448,27 +639,61 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                         </span>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-6 self-start xl:self-auto">
+                                                <div className="flex items-center gap-3 sm:gap-6 self-start xl:self-auto">
                                                     <div>
-                                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Request Qty</label>
-                                                        <NumericInput
-                                                            value={line.quantityRequested}
-                                                            onChange={q => {
-                                                                const newLines = [...orderLines];
-                                                                newLines[index].quantityRequested = q;
-                                                                setOrderLines(newLines);
-                                                            }}
-                                                            onBlur={() => {
-                                                                if (!line.quantityRequested) {
-                                                                    const newLines = [...orderLines];
-                                                                    newLines[index].quantityRequested = 1;
-                                                                    setOrderLines(newLines);
-                                                                }
-                                                            }}
-                                                            className="w-20 px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-sm text-center focus:outline-none focus:border-accent-purple"
-                                                        />
+                                                        <label htmlFor={`po-qty-${line.itemId}`} className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">
+                                                            Request Qty
+                                                            {batch > 0 && (
+                                                                <span className="ml-2 normal-case tracking-normal font-semibold text-slate-400">
+                                                                    {line.quantityRequested % batch === 0
+                                                                        ? `${line.quantityRequested / batch} × case of ${batch}`
+                                                                        : `case of ${batch}`}
+                                                                </span>
+                                                            )}
+                                                        </label>
+                                                        <div className="flex items-center gap-1.5">
+                                                            {batch > 0 && (
+                                                                <button
+                                                                    type="button"
+                                                                    tabIndex={-1}
+                                                                    onClick={() => setLineQuantity(line.itemId, adjustOrderQuantity(line.quantityRequested, -batch))}
+                                                                    disabled={line.quantityRequested - batch < 1}
+                                                                    aria-label={`Remove a case of ${batch} ${item.name}`}
+                                                                    className="min-h-11 min-w-11 px-2 rounded-lg text-xs font-bold bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-white/10 transition-colors disabled:opacity-40"
+                                                                >
+                                                                    −{batch}
+                                                                </button>
+                                                            )}
+                                                            <NumericInput
+                                                                id={`po-qty-${line.itemId}`}
+                                                                data-entry
+                                                                value={line.quantityRequested}
+                                                                onChange={q => setLineQuantity(line.itemId, q)}
+                                                                onBlur={() => {
+                                                                    // A cleared box falls back to one case, the same value the line started at.
+                                                                    if (!line.quantityRequested) setLineQuantity(line.itemId, defaultOrderQuantity(batch));
+                                                                }}
+                                                                onKeyDown={e => {
+                                                                    // Enter = "this line is right, next item". ↑/↓ walk the lines.
+                                                                    if (e.key === "Enter") { e.preventDefault(); focusSearch(); }
+                                                                    else entryKeyNav(e, { enter: false });
+                                                                }}
+                                                                className="w-20 min-h-11 px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-sm text-center focus:outline-none focus:border-accent-purple"
+                                                            />
+                                                            {batch > 0 && (
+                                                                <button
+                                                                    type="button"
+                                                                    tabIndex={-1}
+                                                                    onClick={() => setLineQuantity(line.itemId, adjustOrderQuantity(line.quantityRequested, batch))}
+                                                                    aria-label={`Add a case of ${batch} ${item.name}`}
+                                                                    className="min-h-11 min-w-11 px-2 rounded-lg text-xs font-bold bg-accent-purple/10 hover:bg-accent-purple/20 text-accent-purple border border-accent-purple/20 transition-colors"
+                                                                >
+                                                                    +{batch}
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                    <button onClick={() => setOrderLines(orderLines.filter(l => l.itemId !== line.itemId))} className="p-2 text-slate-400 hover:text-accent-pink hover:bg-accent-pink/10 rounded-lg mt-5 transition-colors">
+                                                    <button type="button" aria-label={`Remove ${item.name} from the order`} onClick={() => setOrderLines(orderLines.filter(l => l.itemId !== line.itemId))} className="p-2 text-slate-400 hover:text-accent-pink hover:bg-accent-pink/10 rounded-lg mt-5 transition-colors">
                                                         <Trash2 className="w-5 h-5" />
                                                     </button>
                                                 </div>
@@ -616,7 +841,12 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
 
                                                     <div className="border-t border-slate-200 dark:border-white/10 pt-4">
                                                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Line Items ({order.Items.length})</p>
-                                                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                                                        {isReceiving && (
+                                                            <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 mb-3">
+                                                                Press Enter to move through quantity and cost line by line. Selling prices are pre-filled — change them only if the invoice does.
+                                                            </p>
+                                                        )}
+                                                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3" data-entry-group>
                                                             {order.Items.map((oi: any) => (
                                                                 <div key={oi.id} className="flex flex-col p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl border border-slate-200 dark:border-white/5">
                                                                     <div className="flex justify-between items-start mb-2">
@@ -638,6 +868,8 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                                 <div className="flex items-center gap-2">
                                                                                     <label className="text-[10px] font-bold text-slate-500 uppercase flex-1 text-right">RCV QTY:</label>
                                                                                     <NumericInput
+                                                                                        data-entry
+                                                                                        onKeyDown={entryKeyNav}
                                                                                         value={receivedQtys[oi.id] ?? oi.quantityRequested}
                                                                                         onChange={q => setReceivedQtys({ ...receivedQtys, [oi.id]: q })}
                                                                                         className="w-20 px-2 py-1 bg-white dark:bg-[#18181b] border border-accent-orange/50 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-accent-orange/50"
@@ -648,6 +880,8 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                                         <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Cost:</label>
                                                                                         <NumericInput
                                                                                             decimal
+                                                                                            data-entry
+                                                                                            onKeyDown={entryKeyNav}
                                                                                             value={receivedPrices[oi.id]?.cost ?? 0}
                                                                                             onChange={cost => setReceivedPrices({
                                                                                                 ...receivedPrices,
@@ -920,8 +1154,22 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                         </table>
                                     </div>
 
-                                    <div className="mt-6 pt-6 border-t border-slate-200 dark:border-white/10 flex justify-between items-center shrink-0">
-                                        <p className="text-slate-500 text-sm font-medium">Total Received Value</p>
+                                    <div className="mt-6 pt-6 border-t border-slate-200 dark:border-white/10 flex flex-wrap justify-between items-center gap-4 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const { lines, skipped } = linesFromPreviousOrder(selectedHistoryOrder.Items, new Set(orderableItems.map(i => i.id)));
+                                                addLinesInBulk(lines, "Everything from that order is already on the one you are building.", skipped);
+                                                const sameWarehouse = selectedHistoryOrder.warehouseId;
+                                                setSelectedWarehouseId(prev => prev || (warehouses.some(w => w.id === sameWarehouse) ? sameWarehouse : ""));
+                                                setSelectedHistoryOrder(null);
+                                                setActiveTab("NEW");
+                                            }}
+                                            className="min-h-11 flex items-center gap-2 px-4 py-2 bg-accent-purple/10 hover:bg-accent-purple/20 text-accent-purple rounded-xl text-xs font-bold transition-all border border-accent-purple/20"
+                                        >
+                                            <RotateCcw className="w-4 h-4" /> Order these again
+                                        </button>
+                                        <p className="text-slate-500 text-sm font-medium ml-auto">Total Received Value</p>
                                         <p className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
                                             {formatCurrency(selectedHistoryOrder.Items.reduce((acc: number, oi: any) => acc + (oi.costPerUnit * oi.quantityReceived), 0))}
                                         </p>
@@ -1005,6 +1253,15 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                 onConfirm={executeConfirmAction}
                 onCancel={() => setConfirmModal({ isOpen: false, action: null })}
             />
+            <ConfirmModal
+                isOpen={confirmClear}
+                isDestructive
+                title="Clear this order"
+                message={`Remove all ${orderLines.length} items from the order you are building? Nothing has been submitted yet.`}
+                confirmText="Yes, Clear All"
+                onConfirm={() => { setOrderLines([]); setConfirmClear(false); }}
+                onCancel={() => setConfirmClear(false)}
+            />
         </>
     );
 }
@@ -1021,7 +1278,7 @@ function WarehouseDropdown({ warehouses, selected, onChange }: { warehouses: War
                 className={`w-full bg-slate-100 dark:bg-white/5 border ${isOpen ? 'border-accent-purple shadow-[0_0_15px_rgba(168,85,247,0.15)]' : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:border-white/20'} rounded-xl px-4 py-3 flex items-center justify-between text-slate-900 dark:text-white focus:outline-none transition-all font-medium gap-3`}
             >
                 <span className={`truncate flex-1 text-left ${selectedWarehouse ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
-                    {selectedWarehouse ? selectedWarehouse.name : '-- Choose Origin Warehouse --'}
+                    {selectedWarehouse ? selectedWarehouse.name : '-- Choose Destination Warehouse --'}
                 </span>
                 <ChevronDown className={`w-5 h-5 text-slate-500 dark:text-slate-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180 text-accent-purple' : ''}`} />
             </button>
