@@ -523,6 +523,156 @@ export async function submitDriverReturn(
 }
 
 /**
+ * Admin collects unused stock from a driver at the end of the day and puts it
+ * back on the warehouse shelf. The mirror image of assignToDriver(): bag down,
+ * warehouse up, in one transaction.
+ *
+ * The admin is the one holding the goods, so there is nothing left to verify —
+ * the ReturnVerification rows are written already closed, as RESTOCKED. That
+ * status is deliberate and must not be APPROVED: Financials and the super KPIs
+ * read every APPROVED return as shrinkage at item cost, and a van hands back
+ * hundreds of good units a day.
+ *
+ * Partial by design. Drinks ride in the van overnight, and the admin types what
+ * they actually counted — anything not returned simply stays in the bag.
+ *
+ * No RefillLog and no WAC change: the same units move between two locations at
+ * the same cost, which is neither a sale nor a purchase.
+ */
+export async function returnDriverStockToWarehouse(
+    driverId: number,
+    warehouseId: number,
+    items: { itemId: number; quantity: number }[]
+): Promise<ActionResult<{ lines: number; units: number }>> {
+    const session = await requireAdmin()
+    try {
+        // Additive merge, then drop zeros — a repeated itemId would otherwise hit
+        // one target row twice in UPDATE…FROM VALUES / INSERT…ON CONFLICT.
+        const merged = new Map<number, number>()
+        for (const i of items) {
+            assertWholeNonNegative(i.quantity, `Return quantity for item ${i.itemId}`)
+            if (i.quantity === 0) continue
+            merged.set(i.itemId, (merged.get(i.itemId) || 0) + i.quantity)
+        }
+        if (!merged.size) throw new Error("Return must include at least one quantity > 0")
+
+        const lines = Array.from(merged, ([itemId, quantity]) => ({ itemId, quantity }))
+        const itemIds = lines.map((l) => l.itemId)
+
+        // Reference reads stay outside the tx (pooler latency — see assignToDriver).
+        const [driver, warehouse, dbItems, bagRows] = await Promise.all([
+            prisma.driver.findUnique({ where: { id: driverId }, select: { id: true, name: true } }),
+            prisma.warehouse.findUnique({ where: { id: warehouseId }, select: { id: true, name: true, isActive: true } }),
+            prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true, price_standard: true } }),
+            prisma.driverStock.findMany({ where: { driverId, itemId: { in: itemIds } }, select: { itemId: true, quantity_on_hand: true } }),
+        ])
+        if (!driver) throw new Error("Driver not found")
+        if (!warehouse || !warehouse.isActive) throw new Error("Warehouse not found")
+        if (dbItems.length !== itemIds.length) throw new Error("One or more items are invalid")
+
+        const itemById = new Map(dbItems.map((i) => [i.id, i]))
+        const onHand = new Map(bagRows.map((r) => [r.itemId, r.quantity_on_hand]))
+        const over = lines.filter((l) => l.quantity > (onHand.get(l.itemId) || 0))
+        if (over.length) {
+            throw new Error(
+                `More than the bag holds: ${over
+                    .map((l) => `${itemById.get(l.itemId)!.name} (bag ${onHand.get(l.itemId) || 0}, returning ${l.quantity})`)
+                    .join(", ")}`
+            )
+        }
+
+        await prisma.$transaction(async (tx) => {
+            // Guarded decrement: if the driver logged a refill between the read
+            // above and now, the short row misses the gte guard, drops out of
+            // RETURNING, and the whole return rolls back.
+            const decremented = await tx.$queryRaw<{ itemId: number }[]>`
+                UPDATE "DriverStock" AS ds
+                SET quantity_on_hand = ds.quantity_on_hand - v.qty,
+                    "updatedAt" = now()
+                FROM (VALUES ${Prisma.join(lines.map((l) => Prisma.sql`(${l.itemId}::int, ${l.quantity}::int)`))}) AS v("itemId", qty)
+                WHERE ds."driverId" = ${driverId}
+                  AND ds."itemId" = v."itemId"
+                  AND ds.quantity_on_hand >= v.qty
+                RETURNING ds."itemId"
+            `
+            if (decremented.length !== lines.length) {
+                const covered = new Set(decremented.map((r) => r.itemId))
+                const short = lines.filter((l) => !covered.has(l.itemId)).map((l) => itemById.get(l.itemId)!.name)
+                throw new Error(`The bag changed while you were counting (${short.join(", ")}). Reopen the return and try again.`)
+            }
+
+            await tx.$executeRaw`
+                INSERT INTO "WarehouseStock" ("warehouseId", "itemId", quantity_on_hand)
+                VALUES ${Prisma.join(lines.map((l) => Prisma.sql`(${warehouseId}::int, ${l.itemId}::int, ${l.quantity}::int)`))}
+                ON CONFLICT ("warehouseId", "itemId") DO UPDATE
+                SET quantity_on_hand = "WarehouseStock".quantity_on_hand + EXCLUDED.quantity_on_hand
+            `
+
+            const now = new Date()
+            await tx.returnVerification.createMany({
+                data: lines.map((l) => ({
+                    dispatchId: null,
+                    driverId,
+                    itemId: l.itemId,
+                    quantity: l.quantity,
+                    reason: "SURPLUS",
+                    status: "RESTOCKED",
+                    verified_at: now,
+                    notes: `Collected by admin → ${warehouse.name}`,
+                })),
+            })
+
+            await tx.inventoryAdjustment.createMany({
+                data: lines.map((l) => ({
+                    itemId: l.itemId,
+                    quantity: l.quantity,
+                    reason: "Driver Return to Warehouse",
+                    locationName: `${driver.name} → ${warehouse.name}`,
+                    priceAtAdjustment: itemById.get(l.itemId)!.price_standard,
+                })),
+            })
+        }, { timeout: 15_000, maxWait: 5_000 })
+
+        const units = lines.reduce((sum, l) => sum + l.quantity, 0)
+
+        await writeAuditLog(
+            session,
+            "ADMIN_DRIVER_RETURN",
+            "Driver",
+            driverId,
+            null,
+            { warehouseId, items: lines },
+            `Returned ${units} unit(s) across ${lines.length} item(s) from ${driver.name} to ${warehouse.name}`
+        )
+
+        notifyClients("driverStock")
+        revalidatePath("/admin")
+        revalidatePath("/admin/driver-stock")
+        revalidatePath("/admin/warehouse")
+        revalidatePath("/admin/returns")
+        revalidatePath("/driver")
+
+        // The driver's bag just changed under them. Low urgency — it is the end
+        // of the day and nothing needs doing — but their next refill sheet
+        // should not be a surprise. Never throws.
+        await sendPushToDriver(
+            driverId,
+            {
+                title: "Stock returned to the warehouse",
+                body: `${units} unit${units === 1 ? "" : "s"} were checked back in from your bag.`,
+                url: "/driver",
+                tag: `return-${driverId}`,
+            },
+            { urgency: "low" }
+        )
+
+        return { success: true, data: { lines: lines.length, units } }
+    } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Failed to return stock" }
+    }
+}
+
+/**
  * Admin-side feed for the /admin/driver-stock page: every active driver
  * with their current bag, ALL open assignments (PENDING_ACK / DISPUTED),
  * a window of recent acknowledged history, and recent refills.

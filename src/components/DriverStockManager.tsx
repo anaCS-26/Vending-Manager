@@ -16,6 +16,7 @@ import {
     ClipboardList,
     BookmarkPlus,
     Trash2,
+    Undo2,
     X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,6 +24,7 @@ import { toast } from "sonner";
 import { assignToDriver, dismissAllDisputes } from "@/actions/driver-stock";
 import { createDispatchTemplate } from "@/actions/dispatch-templates";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import DriverReturnModal from "@/components/DriverReturnModal";
 import { formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { adjustByBatch } from "@/lib/refill-entry";
 import { entryKeyNav } from "@/lib/entry-keys";
@@ -556,14 +558,23 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
                         <p className="text-slate-500 dark:text-slate-400 text-xs max-w-sm">Select a driver from the left pane to view their current inventory alongside the allocation menu.</p>
                     </motion.div>
                 ) : (
-                    <DriverDashboard driver={selectedDriver} />
+                    <DriverDashboard
+                        driver={selectedDriver}
+                        warehouses={warehouses}
+                        defaultWarehouseId={selectedWarehouseId === "" ? null : selectedWarehouseId}
+                    />
                 )}
             </div>
         </div>
     );
 }
 
-function DriverDashboard({ driver }: { driver: DriverWithBag }) {
+function DriverDashboard({ driver, warehouses, defaultWarehouseId }: {
+    driver: DriverWithBag;
+    warehouses: WarehouseType[];
+    defaultWarehouseId: number | null;
+}) {
+    const [returnOpen, setReturnOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<"STOCK" | "REFILLS" | "PENDING" | "HISTORY">("STOCK");
     const [stockSearchQuery, setStockSearchQuery] = useState("");
     
@@ -660,6 +671,16 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
                         
                         return (
                         <motion.div key="stock" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
+                            {driver.DriverStock.length > 0 && (
+                                <button
+                                    onClick={() => setReturnOpen(true)}
+                                    className="w-full min-h-11 px-4 rounded-xl bg-accent-green/10 hover:bg-accent-green/15 border border-accent-green/30 text-accent-green text-sm font-bold flex items-center justify-center gap-2 transition-colors"
+                                >
+                                    <Undo2 className="w-4 h-4" />
+                                    Return Items to Warehouse
+                                </button>
+                            )}
+
                             {driver.DriverStock.length > 0 && (
                                 <div className="relative group shrink-0">
                                     <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent-blue transition-colors">
@@ -792,6 +813,15 @@ function DriverDashboard({ driver }: { driver: DriverWithBag }) {
                 isPending={isClearingAll}
                 onConfirm={handleClearAllDisputes}
                 onCancel={() => setClearAllOpen(false)}
+            />
+
+            <DriverReturnModal
+                isOpen={returnOpen}
+                onClose={() => setReturnOpen(false)}
+                driver={driver}
+                bag={driver.DriverStock}
+                warehouses={warehouses}
+                defaultWarehouseId={defaultWarehouseId}
             />
         </div>
     );
