@@ -217,8 +217,15 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8 animate-in fade-in zoom-in-95 duration-300 pb-20 items-start">
-            {/* LEFT — Push Items to Bag (Sticky on Desktop) */}
-            <div className="xl:sticky xl:top-24 flex flex-col gap-6 h-[calc(100vh-8rem)]">
+            {/* LEFT — Push Items to Bag.
+                The panel used to be a fixed `h-[calc(100vh-8rem)]` at every width. Its
+                selects, search and push bar need ~410px, so on a short viewport (the
+                client's laptop: ~500px tall) the item list was squeezed to one row or
+                none. Now: stacked (<xl) the panel is as tall as its content and the list
+                caps itself; side-by-side (xl) it fills the viewport but never drops below
+                a height that shows ~6 rows, and only pins when the viewport can hold it —
+                a sticky panel taller than the screen hides its own push bar. */}
+            <div className="xl:tall:sticky xl:tall:top-24 flex flex-col gap-6 xl:h-[calc(100dvh-8rem)] xl:min-h-[44rem]">
                 <div className="glass-panel border-slate-200 dark:border-white/10 rounded-3xl flex flex-col relative overflow-hidden h-full shadow-sm">
                     <div className="p-5 lg:p-6 border-b border-slate-200 dark:border-white/10 bg-gradient-to-r from-slate-50 to-white dark:from-white/[0.02] dark:to-transparent shrink-0">
                         <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight mb-5">Stock Allocation</h2>
@@ -323,7 +330,7 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
                                     />
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-1.5">
+                                <div className="max-h-[max(60dvh,20rem)] xl:max-h-none xl:flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-1.5">
                                     {filteredInventory.length === 0 ? (
                                         <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-white/5 rounded-lg border border-dashed border-slate-200 dark:border-white/10">
                                             {searchQuery ? "No matching items." : "No available stock in this warehouse."}
