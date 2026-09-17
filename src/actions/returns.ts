@@ -39,7 +39,7 @@ export async function getPendingReturns() {
 export async function getProcessedReturns() {
     await requireAdmin();
     return await prisma.returnVerification.findMany({
-        where: { status: { in: ["APPROVED", "REJECTED"] } },
+        where: { status: { in: ["APPROVED", "RESTOCKED", "REJECTED"] } },
         include: {
             item: true,
             driver: true,
@@ -69,10 +69,12 @@ export async function approveReturn(returnId: number, actionType: 'RESTOCK' | 'L
                 throw new Error("Return is not pending or not found.");
             }
 
-            // Mark as approved and optional add notes string
+            // RESTOCKED vs APPROVED is load-bearing: Financials and the super KPIs
+            // book every APPROVED return as shrinkage at item cost. Goods that went
+            // back on the shelf are not a loss, so they must not share that status.
             await tx.returnVerification.update({
                 where: { id: returnId },
-                data: { status: "APPROVED", verified_at: new Date(), notes: adminNotes || null }
+                data: { status: actionType === 'RESTOCK' ? "RESTOCKED" : "APPROVED", verified_at: new Date(), notes: adminNotes || null }
             });
 
             if (actionType === 'RESTOCK') {

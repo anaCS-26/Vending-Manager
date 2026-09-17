@@ -258,7 +258,11 @@ export function ReturnsManager({ pending, history }: { pending: ReturnVerificati
                                                 {(his as any).notes || "-"}
                                             </td>
                                             <td className="px-3 py-3 md:px-6 md:py-4">
-                                                {his.status === 'APPROVED' ? (
+                                                {his.status === 'RESTOCKED' ? (
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest text-accent-blue bg-accent-blue/10 border border-accent-blue/20 px-2.5 py-1 rounded-full flex items-center gap-1.5 w-max">
+                                                        <Check className="w-3 h-3" /> Restocked
+                                                    </span>
+                                                ) : his.status === 'APPROVED' ? (
                                                     <span className="text-[10px] font-bold uppercase tracking-widest text-accent-green bg-accent-green/10 border border-accent-green/20 px-2.5 py-1 rounded-full flex items-center gap-1.5 w-max">
                                                         <Check className="w-3 h-3" /> Approved
                                                     </span>

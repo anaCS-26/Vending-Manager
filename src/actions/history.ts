@@ -206,7 +206,7 @@ export async function getRefillLogsPaginated(
         driver: r.driver,
         dispatch: r.dispatch,
         isSurplusReturn: true,
-        _customVerifiedCount: r.status === 'VERIFIED' || r.status === 'RESTOCK' || r.status === 'LOSS' || r.status === 'APPROVED' ? r.quantity : 0,
+        _customVerifiedCount: r.status === 'VERIFIED' || r.status === 'RESTOCK' || r.status === 'LOSS' || r.status === 'APPROVED' || r.status === 'RESTOCKED' ? r.quantity : 0,
         _customPendingCount: r.status === 'PENDING' ? r.quantity : 0,
     }));
 

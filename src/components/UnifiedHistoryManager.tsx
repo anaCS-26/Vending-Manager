@@ -316,7 +316,7 @@ function deriveEventFacts(log: any) {
         pendingCount = log._customPendingCount || 0;
     } else {
         const allVerifs = (log._customMachineReturnVerifs || log.dispatch?.ReturnVerifications || []).filter((v: any) => v.itemId === log.itemId);
-        const approved = allVerifs.filter((v: any) => v.status === 'APPROVED' || v.status === 'RESTOCK' || v.status === 'LOSS');
+        const approved = allVerifs.filter((v: any) => v.status === 'APPROVED' || v.status === 'RESTOCKED' || v.status === 'RESTOCK' || v.status === 'LOSS');
         const pending = allVerifs.filter((v: any) => v.status === 'PENDING');
         verifiedLoss = approved.reduce((s: number, v: any) => s + v.quantity, 0);
         pendingCount = pending.reduce((s: number, v: any) => s + v.quantity, 0);

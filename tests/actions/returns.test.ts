@@ -63,7 +63,9 @@ describe('approveReturn', () => {
 
     expect(prismaMock.returnVerification.update).toHaveBeenCalledWith({
       where: { id: 1 },
-      data: expect.objectContaining({ status: 'APPROVED', notes: 'looks ok', verified_at: expect.any(Date) }),
+      // RESTOCKED, not APPROVED: Financials books every APPROVED return as
+      // shrinkage, and goods back on the shelf are not a loss.
+      data: expect.objectContaining({ status: 'RESTOCKED', notes: 'looks ok', verified_at: expect.any(Date) }),
     });
     expect(prismaMock.warehouseStock.upsert).toHaveBeenCalledWith({
       where: { warehouseId_itemId: { warehouseId: 1, itemId: 1 } },
@@ -90,6 +92,12 @@ describe('approveReturn', () => {
 
     const r = await approveReturn(1, 'LOSS', 'water damage');
     expect(r.success).toBe(true);
+
+    // A write-off stays APPROVED — that status is what P&L reads as shrinkage.
+    expect(prismaMock.returnVerification.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({ status: 'APPROVED' }),
+    });
 
     // LOSS branch must NOT call upsert
     expect(prismaMock.warehouseStock.upsert).not.toHaveBeenCalled();
