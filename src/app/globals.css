@@ -1,5 +1,8 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
+/* Viewport is tall enough to pin a full-height panel. A 1366x768 laptop at 125%
+   Windows scaling has ~500px of viewport — width breakpoints alone can't see that. */
+@custom-variant tall (@media (min-height: 50rem));
 
 @theme {
   --font-sans: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
