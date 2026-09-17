@@ -140,6 +140,23 @@ Suggestions come from `getRefillHints()` (`src/actions/inventory.ts`, `requireDr
 
 `Item.default_assignment_qty` (seeded from the client's case-pack sheet, all 63 live items) stays what it always was: the **dispatch**-side `+N` batch button in `DriverStockManager`. It must not leak into refill quantities.
 
+## Admin data entry (case packs + keyboard)
+
+The admin keys long lists from paper — a ~60-line supplier order, a recount, a morning load — so the entry screens are built around two ideas: **start from the right number** and **never need the mouse between rows**.
+
+**PO drafting rules are pure functions in `src/lib/order-entry.ts`** (tested in `tests/lib/order-entry.test.ts`; `OrderManagerUI` only renders them, flow pinned by `tests/components/OrderManagerUI.test.tsx`):
+- **A new PO line starts at one case** — `defaultOrderQuantity(Item.default_assignment_qty)`, falling back to 1 only when the item has no case pack. Every line used to open at a hard-coded 1. This is the opposite call from the driver refill sheet (see below, where a case pack must *not* leak in) and both are right: a supplier order really is placed in cases, and a PO line is a request, not a booked sale — what arrives is typed at receiving.
+- **`±case` buttons, and `−case` refuses rather than clamps** when it would empty the line. Clamping 24 − 24 to the floor of 1 makes the next `+24` land on 25, which is no number of cases.
+- **Bulk starting points only ever append** (`mergeOrderLines`): "Repeat last order" (per destination warehouse, uses `quantityRequested` so a short shipment doesn't shrink the next order, drops and *counts* deactivated items), "Order these again" in the history modal, and "Add N shorted items" (`pending_deficit` rounded up to whole cases). None may overwrite a quantity the admin typed.
+- **Keyboard loop: name → Enter → Enter.** Enter in the search adds the highlighted match and lands in the new line's quantity box with the case pack *selected*; Enter there accepts it and returns to search, typing replaces it. A mouse click instead keeps focus in the search box with the list open (`onMouseDown` `preventDefault`) so several items can be picked in a row. Searching for an item already on the order jumps to its line.
+- **Lines render newest-first** so the line just added sits under the search box, not 60 rows down. State stays in insertion order, so the submitted/printed PO order is unchanged.
+- **The draft is persisted to `localStorage` (`vms:po-draft`)**, restored after mount, cleared on submit. Changing the destination warehouse **no longer wipes the lines** — they are item + quantity, nothing warehouse-specific.
+- Only `isActive` items are orderable; the unfiltered `items` prop is kept because pending/history rows still look up inactive ones. `createPurchaseOrder` now rejects empty orders, non-integer or < 1 quantities, and duplicate items server-side.
+
+**`src/lib/entry-keys.ts` — spreadsheet keys for every long grid.** Put `data-entry-group` on the container and `data-entry` on the inputs in the run; `entryKeyNav` makes Enter/↓ go to the next one and Shift+Enter/↑ the previous, selecting its contents. Order is DOM order. Wired into PO receiving, both calibration modals, `TemplateEditorModal`, and the driver-stock grid. Two rules: **leave rarely-edited fields unmarked** (at receiving only quantity and cost are in the run — the three pre-filled sell prices are skipped, Tab still reaches them), and **select on the keypress, never from `onFocus`** (the NumericInput rule). Pass `{ enter: false }` when Enter means something else on that screen (the PO draft, where it returns to search). Don't add this to a list that re-sorts or filters on the typed value — the focused row would move under the cursor (the `assignRefillGroup` lesson).
+
+`DriverStockManager`: Enter in the search box jumps to the top match's quantity; "Clear" empties the staged grid with an **Undo toast instead of a confirm dialog** (one tap each way).
+
 ## Warehouse calibration & audit
 
 Correct warehouse stock/cost **without fake POs** (a PO at the wrong `costPerUnit` silently corrupts WAC, and WAC flows into P&L via `RefillLog.cost_at_refill` snapshots + live shrinkage). Both actions in `src/actions/inventory.ts` write `InventoryAdjustment` + `SystemAuditLog` **inside the tx**:

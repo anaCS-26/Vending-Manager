@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { createDispatchTemplate, updateDispatchTemplate } from "@/actions/dispatch-templates";
 import { NumericInput } from "@/components/NumericInput";
+import { entryKeyNav } from "@/lib/entry-keys";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
 import type { DispatchTemplateWithItems } from "@/types";
 
@@ -160,9 +161,17 @@ export default function TemplateEditorModal({ isOpen, onClose, template, items }
                                     <Search className="absolute left-3 top-3 w-4 h-4 text-slate-500 dark:text-slate-400" />
                                     <input
                                         type="text"
-                                        placeholder="Search by name or code..."
+                                        placeholder="Type a name or code, press Enter to add..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
+                                        // Enter adds the top match and the box keeps focus, so a
+                                        // 56-line template is typed without reaching for the mouse.
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter" && searchResults[0]) {
+                                                e.preventDefault();
+                                                addLine(searchResults[0]);
+                                            }
+                                        }}
                                         className="w-full bg-slate-50 dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue transition-colors"
                                     />
                                 </div>
@@ -197,7 +206,7 @@ export default function TemplateEditorModal({ isOpen, onClose, template, items }
                                         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">No items yet. Search above to add products.</p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-2">
+                                    <div className="space-y-2" data-entry-group>
                                         {selectedLines.map(item => (
                                             <div key={item.id} className="flex items-center justify-between gap-3 bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/5 rounded-xl px-4 py-2.5">
                                                 <div className="flex-1 min-w-0">
@@ -205,6 +214,8 @@ export default function TemplateEditorModal({ isOpen, onClose, template, items }
                                                     <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">#{item.sku}</p>
                                                 </div>
                                                 <NumericInput
+                                                    data-entry
+                                                    onKeyDown={entryKeyNav}
                                                     value={lines[item.id]}
                                                     onChange={(qty) => setLineQty(item.id, qty)}
                                                     className="w-20 bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-sm text-center font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue transition-colors"

@@ -6,6 +6,8 @@ import OrderManagerUI from "@/components/OrderManagerUI";
 export default async function OrdersPage() {
     const [warehouses, items, orders] = await Promise.all([
         prisma.warehouse.findMany({
+            // Destination picker only — a deactivated warehouse can't take a new PO.
+            where: { isActive: true },
             orderBy: { name: 'asc' }
         }),
         prisma.item.findMany({

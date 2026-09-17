@@ -362,7 +362,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                     <input type="text" value={itemForm.category} onChange={e => setItemForm({ ...itemForm, category: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Category" />
                                                 </div>
                                                 <div>
-                                                    <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Driver Batch Qty</label>
+                                                    <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Case / Batch Qty</label>
                                                     <NumericInput
                                                         max={100}
                                                         value={itemForm.default_assignment_qty}
@@ -370,7 +370,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none"
                                                         placeholder="e.g. 30"
                                                     />
-                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 px-1">Adds a +N batch button on driver stock. Set to 0 to hide. Max 100.</p>
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 px-1">Units in one case. New purchase order lines start at this quantity, and it is the +N button on orders and driver stock. Set to 0 for none. Max 100.</p>
                                                 </div>
                                                 <div className="flex gap-2 pt-2">
                                                     <button onClick={() => setEditingId(null)} className="flex-1 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-white/10 text-slate-900 dark:text-white rounded-lg text-xs font-medium transition-colors">Cancel</button>

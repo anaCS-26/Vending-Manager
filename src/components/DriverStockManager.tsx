@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import {
     Backpack,
     AlertTriangle,
@@ -15,6 +15,7 @@ import {
     Check,
     ClipboardList,
     BookmarkPlus,
+    Trash2,
     X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,6 +25,7 @@ import { createDispatchTemplate } from "@/actions/dispatch-templates";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { adjustByBatch } from "@/lib/refill-entry";
+import { entryKeyNav } from "@/lib/entry-keys";
 import type { WarehouseWithItem, WarehouseType, DispatchTemplateWithItems } from "@/types";
 
 type StockAssignmentLite = {
@@ -77,6 +79,7 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
     const [isPending, startTransition] = useTransition();
     const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
     const [templateName, setTemplateName] = useState("");
+    const itemListRef = useRef<HTMLDivElement>(null);
 
     const selectedDriver = useMemo(
         () => drivers.find((d) => d.id.toString() === selectedDriverId) ?? null,
@@ -105,6 +108,16 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
         } else {
             setQuantities((prev) => ({ ...prev, [itemId]: Math.min(val, max) }));
         }
+    };
+
+    /** Undo instead of a confirm dialog: clearing is one tap, and so is taking it back. */
+    const handleClearStaged = () => {
+        const snapshot = quantities;
+        const count = Object.keys(snapshot).length;
+        setQuantities({});
+        toast(`Cleared ${count} staged items.`, {
+            action: { label: "Undo", onClick: () => setQuantities(snapshot) },
+        });
     };
 
     const handleIncrement = (itemId: number, currentQty: number, max: number) => {
@@ -323,14 +336,23 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
                                     </div>
                                     <input
                                         type="text"
-                                        placeholder="Search inventory..."
+                                        placeholder="Search inventory, press Enter to jump to its quantity..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
+                                        // "lays" ↵ "28": the top match's quantity box takes focus, so
+                                        // finding a row and filling it is one motion.
+                                        onKeyDown={(e) => {
+                                            if (e.key !== "Enter") return;
+                                            e.preventDefault();
+                                            const first = itemListRef.current?.querySelector<HTMLInputElement>("input[data-entry]");
+                                            first?.focus();
+                                            first?.select();
+                                        }}
                                         className="w-full bg-white dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-lg py-2 pl-9 pr-3 text-xs text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-accent-blue shadow-sm transition-all"
                                     />
                                 </div>
 
-                                <div className="max-h-[max(60dvh,20rem)] xl:max-h-none xl:flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-1.5">
+                                <div ref={itemListRef} data-entry-group className="max-h-[max(60dvh,20rem)] xl:max-h-none xl:flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-1.5">
                                     {filteredInventory.length === 0 ? (
                                         <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-white/5 rounded-lg border border-dashed border-slate-200 dark:border-white/10">
                                             {searchQuery ? "No matching items." : "No available stock in this warehouse."}
@@ -371,6 +393,9 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
                                                                 inputMode="numeric"
                                                                 value={qty || ""}
                                                                 placeholder="0"
+                                                                data-entry
+                                                                aria-label={`Quantity of ${inv.item.name}`}
+                                                                onKeyDown={entryKeyNav}
                                                                 onChange={(e) => handleQtyChange(inv.itemId, e.target.value, inv.quantity_on_hand)}
                                                                 className="w-8 bg-transparent text-center text-xs font-black text-slate-900 dark:text-white focus:outline-none"
                                                             />
@@ -499,6 +524,18 @@ export function DriverStockManager({ drivers, inventory, warehouses, templates }
                                 <BookmarkPlus className="w-4 h-4" />
                                 <span className="hidden sm:inline">Save as Template</span>
                             </button>
+                            {Object.keys(quantities).length > 1 && (
+                                <button
+                                    onClick={handleClearStaged}
+                                    disabled={isPending}
+                                    title="Clear every staged quantity"
+                                    aria-label="Clear every staged quantity"
+                                    className="px-4 py-3 bg-slate-100 dark:bg-white/5 hover:bg-accent-pink/10 hover:text-accent-pink border border-slate-200 dark:border-white/10 disabled:opacity-40 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors text-slate-700 dark:text-slate-200 text-sm"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Clear</span>
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
