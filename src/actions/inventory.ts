@@ -13,6 +13,7 @@ import bcrypt from "bcryptjs";
 import { requireAdmin, requireSuperAdmin, requireDriver, requireAdminOrDriverOwner } from "@/lib/auth-utils";
 import { writeAuditLog } from "@/lib/audit-utils";
 import { computeWeightedCost } from "@/lib/wac-math";
+import { actionFailure } from "@/lib/action-error";
 
 /**
  * ============================================================================
@@ -344,8 +345,7 @@ export async function dispatchToDriver(
         
         return { success: true, data: undefined }
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to dispatch items"
-        return { success: false, error: message }
+        return actionFailure(error, "dispatchToDriver", "Failed to dispatch items")
     }
 }
 
@@ -492,8 +492,7 @@ export async function logRefill(
         
         return { success: true, data: undefined }
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to log refill"
-        return { success: false, error: message }
+        return actionFailure(error, "logRefill", "Failed to log refill")
     }
 }
 
@@ -646,8 +645,7 @@ export async function logBatchRefills(
         return { success: true, data: undefined }
     } catch (error) {
         if (isDuplicateRefillReplay(error)) return { success: true, data: undefined }
-        const message = error instanceof Error ? error.message : "Failed to log batch refill"
-        return { success: false, error: message }
+        return actionFailure(error, "logBatchRefills", "Failed to log batch refill")
     }
 }
 
@@ -846,8 +844,7 @@ async function logBatchRefillsDispatchless(
         return { success: true, data: undefined };
     } catch (error) {
         if (isDuplicateRefillReplay(error)) return { success: true, data: undefined };
-        const message = error instanceof Error ? error.message : "Failed to log batch refill";
-        return { success: false, error: message };
+        return actionFailure(error, "logBatchRefillsDispatchless", "Failed to log batch refill");
     }
 }
 
@@ -983,8 +980,7 @@ export async function returnDispatch(
         
         return { success: true, data: undefined }
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to process return"
-        return { success: false, error: message }
+        return actionFailure(error, "returnDispatch", "Failed to process return")
     }
 }
 
@@ -1103,8 +1099,7 @@ export async function editDispatchReturn(
         
         return { success: true, data: undefined }
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to edit return"
-        return { success: false, error: message }
+        return actionFailure(error, "editDispatchReturn", "Failed to edit return")
     }
 }
 
@@ -1164,7 +1159,7 @@ export async function createDriver(name: string, phone?: string, email?: string,
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to create driver" }
+        return actionFailure(error, "createDriver", "Failed to create driver")
     }
 }
 
@@ -1183,7 +1178,7 @@ export async function updateDriver(id: number, name: string, phone?: string, ema
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to update driver" }
+        return actionFailure(error, "updateDriver", "Failed to update driver")
     }
 }
 
@@ -1264,7 +1259,7 @@ export async function createMachine(location_name: string, district: string, add
         revalidatePath('/admin/manage')
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to create machine" }
+        return actionFailure(error, "createMachine", "Failed to create machine")
     }
 }
 
@@ -1305,7 +1300,7 @@ export async function updateMachine(id: number, location_name: string, district:
         notifyClients('machine')
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to update machine" }
+        return actionFailure(error, "updateMachine", "Failed to update machine")
     }
 }
 
@@ -1396,7 +1391,7 @@ export async function createItem(name: string, category: string, sku: string, pr
         revalidatePath('/admin/manage');
         return { success: true, data: undefined };
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to process item creation" };
+        return actionFailure(error, "createItem", "Failed to process item creation");
     }
 }
 
@@ -1424,7 +1419,7 @@ export async function updateItem(id: number, name: string, category: string, sku
         notifyClients('item')
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to update item" }
+        return actionFailure(error, "updateItem", "Failed to update item")
     }
 }
 
@@ -1450,7 +1445,7 @@ export async function updateItemStock(id: number, quantity_on_hand: number): Pro
         notifyClients('warehouseStock')
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to update item stock" }
+        return actionFailure(error, "updateItemStock", "Failed to update item stock")
     }
 }
 
@@ -1492,7 +1487,7 @@ export async function updateWarehouseItemStock(warehouseId: number, itemId: numb
         notifyClients('warehouseStock');
         return { success: true, data: undefined };
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to restock warehouse item" };
+        return actionFailure(error, "updateWarehouseItemStock", "Failed to restock warehouse item");
     }
 }
 
@@ -1522,7 +1517,7 @@ export async function createWarehouseItem(warehouseId: number, name: string, cat
         notifyClients('item');
         return { success: true, data: undefined };
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to specify new warehouse item" };
+        return actionFailure(error, "createWarehouseItem", "Failed to specify new warehouse item");
     }
 }
 
@@ -1580,8 +1575,7 @@ export async function resetDatabase(): Promise<ActionResult> {
         notifyClients('reset');
         return { success: true, data: undefined };
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to clear database"
-        return { success: false, error: message }
+        return actionFailure(error, "resetDatabase", "Failed to clear database")
     }
 }
 
@@ -1614,8 +1608,7 @@ export async function uploadItemImage(itemId: number, formData: FormData): Promi
         notifyClients('image');
         return { success: true, data: imageUrl };
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to upload image";
-        return { success: false, error: message };
+        return actionFailure(error, "uploadItemImage", "Failed to upload image");
     }
 }
 /** Fetches the most recent dispatch for a driver to assist with inventory reconciliation. */
@@ -1638,7 +1631,7 @@ export async function getRecentDispatchForDriver(driverId: number): Promise<Acti
 
         return { success: true, data: latestDispatch };
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to fetch latest dispatch" };
+        return actionFailure(error, "getRecentDispatchForDriver", "Failed to fetch latest dispatch");
     }
 }
 
@@ -1727,7 +1720,7 @@ export async function editDriverBagStock(
         notifyClients('driverStock');
         return { success: true, data: undefined };
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to edit driver bag stock" };
+        return actionFailure(error, "editDriverBagStock", "Failed to edit driver bag stock");
     }
 }
 
@@ -1852,8 +1845,7 @@ export async function reconcileMachineAudit(
         
         return { success: true, data: undefined };
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to reconcile machine";
-        return { success: false, error: message };
+        return actionFailure(error, "reconcileMachineAudit", "Failed to reconcile machine");
     }
 }
 
@@ -2020,7 +2012,7 @@ export async function calibrateWarehouseStock(
         notifyClients('warehouseStock');
         return { success: true, data: undefined };
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to calibrate warehouse stock" };
+        return actionFailure(error, "calibrateWarehouseStock", "Failed to calibrate warehouse stock");
     }
 }
 
@@ -2072,6 +2064,6 @@ export async function correctItemCost(
         notifyClients('item');
         return { success: true, data: undefined };
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to correct item cost" };
+        return actionFailure(error, "correctItemCost", "Failed to correct item cost");
     }
 }

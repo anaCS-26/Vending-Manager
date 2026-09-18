@@ -6,6 +6,7 @@ import type { ActionResult } from "@/types"
 import bcrypt from "bcryptjs"
 import { auth } from "@/auth"
 import { notifyClients } from "@/lib/notify"
+import { actionFailure } from "@/lib/action-error"
 
 /**
  * ============================================================================
@@ -50,7 +51,7 @@ export async function createAdmin(email: string, password?: string, name?: strin
         notifyClients('admin')
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to create admin" }
+        return actionFailure(error, "createAdmin", "Failed to create admin")
     }
 }
 
@@ -72,7 +73,7 @@ export async function updateAdmin(id: number, email: string, password?: string, 
         notifyClients('admin')
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to update admin" }
+        return actionFailure(error, "updateAdmin", "Failed to update admin")
     }
 }
 

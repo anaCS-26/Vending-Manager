@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { runStockAlerts } from "@/lib/stock-alerts";
+import { pruneErrorEvents } from "@/lib/action-error";
 
 /**
  * ============================================================================
@@ -50,6 +51,16 @@ export async function GET(request: Request) {
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
     if (!token || !secretMatches(token, expected)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Housekeeping that rides the only scheduled tick this app has (a second
+    // cron would be a third REST route). Isolated so a failed prune can never
+    // cost the fleet its morning stock alert.
+    try {
+        const pruned = await pruneErrorEvents();
+        if (pruned > 0) console.log(`[cron:stock-alerts] pruned ${pruned} old error events`);
+    } catch (error) {
+        console.error("[cron:stock-alerts] error-event prune failed:", error);
     }
 
     try {

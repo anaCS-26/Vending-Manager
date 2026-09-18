@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma"
 import { auth } from "@/auth"
 import bcrypt from "bcryptjs"
 import { revalidatePath } from "next/cache"
+import { actionFailure } from "@/lib/action-error"
 import type { ActionResult } from "@/types"
 
 /**
@@ -40,6 +41,6 @@ export async function updateMyProfile(name: string, password?: string): Promise<
         return { success: true, data: undefined }
 
     } catch (e: any) {
-        return { success: false, error: e.message || "Failed to update profile" }
+        return actionFailure(e, "updateMyProfile", "Failed to update profile")
     }
 }

@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/auth-utils'
 import { writeAuditLog } from '@/lib/audit-utils'
 import { notifyClients } from '@/lib/notify'
 import type { ActionResult, DispatchTemplateWithItems } from '@/types'
+import { actionFailure } from '@/lib/action-error'
 
 /**
  * ============================================================================
@@ -98,8 +99,7 @@ export async function createDispatchTemplate(
         notifyClients('dispatch-template');
         return { success: true, data: template };
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to create template";
-        return { success: false, error: message };
+        return actionFailure(error, "createDispatchTemplate", "Failed to create template");
     }
 }
 
@@ -135,8 +135,7 @@ export async function updateDispatchTemplate(
         notifyClients('dispatch-template');
         return { success: true, data: template };
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to update template";
-        return { success: false, error: message };
+        return actionFailure(error, "updateDispatchTemplate", "Failed to update template");
     }
 }
 
@@ -159,7 +158,6 @@ export async function deleteDispatchTemplate(id: number): Promise<ActionResult> 
         notifyClients('dispatch-template');
         return { success: true, data: undefined };
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to delete template";
-        return { success: false, error: message };
+        return actionFailure(error, "deleteDispatchTemplate", "Failed to delete template");
     }
 }

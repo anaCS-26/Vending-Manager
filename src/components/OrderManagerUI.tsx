@@ -217,7 +217,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                 setIsCreatingItem(false);
                 setNewItemForm({ name: "", sku: "", category: "", bulk_format: "" });
             } else {
-                toast.error(res.error);
+                toast.error(res.success ? "Failed to create new item" : res.error);
             }
         });
     };

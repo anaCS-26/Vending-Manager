@@ -14,6 +14,7 @@ import {
     type PushSubscriptionData,
 } from "@/lib/pushStore"
 import type { ActionResult, PushRegistrationStatus } from "@/types"
+import { actionFailure } from "@/lib/action-error"
 
 /**
  * ============================================================================
@@ -142,10 +143,7 @@ export async function savePushSubscription(
 
         return { success: true, data: { deviceCount: await countSubscriptions(owner) } }
     } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Failed to save push subscription",
-        }
+        return actionFailure(error, "savePushSubscription", "Failed to save push subscription")
     }
 }
 
@@ -172,10 +170,7 @@ export async function deletePushSubscription(
 
         return { success: true, data: { deviceCount: await countSubscriptions(owner) } }
     } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Failed to remove push subscription",
-        }
+        return actionFailure(error, "deletePushSubscription", "Failed to remove push subscription")
     }
 }
 
@@ -223,9 +218,6 @@ export async function sendTestPush(): Promise<ActionResult<{ sent: number }>> {
         }
         return { success: true, data: { sent: result.sent } }
     } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Failed to send test notification",
-        }
+        return actionFailure(error, "sendTestPush", "Failed to send test notification")
     }
 }

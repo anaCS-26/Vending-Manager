@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/auth-utils";
 import { writeAuditLog } from "@/lib/audit-utils";
 import { notifyClients } from "@/lib/notify";
 import { computeWeightedCost } from "@/lib/wac-math";
+import { actionFailure } from "@/lib/action-error";
 
 /**
  * ============================================================================
@@ -68,10 +69,10 @@ export async function createPurchaseOrder(data: {
         await writeAuditLog(session, 'CREATE_PURCHASE_ORDER', 'PurchaseOrder', order.id, null, data);
         notifyClients('purchase-order');
 
-        return { success: true, orderId: order.id };
+        return { success: true as const, orderId: order.id };
     } catch (error: any) {
         console.error("Failed to create purchase order:", error);
-        return { success: false, error: error.message || "Failed to create purchase order" };
+        return actionFailure(error, "createPurchaseOrder", "Failed to create purchase order");
     }
 }
 
@@ -262,10 +263,10 @@ export async function completePurchaseOrder(
         await writeAuditLog(session, 'COMPLETE_PURCHASE_ORDER', 'PurchaseOrder', orderId, null, { receivedData });
         notifyClients('purchase-order');
         
-        return { success: true };
+        return { success: true as const };
     } catch (error: any) {
         console.error("Failed to complete purchase order:", error);
-        return { success: false, error: error.message || "Failed to complete purchase order" };
+        return actionFailure(error, "completePurchaseOrder", "Failed to complete purchase order");
     }
 }
 
@@ -282,10 +283,10 @@ export async function cancelPurchaseOrder(orderId: number) {
         await writeAuditLog(session, 'CANCEL_PURCHASE_ORDER', 'PurchaseOrder', orderId, null, null);
         notifyClients('purchase-order');
         
-        return { success: true };
+        return { success: true as const };
     } catch (error: any) {
         console.error("Failed to cancel purchase order:", error);
-        return { success: false, error: error.message || "Failed to cancel purchase order" };
+        return actionFailure(error, "cancelPurchaseOrder", "Failed to cancel purchase order");
     }
 }
 
@@ -315,8 +316,8 @@ export async function createQuickItem(data: { name: string; sku: string; categor
         await writeAuditLog(session, 'CREATE_QUICK_ITEM', 'Item', item.id, null, data);
         notifyClients('item');
         
-        return { success: true, item: { ...item, WarehouseStock: [], _count: { DispatchItems: 0 } } };
+        return { success: true as const, item: { ...item, WarehouseStock: [], _count: { DispatchItems: 0 } } };
     } catch (error: any) {
-        return { success: false, error: error.message || "Failed to create new item" };
+        return actionFailure(error, "createQuickItem", "Failed to create new item");
     }
 }
