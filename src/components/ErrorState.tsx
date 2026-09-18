@@ -1,8 +1,12 @@
 "use client";
 
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import { AlertTriangle, MessageSquareWarning, RotateCcw } from "lucide-react";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { reportClientError } from "@/actions/support";
+import { Bi } from "@/components/Bi";
+import { ReportProblemModal } from "@/components/support/ReportProblemModal";
 
 type Props = {
     error: Error & { digest?: string };
@@ -20,23 +24,47 @@ type Props = {
  * Deliberately does NOT render `error.message` in production. Server actions in
  * this codebase surface raw Prisma errors (constraint names, column names) and
  * an error boundary is the last place that should be echoed back to a driver or
- * a client's admin. The `digest` is shown instead — it's the stable id Vercel
- * logs against, so it's what support actually needs. Full text still shows in
+ * a client's admin. A reference code is shown instead. Full text still shows in
  * development.
+ *
+ * The code on screen is always one that resolves at /super/support: on mount
+ * the failure is recorded as an ErrorEvent under the Next `digest` when there is
+ * one (server-render failures — the same id Vercel logs against), or under a
+ * freshly minted `E-` code when there isn't (errors thrown in the browser have
+ * no digest, and used to show no reference at all). "Report this problem" then
+ * opens the report form with that code already attached.
+ *
+ * Copy is Arabic + English: this is the screen someone is most likely to
+ * photograph and send, and the least likely to be able to describe.
  */
-export function ErrorState({
-    error,
-    reset,
-    homeHref,
-    homeLabel,
-    title = "Something went wrong",
-    description = "This page failed to load. It's usually temporary — try again.",
-}: Props) {
+export function ErrorState({ error, reset, homeHref, homeLabel, title, description }: Props) {
+    const pathname = usePathname();
+    const [code, setCode] = useState<string | null>(error.digest ?? null);
+    // Unknown until the beacon answers: the root boundary also serves signed-out
+    // visitors, who can't file a report, so the button must not be offered blind.
+    const [canReport, setCanReport] = useState(false);
+    const [reportOpen, setReportOpen] = useState(false);
+
     useEffect(() => {
-        // No error tracker is wired up yet (see the backlog), so at minimum get
-        // it into the Vercel function logs rather than losing it entirely.
         console.error("[error-boundary]", error);
-    }, [error]);
+        let cancelled = false;
+        reportClientError({
+            source: "boundary",
+            message: error.message,
+            stack: error.stack,
+            digest: error.digest,
+            path: pathname ?? undefined,
+        })
+            .then((result) => {
+                if (cancelled) return;
+                setCanReport(true);
+                if (result.success) setCode(result.data.code);
+            })
+            .catch(() => undefined);
+        return () => {
+            cancelled = true;
+        };
+    }, [error, pathname]);
 
     return (
         <div className="flex min-h-[60vh] items-center justify-center p-4">
@@ -45,8 +73,17 @@ export function ErrorState({
                     <AlertTriangle className="h-8 w-8" />
                 </div>
 
-                <h1 className="mb-2 text-xl font-bold text-slate-900 dark:text-white">{title}</h1>
-                <p className="mb-6 text-sm text-slate-600 dark:text-slate-400">{description}</p>
+                <h1 className="mb-2 text-xl font-bold text-slate-900 dark:text-white">
+                    {title ?? <Bi en="Something went wrong" ar="حدث خطأ ما" />}
+                </h1>
+                <p className="mb-6 text-sm text-slate-600 dark:text-slate-400">
+                    {description ?? (
+                        <Bi
+                            en="This page failed to load. It's usually temporary — try again."
+                            ar="تعذّر تحميل هذه الصفحة. غالباً ما يكون ذلك مؤقتاً — حاول مرة أخرى."
+                        />
+                    )}
+                </p>
 
                 {process.env.NODE_ENV === "development" && (
                     <pre className="mb-6 max-h-40 overflow-auto rounded-xl bg-slate-100 p-3 text-left text-[11px] leading-relaxed text-slate-700 dark:bg-black/40 dark:text-slate-300">
@@ -59,8 +96,8 @@ export function ErrorState({
                         onClick={reset}
                         className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent-blue px-4 py-3 font-bold text-white transition-colors hover:bg-accent-blue/90"
                     >
-                        <RotateCcw className="h-4 w-4" />
-                        Try again
+                        <RotateCcw className="h-4 w-4 shrink-0" />
+                        <Bi inline en="Try again" ar="حاول مجدداً" />
                     </button>
                     <Link
                         href={homeHref}
@@ -70,12 +107,25 @@ export function ErrorState({
                     </Link>
                 </div>
 
-                {error.digest && (
-                    <p className="mt-5 font-mono text-[11px] text-slate-400 dark:text-slate-500">
-                        Reference: {error.digest}
+                {canReport && (
+                    <button
+                        type="button"
+                        onClick={() => setReportOpen(true)}
+                        className="mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+                    >
+                        <MessageSquareWarning className="h-4 w-4 shrink-0" />
+                        <Bi inline en="Report this problem" ar="الإبلاغ عن هذه المشكلة" />
+                    </button>
+                )}
+
+                {code && (
+                    <p className="mt-5 font-mono text-[11px] text-slate-400 dark:text-slate-500 select-all">
+                        Reference: {code}
                     </p>
                 )}
             </div>
+
+            <ReportProblemModal isOpen={reportOpen} onClose={() => setReportOpen(false)} errorCode={code} />
         </div>
     );
 }

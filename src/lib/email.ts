@@ -103,3 +103,68 @@ function resetEmailHtml(url: string): string {
   </body>
 </html>`;
 }
+
+/** Where problem reports are mailed. Unset = push + /super/support only. */
+export function getSupportEmail(): string | null {
+    return process.env.SUPPORT_EMAIL || null;
+}
+
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+export type ProblemReportEmail = {
+    code: string;
+    who: string;
+    path: string | null;
+    note: string | null;
+    errorCode: string | null;
+    screenshotUrl: string | null;
+};
+
+/**
+ * Mails a problem report to the developer. Best-effort: the report is already
+ * in the database by the time this runs, so a transport failure is logged by
+ * the caller and never shown to the person who filed it.
+ *
+ * `note` is free text typed by a user and lands in an HTML body — it is escaped,
+ * and the subject carries only the code and the author, never the note.
+ */
+export async function sendProblemReportEmail(report: ProblemReportEmail): Promise<SendResult> {
+    const apiKey = process.env.RESEND_API_KEY;
+    const to = getSupportEmail();
+    if (!apiKey || !to) return { ok: false, error: "Support email is not configured" };
+
+    const url = `${getAppOrigin()}/super/support`;
+    const rows: [string, string][] = [
+        ["Report", report.code],
+        ["From", report.who],
+        ["Page", report.path ?? "—"],
+        ["Error code", report.errorCode ?? "—"],
+        ["Screenshot", report.screenshotUrl ?? "—"],
+    ];
+
+    try {
+        const { error } = await new Resend(apiKey).emails.send({
+            from: FROM,
+            to,
+            subject: `Problem report ${report.code} from ${report.who}`,
+            text: [...rows.map(([k, v]) => `${k}: ${v}`), "", report.note ?? "(no note)", "", url].join("\n"),
+            html: `<!doctype html><html><body style="font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:14px;color:#0f172a;">
+<table cellpadding="6" style="border-collapse:collapse;">${rows
+                .map(([k, v]) => `<tr><td style="color:#64748b;">${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`)
+                .join("")}</table>
+<p dir="auto" style="white-space:pre-wrap;border-left:3px solid #cbd5e1;padding-left:12px;">${escapeHtml(report.note ?? "(no note)")}</p>
+<p><a href="${url}">Open the support inbox</a></p>
+</body></html>`,
+        });
+        if (error) return { ok: false, error: error.message };
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : "Unknown transport error" };
+    }
+}

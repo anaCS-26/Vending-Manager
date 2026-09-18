@@ -3,6 +3,7 @@ import {
     deleteSubscriptionByEndpoint,
     getAdminSubscriptions,
     getDriverSubscriptions,
+    getSuperAdminSubscriptions,
     markDelivered,
     markFailed,
     type StoredSubscription,
@@ -211,6 +212,20 @@ export async function sendPushToAdmins(
         return await sendToSubscriptions(subs, payload, opts);
     } catch (err) {
         console.error("[push] sendPushToAdmins failed:", err);
+        return { ...EMPTY, failed: 1 };
+    }
+}
+
+/** Notifies super-admin devices only (the provider). Never throws. */
+export async function sendPushToSuperAdmins(
+    payload: PushPayload,
+    opts?: { urgency?: "very-low" | "low" | "normal" | "high" }
+): Promise<PushSendResult> {
+    try {
+        const subs = await getSuperAdminSubscriptions();
+        return await sendToSubscriptions(subs, payload, opts);
+    } catch (err) {
+        console.error("[push] sendPushToSuperAdmins failed:", err);
         return { ...EMPTY, failed: 1 };
     }
 }

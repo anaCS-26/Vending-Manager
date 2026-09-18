@@ -5,6 +5,11 @@ const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
   swDest: "public/sw.js",
   disable: process.env.NODE_ENV === "development",
+  // Everything in /public is precached on install by default. Release-note
+  // clips are the one thing in there that is large and shown once, so keep
+  // them out — otherwise every driver downloads every clip over mobile data
+  // the moment the worker updates, including the admin-only ones.
+  globPublicPatterns: ["**/*", "!whats-new/**"],
   // Precache the offline page so the service worker has it available
   additionalPrecacheEntries: [{ url: "/~offline", revision: "1" }],
 });

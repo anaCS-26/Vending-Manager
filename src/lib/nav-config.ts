@@ -9,8 +9,10 @@ import {
     Package,
     PieChart,
     ScrollText,
+    LifeBuoy,
     Settings,
     ShieldAlert,
+    Sparkles,
     Store,
     Users,
 } from "lucide-react";
@@ -63,6 +65,8 @@ export const adminNavSections: NavSection[] = [
         items: [
             { name: "Operations History", shortName: "History", href: "/admin/history", icon: History, accent: "pink" },
             { name: "Manage System", shortName: "Manage", href: "/admin/manage", icon: Settings, accent: "pink" },
+            // Release notes in Arabic + English. See src/lib/whats-new.ts.
+            { name: "What's New", href: "/admin/whats-new", icon: Sparkles, accent: "pink" },
         ],
     },
 ];
@@ -88,6 +92,8 @@ export const superNavSections: NavSection[] = [
             { name: "Audit Trail", shortName: "Audit", href: "/super/audit", icon: ScrollText },
             { name: "Integrity", href: "/super/integrity", icon: ShieldAlert },
             { name: "System Health", shortName: "Health", href: "/super/system", icon: Activity },
+            // Problem reports, error-code lookup, What's New receipts.
+            { name: "Support Inbox", shortName: "Support", href: "/super/support", icon: LifeBuoy },
             // Experimental — only when NEXT_PUBLIC_ENABLE_AI_LAB=true.
             ...(ENABLE_AI_LAB ? [{ name: "AI Lab", href: "/super/lab", icon: FlaskConical }] : []),
         ],

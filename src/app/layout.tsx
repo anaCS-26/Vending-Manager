@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { Geist, Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
+import { Geist, Bricolage_Grotesque, JetBrains_Mono, IBM_Plex_Sans_Arabic } from "next/font/google";
 import { Toaster } from "sonner";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 import { RealtimeRefresher } from "@/components/RealtimeRefresher";
+import { ClientErrorReporter } from "@/components/support/ClientErrorReporter";
 const geist = Geist({
   variable: "--font-geist",
   subsets: ["latin"],
@@ -26,6 +27,19 @@ const bricolage = Bricolage_Grotesque({
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   subsets: ["latin"],
+});
+
+// Arabic fallback for the body stack. Geist has no Arabic glyphs, so without
+// this every Arabic string (What's New, error messages, a note a user typed)
+// falls to whatever the OS offers — Tahoma-era shapes on the client's Windows
+// laptop. `preload: false` is the point: next/font emits the @font-face with a
+// unicode-range, so the file is fetched only on a page that actually renders
+// Arabic, and costs an English-only screen nothing.
+const plexArabic = IBM_Plex_Sans_Arabic({
+  variable: "--font-arabic",
+  subsets: ["arabic"],
+  weight: ["400", "600", "700"],
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -74,19 +88,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geist.variable} ${bricolage.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${geist.variable} ${bricolage.variable} ${jetbrainsMono.variable} ${plexArabic.variable}`} suppressHydrationWarning>
       <body className="antialiased font-sans transition-colors duration-300" suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <RealtimeRefresher />
+          <ClientErrorReporter />
           {children}
           <SpeedInsights />
           <Analytics />
           <Toaster
             position="bottom-right"
             toastOptions={{
-              className: "dark:!bg-zinc-900 dark:!border-slate-200 dark:border-white/10 dark:!text-slate-50 !bg-white !border-slate-200 !text-slate-900",
+              // pre-line + plaintext: unexpected-error toasts are three lines
+              // (English / Arabic / Ref code — see formatUserError) inside one
+              // text node. pre-line keeps the breaks; plaintext gives each line
+              // its own direction so the Arabic sentence isn't laid out LTR.
+              className: "dark:!bg-zinc-900 dark:!border-slate-200 dark:border-white/10 dark:!text-slate-50 !bg-white !border-slate-200 !text-slate-900 [&_[data-title]]:whitespace-pre-line [&_[data-title]]:[unicode-bidi:plaintext] [&_[data-description]]:whitespace-pre-line [&_[data-description]]:[unicode-bidi:plaintext]",
               style: {
-                fontFamily: "var(--font-geist)",
+                fontFamily: "var(--font-geist), var(--font-arabic)",
               },
             }}
             richColors

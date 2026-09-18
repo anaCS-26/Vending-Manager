@@ -68,6 +68,8 @@ vi.mock('@/lib/rate-limit', () => ({
   passwordResetRequestRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
   passwordResetConfirmRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
   pushTestRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
+  problemReportRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
+  clientErrorRateLimit: { limit: vi.fn(async () => ({ success: true, remaining: 999 })) },
 }));
 
 // Web Push transport. Mocked globally for the same reason as @/lib/email: it
@@ -80,6 +82,7 @@ vi.mock('@/lib/push', () => ({
   sendToSubscriptions: vi.fn(async () => ({ sent: 1, failed: 0, pruned: 0 })),
   sendPushToDriver: vi.fn(async () => ({ sent: 1, failed: 0, pruned: 0 })),
   sendPushToAdmins: vi.fn(async () => ({ sent: 1, failed: 0, pruned: 0 })),
+  sendPushToSuperAdmins: vi.fn(async () => ({ sent: 1, failed: 0, pruned: 0 })),
 }));
 
 // Transactional email. Tests assert on the token handed to the transport —
@@ -87,6 +90,7 @@ vi.mock('@/lib/push', () => ({
 vi.mock('@/lib/email', () => ({
   isEmailConfigured: vi.fn(() => true),
   sendPasswordResetEmail: vi.fn(async () => ({ ok: true })),
+  sendProblemReportEmail: vi.fn(async () => ({ ok: true })),
   getAppOrigin: vi.fn(() => 'http://localhost:3000'),
 }));
 
