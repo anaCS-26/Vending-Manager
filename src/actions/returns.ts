@@ -6,6 +6,7 @@ import { notifyClients } from "@/lib/notify"
 import type { ActionResult } from "@/types"
 import { requireAdmin } from "@/lib/auth-utils"
 import { writeAuditLog } from "@/lib/audit-utils"
+import { actionFailure } from "@/lib/action-error"
 
 /**
  * ============================================================================
@@ -118,7 +119,7 @@ export async function approveReturn(returnId: number, actionType: 'RESTOCK' | 'L
         return { success: true, data: undefined };
 
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to approve return" };
+        return actionFailure(error, "approveReturn", "Failed to approve return");
     }
 }
 
@@ -163,6 +164,6 @@ export async function rejectReturn(returnId: number): Promise<ActionResult> {
         
         return { success: true, data: undefined };
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to reject return" };
+        return actionFailure(error, "rejectReturn", "Failed to reject return");
     }
 }

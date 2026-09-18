@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { signOut } from "next-auth/react";
-import { ArrowLeft, LogOut, MoreHorizontal, Package, ShieldAlert, Truck, X } from "lucide-react";
+import { ArrowLeft, LogOut, MessageSquareWarning, MoreHorizontal, Package, ShieldAlert, Truck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
     adminNavSections,
@@ -18,6 +18,7 @@ import {
 } from "@/lib/nav-config";
 import { AdminSettingsModal } from "@/components/AdminSettingsModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ReportProblemModal } from "@/components/support/ReportProblemModal";
 
 type Notifications = { driverStock: number; returns: number };
 
@@ -61,6 +62,7 @@ export function MobileNav({ variant, notifications, user }: MobileNavProps) {
     const pathname = usePathname();
     const [sheetOpen, setSheetOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [reportOpen, setReportOpen] = useState(false);
 
     // Any navigation closes the sheet — Next keeps this component mounted across
     // route changes, so without this the sheet would survive the tap that used it.
@@ -154,7 +156,13 @@ export function MobileNav({ variant, notifications, user }: MobileNavProps) {
                     setSheetOpen(false);
                     setSettingsOpen(true);
                 }}
+                onReportProblem={() => {
+                    setSheetOpen(false);
+                    setReportOpen(true);
+                }}
             />
+
+            <ReportProblemModal isOpen={reportOpen} onClose={() => setReportOpen(false)} />
 
             {user && variant === "admin" && (
                 <AdminSettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} user={user} />
@@ -171,6 +179,7 @@ function MoreSheet({
     notifications,
     user,
     onEditProfile,
+    onReportProblem,
 }: {
     isOpen: boolean;
     onClose: () => void;
@@ -179,6 +188,7 @@ function MoreSheet({
     notifications?: Notifications;
     user?: any;
     onEditProfile: () => void;
+    onReportProblem: () => void;
 }) {
     const pathname = usePathname();
 
@@ -333,6 +343,20 @@ function MoreSheet({
                                         <ArrowLeft className="w-[18px] h-[18px] shrink-0" />
                                         Back to Admin
                                     </Link>
+                                )}
+
+                                {isAdmin && (
+                                    <button
+                                        type="button"
+                                        onClick={onReportProblem}
+                                        className="w-full flex items-center gap-3 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.03] px-4 min-h-[52px] text-sm font-semibold text-slate-700 dark:text-slate-200 active:bg-slate-100 dark:active:bg-white/10"
+                                    >
+                                        <MessageSquareWarning className="w-[18px] h-[18px] shrink-0" />
+                                        <span>
+                                            Report a problem <span aria-hidden="true">·</span>{" "}
+                                            <span lang="ar" dir="rtl">الإبلاغ عن مشكلة</span>
+                                        </span>
+                                    </button>
                                 )}
 
                                 <button

@@ -155,6 +155,20 @@ export async function getAdminSubscriptions(): Promise<StoredSubscription[]> {
     return rows.map(toStored);
 }
 
+/**
+ * Super-admin devices only — the *provider*, not the client's staff. Problem
+ * reports go here: they are addressed to the developer, and fanning them out
+ * to every client admin would tell the whole office each time one of them
+ * filed a complaint.
+ */
+export async function getSuperAdminSubscriptions(): Promise<StoredSubscription[]> {
+    const rows = await prisma.pushSubscription.findMany({
+        where: { admin: { role: "SUPER_ADMIN" } },
+        select: { id: true, endpoint: true, p256dh: true, auth: true },
+    });
+    return rows.map(toStored);
+}
+
 /** Every device belonging to one owner. Used by the "send test" action. */
 export async function getOwnerSubscriptions(owner: PushOwner): Promise<StoredSubscription[]> {
     const rows = await prisma.pushSubscription.findMany({

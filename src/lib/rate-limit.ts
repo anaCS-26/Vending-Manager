@@ -52,3 +52,23 @@ export const passwordResetConfirmRateLimit = new Ratelimit({
   analytics: true,
   prefix: "vms_ratelimit_pwreset_confirm",
 });
+
+// "Report a problem", per user. Each submission can carry a screenshot to Blob
+// storage and fans a push + email out to the developer, so an open tap is both
+// a storage-cost and a notification-spam vector. A real user sends one or two.
+export const problemReportRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, "10 m"),
+  analytics: true,
+  prefix: "vms_ratelimit_problem_report",
+});
+
+// Browser-side crash beacons, per user. A render loop can throw hundreds of
+// times a second; the client caps itself at 3 per page load, and this is the
+// server not taking the client's word for it.
+export const clientErrorRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(10, "10 m"),
+  analytics: true,
+  prefix: "vms_ratelimit_client_error",
+});

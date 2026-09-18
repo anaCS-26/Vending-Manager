@@ -39,4 +39,26 @@ describe("production build command", () => {
         // touches the new field first.
         expect(vercelConfig.buildCommand).toContain("prisma db push");
     });
+
+    it("locks down the tables db push just created, after the push and before the build", () => {
+        // `db push` creates tables with Row Level Security OFF, and the Supabase
+        // anon key ships in the client bundle — so a new table is world-readable
+        // over PostgREST until someone enables RLS by hand. Four tables already
+        // went to production that way. prisma/rls.sql is the list; running it in
+        // the build makes "add the table to that file" the whole procedure.
+        const cmd = vercelConfig.buildCommand ?? "";
+        const push = cmd.indexOf("prisma db push");
+        const rls = cmd.indexOf("prisma db execute --file prisma/rls.sql");
+        const build = cmd.indexOf("npm run build");
+        expect(rls).toBeGreaterThan(push);
+        expect(build).toBeGreaterThan(rls);
+
+        const sql = readFileSync(resolve(root, "prisma/rls.sql"), "utf8");
+        for (const table of ["ErrorEvent", "ProblemReport", "AnnouncementSeen"]) {
+            expect(sql.replace(/[ \t]+/g, " ")).toContain(`ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY`);
+        }
+        // Realtime needs anon SELECT on this one — enabling RLS here silently
+        // stops every dashboard from refreshing.
+        expect(sql).not.toMatch(/ALTER TABLE "SystemMeta"/);
+    });
 });

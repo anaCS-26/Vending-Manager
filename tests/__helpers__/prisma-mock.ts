@@ -54,6 +54,9 @@ export const prismaMock = {
   systemAuditLog: makeModelMock(),
   pushSubscription: makeModelMock(),
   pushDedupe: makeModelMock(),
+  errorEvent: makeModelMock(),
+  problemReport: makeModelMock(),
+  announcementSeen: makeModelMock(),
   // The transactional callback receives the same mock as `tx`. Real Prisma
   // would isolate writes; tests that want to assert per-tx behavior can
   // override this implementation per-test.

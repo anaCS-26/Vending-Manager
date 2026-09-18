@@ -7,6 +7,7 @@ import type { ActionResult, PaginatedResult, SystemAuditLogRow } from "@/types";
 import { requireAdmin, requireSuperAdmin } from "@/lib/auth-utils";
 import { startOfRiyadhDay, endOfRiyadhDay } from "@/lib/utils";
 import type { Prisma } from "@prisma/client";
+import { actionFailure } from "@/lib/action-error";
 
 /**
  * ============================================================================
@@ -293,10 +294,7 @@ export async function updateRefillLog(
         return { success: true, data: undefined };
 
     } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Failed to update log"
-        };
+        return actionFailure(error, "updateRefillLog", "Failed to update log");
     }
 }
 

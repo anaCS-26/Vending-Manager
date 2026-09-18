@@ -500,3 +500,104 @@ model SystemAuditLog {
   @@index([actionType, timestamp]) // sensitive-action feed
   @@index([actorId, timestamp]) // per-actor last-activity rollups
 }
+
+/// One row per failed server action (or browser-side crash), keyed by the short
+/// reference code the user is shown.
+///
+/// Exists because the client and the developer don't share a language: "it
+/// gave an error when I saved" is unanswerable, while a screenshot containing
+/// `E-7K3Q9` is a primary-key lookup. The raw message and stack live HERE and
+/// never in the toast — the user sees a plain bilingual sentence plus the code
+/// (see src/lib/error-codes.ts), which also stops raw Prisma text (column and
+/// constraint names) reaching a client's admin.
+///
+/// `expected` rows are business-rule rejections ("not enough stock") whose
+/// message already went to the user verbatim with no code; they are recorded
+/// anyway so a problem report can be read next to what that person just hit.
+///
+/// RLS: enabled with no policies by prisma/rls.sql (run in the build). Only
+/// Prisma reads this table; the anon key must not — stacks are in here.
+model ErrorEvent {
+  id         Int      @id @default(autoincrement())
+  /// "E-" + 5 chars. Not unique: a collision (1 in 33M) just lists both.
+  code       String
+  /// "action" | "client" | "boundary"
+  source     String
+  /// Server action name, or the route for browser-side events.
+  action     String?
+  /// Classification from classifyError(), e.g. "TIMEOUT", "BUSINESS_RULE".
+  kind       String
+  expected   Boolean  @default(false)
+  message    String
+  stack      String?
+  prismaCode String?
+  actorId    Int?
+  actorRole  String?
+  path       String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([code])
+  @@index([createdAt])
+  @@index([actorRole, actorId, createdAt])
+}
+
+/// A "Report a problem" submission from a driver or admin.
+///
+/// Everything except `note` and the screenshot is captured automatically, so
+/// the reporter never has to describe where they were or what device they use —
+/// the two things that are hardest to get across a language barrier.
+///
+/// RLS: see ErrorEvent.
+model ProblemReport {
+  id            Int       @id @default(autoincrement())
+  /// "R-" + 5 chars, shown to the reporter so they can quote it on WhatsApp.
+  code          String    @unique
+  actorId       Int?
+  actorRole     String
+  /// Snapshot — a driver deleted later must not orphan the report's author.
+  actorName     String?
+  /// Page the reporter was on when they opened the form.
+  path          String?
+  /// Free text, any language. Stored as typed; never machine-translated at rest.
+  note          String?
+  /// An ErrorEvent.code or error-boundary digest the form was opened from.
+  errorCode     String?
+  screenshotUrl String?
+  userAgent     String?
+  /// e.g. "390x844@3", plus standalone/online flags — see ReportProblemModal.
+  device        Json?
+  /// "OPEN" | "RESOLVED"
+  status        String    @default("OPEN")
+  createdAt     DateTime  @default(now())
+  resolvedAt    DateTime?
+
+  @@index([status, createdAt])
+  @@index([actorRole, actorId])
+}
+
+/// Receipt that a user dismissed a What's New entry (src/lib/whats-new.ts).
+///
+/// Server-side rather than localStorage for one reason: the developer needs to
+/// know whether the client actually saw a release note before assuming they
+/// know a feature exists. `/super/support` reads these.
+///
+/// Owner is driverId XOR adminId, always derived from the session. Postgres
+/// treats NULLs as distinct in a unique index, so each constraint only ever
+/// bites on the owner kind it is meant for.
+///
+/// RLS: see ErrorEvent.
+model AnnouncementSeen {
+  id       Int      @id @default(autoincrement())
+  /// Stable id of the entry in src/lib/whats-new.ts — not a foreign key,
+  /// entries live in the repo.
+  entryId  String
+  driverId Int?
+  adminId  Int?
+  seenAt   DateTime @default(now())
+
+  @@unique([entryId, driverId])
+  @@unique([entryId, adminId])
+  @@index([driverId])
+  @@index([adminId])
+}

@@ -9,6 +9,7 @@ import { auth } from "@/auth"
 import { requireAdmin, requireDriver } from "@/lib/auth-utils"
 import { writeAuditLog } from "@/lib/audit-utils"
 import { sendPushToAdmins, sendPushToDriver } from "@/lib/push"
+import { actionFailure } from "@/lib/action-error"
 
 /**
  * ============================================================================
@@ -182,7 +183,7 @@ export async function assignToDriver(
 
         return { success: true, data: { assignmentIds } }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to assign stock" }
+        return actionFailure(error, "assignToDriver", "Failed to assign stock")
     }
 }
 
@@ -230,7 +231,7 @@ export async function acknowledgeAssignment(assignmentId: number): Promise<Actio
         revalidatePath("/admin/driver-stock")
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to acknowledge assignment" }
+        return actionFailure(error, "acknowledgeAssignment", "Failed to acknowledge assignment")
     }
 }
 
@@ -333,7 +334,7 @@ export async function denyAssignment(
 
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to deny assignment" }
+        return actionFailure(error, "denyAssignment", "Failed to deny assignment")
     }
 }
 
@@ -366,7 +367,7 @@ export async function dismissAssignment(assignmentId: number): Promise<ActionRes
         revalidatePath("/admin/driver-stock")
         return { success: true, data: undefined }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to dismiss assignment" }
+        return actionFailure(error, "dismissAssignment", "Failed to dismiss assignment")
     }
 }
 
@@ -405,7 +406,7 @@ export async function dismissAllDisputes(driverId: number): Promise<ActionResult
         revalidatePath("/admin/driver-stock")
         return { success: true, data: { dismissed: disputed.length } }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to clear disputes" }
+        return actionFailure(error, "dismissAllDisputes", "Failed to clear disputes")
     }
 }
 
@@ -518,7 +519,7 @@ export async function submitDriverReturn(
         revalidatePath("/admin/returns")
         return { success: true, data: { returnIds } }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to submit return" }
+        return actionFailure(error, "submitDriverReturn", "Failed to submit return")
     }
 }
 
@@ -668,7 +669,7 @@ export async function returnDriverStockToWarehouse(
 
         return { success: true, data: { lines: lines.length, units } }
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : "Failed to return stock" }
+        return actionFailure(error, "returnDriverStockToWarehouse", "Failed to return stock")
     }
 }
 

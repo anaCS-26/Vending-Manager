@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LogOut, Package, Truck, ChevronLeft } from "lucide-react";
+import { LogOut, MessageSquareWarning, Package, Truck, ChevronLeft } from "lucide-react";
 import { useState } from "react";
 import { AdminSettingsModal } from "@/components/AdminSettingsModal";
+import { ReportProblemModal } from "@/components/support/ReportProblemModal";
 import { signOut } from "next-auth/react";
 import { adminNavSections, isNavItemActive, type NavItem } from "@/lib/nav-config";
 
@@ -28,6 +29,7 @@ export function Sidebar({ user, notifications }: { user?: any; notifications?: N
     const pathname = usePathname();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [collapsed, setCollapsed] = useState(false);
+    const [isReportOpen, setIsReportOpen] = useState(false);
 
     return (
         <div
@@ -107,6 +109,22 @@ export function Sidebar({ user, notifications }: { user?: any; notifications?: N
                     {!collapsed && <span className="truncate">Enter Driver Portal</span>}
                 </Link>
 
+                {/* Bilingual on purpose — this is how an Arabic-speaking admin
+                    tells an English-speaking developer something is wrong. */}
+                <button
+                    onClick={() => setIsReportOpen(true)}
+                    title="Report a problem · الإبلاغ عن مشكلة"
+                    className={cn("flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl transition-all font-medium group", collapsed ? "justify-center w-12 h-12" : "px-4 py-3 w-full gap-3 text-sm mb-2 text-left")}
+                >
+                    <MessageSquareWarning className="w-4 h-4 shrink-0" />
+                    {!collapsed && (
+                        <span className="min-w-0 leading-tight">
+                            <span className="block truncate">Report a problem</span>
+                            <span lang="ar" className="block truncate text-xs text-slate-500 dark:text-slate-400">الإبلاغ عن مشكلة</span>
+                        </span>
+                    )}
+                </button>
+
                 <button
                     onClick={() => signOut({ callbackUrl: '/login' })}
                     title="Sign Out"
@@ -120,6 +138,7 @@ export function Sidebar({ user, notifications }: { user?: any; notifications?: N
             {user && (
                 <AdminSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={user} />
             )}
+            <ReportProblemModal isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} />
         </div>
     );
 }

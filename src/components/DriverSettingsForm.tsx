@@ -2,10 +2,12 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, KeyRound, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ChevronRight, KeyRound, Eye, EyeOff, Loader2, MessageSquareWarning, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { changeDriverPin } from "@/actions/auth";
 import { PushNotificationToggle } from "@/components/PushNotificationToggle";
+import { ReportProblemModal } from "@/components/support/ReportProblemModal";
+import { Bi } from "@/components/Bi";
 import { useDriverStore } from "@/stores/useDriverStore";
 import type { RefillEntryMode } from "@/types";
 
@@ -16,6 +18,7 @@ export default function DriverSettingsForm({ driverName }: Props) {
     const [newPin, setNewPin] = useState("");
     const [confirmPin, setConfirmPin] = useState("");
     const [showPins, setShowPins] = useState(false);
+    const [reportOpen, setReportOpen] = useState(false);
     const [isPending, startTransition] = useTransition();
 
     const submit = () => {
@@ -72,6 +75,32 @@ export default function DriverSettingsForm({ driverName }: Props) {
                 <PushNotificationToggle audience="driver" />
 
                 <RefillModeChooser />
+
+                {/* Help — the driver portal has no nav, so this is the one place
+                    these two live. Arabic + English: see src/components/Bi.tsx. */}
+                <div className="space-y-3">
+                    <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                        Help <span lang="ar">· المساعدة</span>
+                    </h2>
+                    <Link
+                        href="/driver/whats-new"
+                        className="flex min-h-[60px] items-center gap-3 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-2 text-sm font-semibold text-slate-800 dark:text-slate-100 active:bg-slate-100 dark:active:bg-white/10"
+                    >
+                        <Sparkles className="w-5 h-5 shrink-0 text-accent-blue" />
+                        <Bi className="flex-1 min-w-0" en="What's new" ar="ما الجديد" />
+                        <ChevronRight className="w-5 h-5 shrink-0 text-slate-400" />
+                    </Link>
+                    <button
+                        type="button"
+                        onClick={() => setReportOpen(true)}
+                        className="flex w-full min-h-[60px] items-center gap-3 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-2 text-left text-sm font-semibold text-slate-800 dark:text-slate-100 active:bg-slate-100 dark:active:bg-white/10"
+                    >
+                        <MessageSquareWarning className="w-5 h-5 shrink-0 text-accent-blue" />
+                        <Bi className="flex-1 min-w-0" en="Report a problem" ar="الإبلاغ عن مشكلة" />
+                        <ChevronRight className="w-5 h-5 shrink-0 text-slate-400" />
+                    </button>
+                </div>
+                <ReportProblemModal isOpen={reportOpen} onClose={() => setReportOpen(false)} />
 
                 {/* PIN */}
                 <div className="space-y-5">

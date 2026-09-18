@@ -84,7 +84,12 @@ export type SystemAuditLogRow = Prisma.SystemAuditLogGetPayload<{}>;
 /** Generic result type for all server actions */
 export type ActionResult<T = undefined> =
     | { success: true; data: T }
-    | { success: false; error: string };
+    /**
+     * `code` is the ErrorEvent reference (`E-7K3Q9`) when the failure came
+     * through actionFailure(). It is already embedded in `error` for unexpected
+     * failures, so UI never has to render it — it's here for programmatic use.
+     */
+    | { success: false; error: string; code?: string };
 
 // ==========================================
 // PAGINATION TYPES

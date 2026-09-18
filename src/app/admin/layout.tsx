@@ -4,6 +4,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { auth } from "@/auth";
 import prisma from "@/lib/prisma";
 import { Package } from "lucide-react";
+import { WhatsNewPrompt } from "@/components/whats-new/WhatsNewPrompt";
+import { getUnseenWhatsNew } from "@/lib/whats-new-server";
 
 export default async function AdminLayout({
     children,
@@ -12,9 +14,10 @@ export default async function AdminLayout({
 }) {
     const session = await auth();
 
-    const [disputedAssignmentsCount, pendingReturnsCount] = await Promise.all([
+    const [disputedAssignmentsCount, pendingReturnsCount, unseenWhatsNew] = await Promise.all([
         prisma.stockAssignment.count({ where: { status: "DISPUTED" } }),
-        prisma.returnVerification.count({ where: { status: "PENDING" } })
+        prisma.returnVerification.count({ where: { status: "PENDING" } }),
+        getUnseenWhatsNew(session),
     ]);
 
     const notifications = {
@@ -59,6 +62,7 @@ export default async function AdminLayout({
             </div>
 
             <MobileNav variant="admin" notifications={notifications} user={session?.user} />
+            <WhatsNewPrompt entries={unseenWhatsNew} />
         </div>
     );
 }

@@ -83,6 +83,17 @@
     letter-spacing: -0.02em;
   }
 
+  /* Arabic gets IBM Plex Sans Arabic explicitly. It can't simply sit in the
+     --font-sans stack after Geist: next/font's metric-matched "Geist Fallback"
+     is Arial underneath, Arial has Arabic glyphs, and so the browser never
+     reaches Plex for them. Anything bilingual marks its Arabic with lang="ar"
+     (see src/components/Bi.tsx); free text of unknown language uses dir="auto"
+     and takes whatever the body stack yields. */
+  [lang="ar"] {
+    font-family: var(--font-arabic), theme(--font-sans);
+    letter-spacing: 0;
+  }
+
   body {
     background-color: var(--background);
     color: var(--foreground);
