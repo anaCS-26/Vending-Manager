@@ -55,6 +55,33 @@ export type WhatsNewEntry = {
 /** Newest first. */
 export const WHATS_NEW: WhatsNewEntry[] = [
     {
+        id: "2026-09-return-to-warehouse",
+        date: "2026-09-17",
+        audience: ["admin"],
+        title: {
+            en: "Return a driver's leftover stock to the warehouse",
+            ar: "إرجاع البضاعة المتبقية مع السائق إلى المستودع",
+        },
+        body: {
+            en: "When a driver hands back what he didn't use, open Driver Stock, pick the driver, and press “Return Items to Warehouse”. Type how many of each item you received; anything you leave empty stays in his bag, so drinks kept in the van are not affected. The stock goes straight back into the warehouse count.",
+            ar: "عندما يعيد السائق ما لم يستخدمه، افتح «مخزون السائق»، اختر السائق، واضغط «إرجاع الأصناف إلى المستودع». اكتب الكمية التي استلمتها من كل صنف؛ وما تتركه فارغاً يبقى في حقيبته، فالمشروبات التي تبقى في السيارة لا تتأثر. تعود البضاعة مباشرة إلى رصيد المستودع.",
+        },
+        href: "/admin/driver-stock",
+    },
+    {
+        id: "2026-09-return-to-warehouse-driver",
+        date: "2026-09-17",
+        audience: ["driver"],
+        title: {
+            en: "Your bag updates when you hand stock back",
+            ar: "حقيبتك تتحدّث عند تسليم البضاعة",
+        },
+        body: {
+            en: "When the admin takes back your unused items at the end of the day, they now disappear from your bag in the app right away. You will get a short notification saying how many were checked back in.",
+            ar: "عندما يستلم المسؤول أصنافك غير المستخدمة في نهاية اليوم، تختفي الآن من حقيبتك في التطبيق فوراً. ستصلك رسالة قصيرة توضح عدد القطع التي تم إرجاعها.",
+        },
+    },
+    {
         id: "2026-09-report-a-problem",
         date: "2026-09-17",
         audience: ["admin", "driver"],
