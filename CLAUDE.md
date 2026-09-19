@@ -1,313 +1,170 @@
 # CLAUDE.md
 
-NexGen Vending Management System — Next.js 16 (App Router, React 19, Turbopack) + Prisma/Postgres (Supabase) + NextAuth v5. Roles: `super_admin | admin | driver`.
+NexGen Vending Management System for a Saudi vending operator. Stock flows **Supplier → Warehouse → Driver bag → Machine**. Next.js 16 (App Router, React 19) + Prisma/Postgres (Supabase) + NextAuth v5 on Vercel (production: `staff.peekandpick.com`). Roles `super_admin | admin | driver`. The client is non-technical, his staff read Arabic, and drivers use the app only on phones.
+
+This file holds what applies to every task. Area detail lives in [`docs/agents/`](docs/agents/): **read the matching doc before changing that area** ([map below](#where-to-read-before-changing-something)).
+
+---
+
+## Workflow (every task)
+
+### 1. Work in your own worktree
+
+Other agents work on this repo in parallel, and a branch belongs to a directory, not to an agent. If you're already in a linked worktree (`git rev-parse --git-dir` ≠ `git rev-parse --git-common-dir`), work there. Otherwise create one **beside** the repo, never inside it:
+
+```powershell
+$topic = '<short-topic>'; $branch = "feat/$topic"          # or fix/ docs/ chore/
+$repo = 'C:\Users\asadn\Desktop\Projects\vending'; $wt = "$repo-$topic"
+git -C $repo fetch origin
+git -C $repo worktree add --no-track -b $branch $wt origin/main
+Copy-Item "$repo\.env" $wt                                  # gitignored, so not in the checkout
+Set-Location $wt; npm ci; npx prisma generate               # skip both for docs-only work
+```
+
+- The main checkout (`vending/`) stays on `main` and belongs to the user. Don't edit, switch, stash or clean there.
+- Never share `node_modules` between worktrees. `scripts/` and seed CSVs are gitignored; copy them in only if you need them.
+- Commit on your branch in small, scoped commits. **Don't merge, push `main`, or delete branches yourself.** The user runs the scripts from step 6.
+
+Details and pitfalls: [local-dev.md](docs/agents/local-dev.md#worktrees).
+
+### 2. Local database: start Docker if it's down
+
+The local DB is Docker Desktop's `supabase_*_vending` containers (Postgres `127.0.0.1:54322`, API `:54321`). If Prisma can't reach `127.0.0.1:54322`, or `docker` can't connect to its engine, start it yourself. Don't ask the user, and don't run `supabase start`:
+
+```powershell
+docker info *> $null
+if ($LASTEXITCODE) {
+  Start-Process "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
+  $i = 0; do { Start-Sleep 5; docker info *> $null } until (-not $LASTEXITCODE -or ++$i -ge 36)   # engine up, ≤ 3 min
+}
+docker start supabase_db_vending supabase_kong_vending supabase_realtime_vending *> $null      # no-op if running
+$i = 0; do { Start-Sleep 2; docker exec supabase_db_vending pg_isready -U postgres *> $null } until (-not $LASTEXITCODE -or ++$i -ge 30)
+```
+
+- **Every worktree shares this database.** Additive schema pushes are fine. Anything that drops/renames a column, adds a required column without a default, or wipes tables (`db:reset:dev`, `prisma/seed-sandbox.ts`) goes in **your own database**: [recipe](docs/agents/local-dev.md#shared-database).
+- A DB restart kills a running dev server's Prisma pool, so restart the server.
+- Logins: `admin@nexgen.com` / `DemoAdmin2026!` (super-admin); driver `5550100` / PIN `1234` (from `prisma/seed-sandbox.ts`).
+- Dev server: `npx next dev -p <free port>` (not `npm run dev -- -p`: PowerShell strips the `--`) in the background; stop it when you're done. Dev-server traps (stale Turbopack, stale service worker, build/dev `.next` clash): [local-dev.md](docs/agents/local-dev.md#dev-server).
+
+### 3. Verify
+
+- `npx prisma generate` → `npx tsc --noEmit` → `npm run lint` → `npx vitest run`. This is the CI trio; all must pass.
+- `npm run build` when a change could break the build (never over a `.next/` that a dev server is using).
+- UI changes: look at them in a browser at phone width (390px) and desktop (1366×768). If you couldn't, say so.
+
+### 4. What's New: tell the client, and mark what's outdated
+
+**When:** any change a client admin or driver would notice (a new screen, button or flow, a changed way of doing something, or a fix to something they hit). **Skip it** for refactors, invisible performance work, tests/docs/tooling, and `/super/*` (the developer's own console). If unsure, add one: a feature nobody is told about doesn't exist for them.
+
+**How:** add an entry at the **top** of `WHATS_NEW` in `src/lib/whats-new.ts`, in the same branch as the feature.
+
+- **Short and plain.** Title ≤ 8 words saying what they can now do. Body 1–3 sentences (≤ ~50 words): where to find it (menu and button names exactly as they appear on screen), what to do, and what happens. No internals, no jargon, no percentages. Write the Arabic too (`ar`), just as simple.
+- **Media is your call.** Use a short silent mp4 clip for a gesture or sequence, a cropped screenshot when the hard part is *finding* the button, and nothing when a sentence is enough (most of the time). Recipe: [client-comms.md](docs/agents/client-comms.md#media-you-decide).
+- **Overlaps:** first read the existing entries. If your change alters, replaces or repeats what an older entry tells people, set `supersededBy: "<your new id>"` on **the old entry**. It then shows as "Outdated — see …" on the What's New page and is never shown in the pop-up again. Never delete an entry or change its `id`.
+
+Full field rules: [client-comms.md](docs/agents/client-comms.md#writing-an-entry).
+
+### 5. Keep the docs true
+
+When your change alters how something works, update this file or the matching `docs/agents/` doc **in the same branch**. Rewrite the affected paragraph in place so it describes the system as it is now. Delete sentences your change made false, instead of adding "Update:" notes beside them. If you replace an older mechanism, say so where the old one was documented. Record gaps you knowingly leave open under [Known gaps](#known-gaps).
+
+### 6. Hand off
+
+Before reporting: `git fetch origin; git rebase origin/main`. Resolve conflicts yourself (two branches that both added a What's New entry at the top always conflict: keep both, newest first). Re-run step 3, commit everything (`git status` shows nothing untracked), and stop your dev server. Then **end your final message with these four parts**:
+
+1. **What changed on the website.** For each screen: what someone can now do and where, in plain words. Name the What's New entry you added (or say why none), plus any entry you marked outdated. Call out anything that **affects production on merge**: schema changes (the build runs `prisma db push --accept-data-loss`), new env vars, and seeds to run.
+2. **How to test it.** Numbered steps the user can follow: start the app from the worktree (`cd <worktree>; npm run dev`), the login to use, the URL, what to click, and what they should see. Include a phone-width check if it's a phone screen.
+3. **Merge script** (PowerShell 7; fill in `<branch>`):
+
+   ```powershell
+   # Merge <branch> into main and deploy (Vercel builds every push to main)
+   $repo = 'C:\Users\asadn\Desktop\Projects\vending'; $branch = '<branch>'
+   git -C $repo switch main &&
+     git -C $repo pull --ff-only &&
+     git -C $repo merge --no-ff $branch -m "Merge branch '$branch'"
+   if ($LASTEXITCODE) { git -C $repo merge --abort 2>$null; "Stopped - nothing was pushed. Paste the error above to the agent." } else { git -C $repo push origin main }
+   ```
+
+4. **Cleanup script** (run after the merge; it refuses to touch a branch that isn't in `main` yet):
+
+   ```powershell
+   # Remove the <topic> worktree and its branch (close any terminal or dev server using that folder first)
+   $repo = 'C:\Users\asadn\Desktop\Projects\vending'; $branch = '<branch>'; $wt = '<worktree path>'
+   git -C $repo merge-base --is-ancestor $branch main
+   if ($LASTEXITCODE) { "Not merged into main yet - nothing was removed." } else { git -C $repo worktree remove $wt && git -C $repo branch -d $branch }
+   ```
+
+   If you created a separate database, append `docker exec supabase_db_vending psql -U postgres -c "DROP DATABASE vending_<topic>"`.
+
+---
 
 ## Commands
 
-- `npm run dev` / `build` / `lint` / `test` (Vitest, see [TESTING.md](TESTING.md)).
-- **CI** (`.github/workflows/ci.yml`): `tsc --noEmit` + `eslint` + `vitest run` on push to `main` and every PR. All three run with `if: !cancelled()`, so one run reports every failure. Lint fails on **errors only** — the 2 remaining `<img>` warnings need a `next/image` migration. Keep it green; it is the only thing between a commit and a production deploy.
-  - Two npm workarounds live in there, both traceable to the lockfile being generated on Windows. **`.npmrc` (`legacy-peer-deps=true`) is committed on purpose** — this dependency set doesn't resolve under strict peer rules, and while that setting sat in the maintainer's `~/.npmrc` the lockfile was valid on exactly one machine. Don't delete it without regenerating the lockfile. The job also runs `npm install` rather than `npm ci`, plus an explicit install of `@rolldown/binding-linux-x64-gnu`, because npm records only the current platform's optional binaries (npm/cli#4828) and vitest 4 needs that binding on Linux. **Generating `package-lock.json` once on Linux (WSL/Docker) retires both hacks.**
-  - `prisma generate` must precede `tsc` — `src/types/index.ts` is built on `Prisma.<Model>GetPayload<...>` and nothing generates the client on install. Tests need no DB (`vitest.setup.ts` mocks `@/lib/prisma`).
-- **`main` branch protection requires a PR but has `enforce_admins: false`**, so the owner's direct pushes bypass it with a "Bypassed rule violations" warning. The rule currently constrains nobody.
-- **The production build command is pinned in `vercel.json`** (`npx prisma db push --accept-data-loss && npx prisma db execute --file prisma/rls.sql --schema prisma/schema.prisma && npm run build`) and `vercel.json` beats the dashboard. It is pinned because it was previously set *only* in the Vercel dashboard, where it overrode `package.json#build` invisibly: the repo said `next build --webpack` while prod ran plain `next build`, Next 16 defaulted to Turbopack, `@serwist/next` (webpack-only) emitted no worker, and `/sw.js` 404'd in production for the entire life of the push feature — with a green build and nothing but a warning in the log. Three parts, all load-bearing, all pinned by `tests/pwa-build.test.ts`: **`--webpack` or there is no service worker**, **`db push` or schema changes never reach prod** (see below), and **`prisma/rls.sql` between them** — `db push` creates every new table with Row Level Security off, and that file is the list of tables to lock (idempotent `ENABLE`, no policies; Prisma doesn't model RLS so a later push never reverts it). **A PR that adds a table adds it to `rls.sql` in the same commit.** If you change the build, change it here, not in the dashboard.
-- Schema: edit `prisma/schema.prisma` → `npx prisma db push` → `npx prisma generate`. **No migrations folder** — this repo uses `db push`. In production that push runs *as part of the build*, so a deploy is also a migration; drop it from `buildCommand` and the build still goes green while the first action touching a new column fails at runtime.
-- Seeding: `npm run db:seed:dev` and variants. `db:reset:dev` is destructive. `:prod` variants exist — be deliberate.
-- **Known gap — RLS is disabled on `PushSubscription`, `PushDedupe`, `DispatchTemplate`, `DispatchTemplateItem`** (`db push` creates tables without it; the older tables were enabled by hand). The anon key is `NEXT_PUBLIC_` and ships in the client bundle, so anyone can read every driver's push endpoint plus their `p256dh`/`auth` keys — enough to push arbitrary notifications to staff phones — or delete the rows. Nothing in the app reads these four over the Supabase client (only Prisma, which connects as owner and bypasses RLS), so `ENABLE ROW LEVEL SECURITY` with **no** policies is the fix and breaks nothing. Unlike `SystemMeta`, which needs its explicit `anon` SELECT for Realtime. Deliberately deferred, not done — but the mechanism now exists: **adding those four lines to `prisma/rls.sql` closes it on the next deploy.** The three tables added by the client-comms work (`ErrorEvent`, `ProblemReport`, `AnnouncementSeen`) are already in that file.
-
-## Server Actions are the backend
-
-All mutations live in `src/actions/*` by domain. There are exactly **two** REST routes and no more should be added: `api/auth/[...nextauth]`, and `api/cron/stock-alerts` (a server action cannot be invoked on a schedule — Vercel Cron dispatches an HTTP GET and nothing else; see [Push notifications](#push-notifications)). Every action:
-
-1. RBAC guard from `src/lib/auth-utils.ts` — `requireAdmin()`, `requireSuperAdmin()`, `requireDriver()`, or `requireAdminOrDriverOwner(driverId)`. **Mandatory first line.**
-2. Prisma transaction for multi-write changes.
-3. Audit row: `RefillLog` / `InventoryAdjustment` for inventory mutations (snapshot prices/costs at write time — never re-derive from live `Item`); `writeAuditLog()` from `src/lib/audit-utils.ts` for admin state changes.
-4. `notifyClients(eventTag)` then `revalidatePath()` where applicable.
-
-Routing guard lives in `src/proxy.ts` (NextAuth edge middleware). Middleware does **not** protect server actions — every export in a `"use server"` file is a publicly routable RPC endpoint whose action id ships in the client bundle, so rule 1 is the *only* authorization layer. `createItem` and `getMachineInventoryDetails` both shipped without a guard; `tests/actions/inventory.test.ts` now asserts `rejects.toThrow(/FORBIDDEN|UNAUTHORIZED/)` per action. Add that assertion for any new action.
-
-A few actions guard inline (`auth()` + role + ownership) instead of calling `auth-utils`: `changeDriverPin`, `updateMyProfile`, `acknowledgeAssignment`/`denyAssignment`, and `super.ts`'s private `verifySuperAdmin()`. They're correct, but prefer the shared guards — three idioms is how the two gaps above went unnoticed.
-
-`src/actions/password-reset.ts` is the **only** file whose exports are deliberately unauthenticated (see below). Nothing else may be.
-
-**Every `catch` ends in `return actionFailure(error, "<actionName>", "<fallback>")`** (`src/lib/action-error.ts`) — never `error.message`. See [Client communication](#client-communication-arabic-staff-english-developer): it records the failure under a reference code and decides what the user is allowed to see. A `throw new Error("…")` is still how an action rejects input, and that message still reaches the user verbatim; what changed is that anything *else* (Prisma, TypeError) no longer does.
-
-## Admin password reset
-
-Self-service reset for **admins only** — drivers log in with phone + PIN, have no email on record, and are reset by an admin. `requestPasswordReset` / `resetPassword` in `src/actions/password-reset.ts` are the app's only unauthenticated mutations, by necessity: a locked-out admin has no session. The RBAC guard is replaced by a *capability* — a 256-bit single-use token mailed to the registered address. Four invariants, each pinned by a test in `tests/actions/password-reset.test.ts`:
-
-1. **Enumeration-safe** — `requestPasswordReset` returns a byte-identical result whether or not the email exists, *including* when the mail transport fails (logged server-side, generic success to the caller). Never branch the response on the lookup.
-2. **Hashed at rest** — `Admin.resetToken` holds `SHA-256(token)`, never the token; redemption looks up by hash. A DB dump yields no usable links.
-3. **Single-use + 30-min TTL** — the token and expiry are cleared in the same `update` that sets the password; issuing a new token overwrites the old one. "Unknown token" and "expired token" return the same string.
-4. **Rate limited before any DB work** — request: per-IP *and* per-email (`passwordResetRequestRateLimit`, 5/hr); redemption: per-IP (`passwordResetConfirmRateLimit`, 10/15min).
-
-Password policy on reset: ≥10 chars, ≤72 **bytes** (bcrypt silently truncates past that), must differ from the current one. Audit rows (`REQUEST_PASSWORD_RESET` / `RESET_PASSWORD`) are attributed to the admin via a synthetic session object — `writeAuditLog` needs a session and there isn't one; an unattributed password change is precisely what an audit trail exists for.
-
-Email goes through **Resend** (`src/lib/email.ts`) — Vercel blocks outbound SMTP, so there is no self-hosted path. `getAppOrigin()` reads `APP_URL`/`NEXT_PUBLIC_APP_URL`/`VERCEL_PROJECT_PRODUCTION_URL` and **never the request Host header**: an attacker who could set `Host:` would otherwise be mailed a valid link pointed at their own domain. With no `RESEND_API_KEY` the dev server logs the link to the console; in production the missing key is reported as an explicit error *before* the account lookup (a deployment fault is account-independent, so saying so leaks nothing).
-
-The token rides in `?token=` on `/reset-password`. `ResetPasswordForm` strips it from the address bar on mount (`history.replaceState`) and `next.config.ts` sets `Referrer-Policy: no-referrer` on that route.
-
-**Known gap:** sessions use JWT with a 30-day `maxAge`, so a stolen session survives a password reset. Closing it needs a `passwordChangedAt` column checked in the `jwt` callback — a DB read on every request. Deliberately not done.
-
-All three unauthenticated routes (`/login`, `/forgot-password`, `/reset-password`) now share chrome via `src/components/AuthShell.tsx`; `LoginForm` is the form only. It used to inline its own hand-copied panel, and that copy had already drifted — raw `emerald-*` instead of the `accent-green` token, and `font-black` on a face that caps at 800. Put new auth chrome in `AuthShell`, never in a page. All three routes are public because `src/proxy.ts` only guards the `/admin`, `/driver` and `/super` prefixes.
-
-## Realtime
-
-`notifyClients()` in `src/lib/notify.ts` bumps a single-row `SystemMeta`; browsers subscribe over Supabase Realtime WS and `router.refresh()` on change. Mounted **once at the root** via `<RealtimeRefresher />` in `src/app/layout.tsx` — do NOT call `useRealtimeRefresh()` in pages (opens a 2nd WS).
-
-Per-environment setup gotcha: `SystemMeta` must be in the `supabase_realtime` publication AND `anon` must have `SELECT` on it (RLS disabled, or an explicit `SELECT TO anon USING (true)` policy). Without the latter, WS connects but no events arrive — silent failure. `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY` are baked at build time, so changing them in Vercel needs a redeploy.
-
-Realtime and push are **complements, not alternatives**: `notifyClients()` refreshes a browser that already has the app open; push reaches a phone with the app closed. Mutations that matter to someone who isn't looking do both.
-
-## Push notifications
-
-Web Push (VAPID), three notifications: **stock assigned → that driver**, **delivery disputed → all admins**, **machine about to run dry → all admins**. Drivers don't sit at a desk; before this, a driver learned about an assignment only by opening the app, and a dispute could sit unread for a week.
-
-An earlier attempt left one orphaned file: `src/lib/pushStore.ts` held subscriptions in a **process-global `Map`** marked "prototype only", imported by nothing. On Vercel every request can hit a cold lambda, so the registry was empty far more often than not — the feature could never have worked. It is now the `PushSubscription` table.
-
-- **Registry** — `src/lib/pushStore.ts` (persistence) + `src/lib/push.ts` (VAPID + transport). `PushSubscription.endpoint` is the natural key: the browser returns the same URL for the same registration, so `saveSubscription` upserts on it and re-subscribing is idempotent. Owner is `driverId` XOR `adminId`.
-- **Sends are `await`ed, deliberately** — unlike `notifyClients()`. That one writes to Postgres over a pool that flushes itself; a push is an outbound HTTPS request, and Vercel freezes the lambda the moment the action's response is sent, so a fire-and-forget push delivers only when the runtime happens not to have frozen yet. Each send fans out in parallel (N devices = one round trip), is capped at `SEND_TIMEOUT_MS` (4s), and **can never throw into the caller** — a dead push service must not fail an assignment whose stock has already moved.
-- **Pruning** — 404/410 from the push service means permanently gone, so the row is deleted immediately. Anything else (429/5xx/network) is retryable: `failureCount` increments and the row is dropped only after 5 consecutive failures. This is what keeps the table from filling with endpoints that slow every future send.
-- **Actions** — `src/actions/push.ts`. The owner is **always** derived from the session by `resolvePushOwner()` and is **never a parameter**, so no client-bundle tampering lets one driver register against another's account and receive their alerts. Guard is `requireDriver()` (which admits driver | admin | super_admin, i.e. "any authenticated user" — the right audience here). Endpoints are validated as https URLs and capped at 10 devices/owner. `PUSH_SUBSCRIBE` is audited **only on genuine creation**, because the client re-syncs on every mount.
-- **Service worker** — `src/app/sw.ts`. Serwist's `addEventListeners()` wires install/activate/fetch/message only; the `push`, `notificationclick` and `pushsubscriptionchange` handlers are ours. The `push` handler **always** shows a notification, even for an empty payload: Chrome revokes push permission from origins that receive a push without displaying one. `notificationclick` reuses an open tab rather than opening a second window (drivers run this as a single-window PWA and would lose an in-progress refill sheet).
-- **Client** — `usePushNotifications()` + `<PushNotificationToggle audience="driver" | "admin" />`, mounted in `/driver/settings` and `AdminSettingsModal`. It **re-syncs the subscription to the server on every mount**. That isn't redundant: a browser can rotate a subscription while the app is closed, and a service worker can't call a server action to persist the new endpoint (known gap, documented in `sw.ts`) — the stale endpoint 410s and is pruned, the fresh one lands on next open. Every non-actionable state has its own copy (`needs-install` / `unsupported` / `not-configured` / `blocked`), because "off" plus a dead toggle hides three different problems with three different fixes.
-- **iOS needs the PWA installed.** Safari only grants push to a home-screen install (16.4+), so a driver can grant permission in a browser tab and receive nothing. `usePushNotifications` detects this and returns `needs-install` with Add-to-Home-Screen instructions rather than a broken switch.
-- **Dev caveat**: `next.config.ts` disables the service worker in development, so push cannot be tested with `npm run dev` — the hook honestly reports `unsupported`. Use `npm run build && npm start`.
-- **The whole feature rests on `/sw.js` existing**, which rests on the build running Webpack — see the `buildCommand` note under [Commands](#commands). `no-service-worker` in production means the worker 404'd, not that the user needs to reload; `curl -I https://staff.peekandpick.com/sw.js` settles it in one shot and is the first thing to check for any "push doesn't work" report.
-
-**Stock alerts (the scheduled one)** — `src/lib/stock-alerts.ts`, triggered by `src/app/api/cron/stock-alerts/route.ts` (`vercel.json`, `0 3 * * *` UTC = **06:00 Riyadh**, as the fleet starts). "About to run dry" is the Stockout Radar's `critical` band — projected empty before that machine's **own** measured visit cadence, not a fixed unit threshold. That computation moved out of the `ENABLE_AI_LAB`-gated action into **`src/lib/stockout.ts`** so the cron runs whether or not the experimental lab is on, and so the notification and `/super/lab` can never disagree about what "at risk" means; `getStockoutForecast()` is now just `requireSuperAdmin()` + `computeStockoutForecast()`.
-
-De-duplication is the load-bearing part and lives in `PushDedupe`: the at-risk condition persists every morning until someone refills the machine, so a naive daily job sends the same alert for a week and trains ops to ignore it. A repeat warning requires either a service visit since the last one (`MachineStock.last_refilled_at > sentAt` — already critical again is genuinely new information) or 7 days of silence. Dedupe rows are written **only after a successful send**, so a push outage warns twice tomorrow rather than never. One digest push per run, never one per machine.
-
-`src/proxy.ts`'s matcher excludes `api`, so the cron route is publicly routable and **guards itself**: constant-time bearer check against `CRON_SECRET`, and it refuses to run (503) when that var is unset rather than defaulting to open — an unauthenticated endpoint that fans notifications out to every admin device is a spam vector.
-
-**Env**: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto:/https:, falls back to `APP_URL`), `CRON_SECRET`. Generate with `npx web-push generate-vapid-keys`. There is deliberately **no `NEXT_PUBLIC_` copy of the public key** — the browser reads it at runtime via `getPushRegistrationStatus()`, because a `NEXT_PUBLIC_` var is inlined at build time and rotating it in Vercel would silently do nothing until a redeploy (the trap already documented for the Supabase keys above). Without the keys the feature degrades to a server-side log and the UI says "not set up", rather than offering a switch that does nothing. **Rotating VAPID keys invalidates every existing row** — truncate `PushSubscription` so devices re-subscribe.
-
-## Domain notes (non-obvious)
-
-- WAC: recomputes on PO receipt. Supplier shortages stack into `WarehouseStock.pending_deficit`, never negative inventory. `Item.cost` = running WAC; `last_purchase_cost` = latest.
-- PO receiving (`OrderManagerUI`, Pending Receipts tab) shows a live **Receipt Summary** (line count, units, subtotal, 15% VAT, grand total; math in `src/lib/receipt-totals.ts`, tested against a real supplier invoice in `tests/lib/receipt-totals.test.ts`) so the receiver can match the paper tax invoice, and the confirm dialog restates the totals. Lines are counted **in boxes at a price per box** (see [Receiving in boxes](#receiving-in-boxes-packaging)), entered **excluding VAT** — divided into a per-piece cost that feeds WAC, and the subtotal lines up with the invoice's pre-VAT "Total Amount". Suppliers round VAT per line, so grand totals may drift a few halalas from `subtotal × 1.15`; that's a match, not an error. The Create Order tab shows the same five-figure panel as an **Estimated Order Value** (unit cost = `Item.cost`, the WAC snapshot `createPurchaseOrder` locks per line) so the value can be sanity-checked before submitting.
-- `completePurchaseOrder` is **set-based** (see the batching rules under [Dispatchless driver stock](#dispatchless-driver-stock-phase-b-dual-run)) — it used to run ~8 sequential queries per line inside the tx and P2028'd on any real invoice. Three consequences to preserve: (a) the W+M+D prior-quantity reads are **3 `groupBy`s before the tx**, not 3 aggregates per line, so WAC is blended against a snapshot taken just outside the transaction; (b) two PO lines pointing at the same `Item` are **merged** first — blending `(q1@c1)` then `(q2@c2)` equals one lot of `Σq @ Σ(q·c)/Σq`, and `UPDATE…FROM VALUES` is undefined for duplicate join rows; (c) `pending_deficit` is written raw (negative on an overage, which pays down an older shortage) and **clamped to 0 by a follow-up `UPDATE`** — `ON CONFLICT DO UPDATE` can see `EXCLUDED` and the target row but not the `VALUES` alias, so one expression can't serve both `max(0, change)` and `max(0, existing + change)`. The status flip is a guarded `updateMany` (`status: { not: 'COMPLETED' }`) as the tx's **first** statement: it locks the PO row, so two receivers can't both apply stock.
-- Three price tiers on `Item` (`price_standard`/`hospital`/`hotel`); `Machine.tier` selects which applies at refill.
-- `Item.default_assignment_qty` (the **driver batch**) renders a separate `+N` button in `DriverStockManager` next to the `+1` stepper. Each click adds one batch; the button is hidden when the value is 0. Editable per-item from `/admin/manage` → Items tab (capped 0–100, validated server-side in `updateItem`). It is **not** the supplier box — that is `Item.pieces_per_box`, and the two differ (MOVENPICK: box of 10, batch of 3).
-- `Dispatch`/`DispatchItem` are frozen historical records — never deleted. New flows write `dispatchId: null` and use denormalized `driverId` on `RefillLog`/`ReturnVerification`.
-- `Admin.role` is `ADMIN`/`SUPER_ADMIN` in DB, lowercase in session (mapped in `src/auth.ts`).
-- Drivers/machines/items/warehouses soft-delete via `isActive` — **every active-list query must filter `where: { isActive: true }`** (the delete only flips the flag). `deleteDriver` (`inventory.ts`) is conditional: it **hard-deletes** a driver with zero history (no `RefillLog`/`ReturnVerification`/`StockAssignment`/`Dispatch`; `DriverStock` cascades), else soft-deletes to preserve the denormalized `driverId` audit trail — falls back to soft-delete on a P2003 FK error. `/super/admins` deliberately shows inactive drivers with an "Inactive" badge (read-only oversight); all other driver lists (`getDrivers`, `/admin/manage`, `getDriversWithBagAndPending`) hide them.
-
-## Dispatchless driver stock (Phase B, dual-run)
-
-Behind `NEXT_PUBLIC_USE_DISPATCHLESS` (`src/lib/feature-flags.ts`). New path: `src/actions/driver-stock.ts` (`assignToDriver`, `acknowledgeAssignment`, `disputeAssignment`, `submitDriverReturn`, `getDriverBag`). Legacy: `src/actions/inventory.ts` (`dispatchToDriver`, `returnDispatch`). `logBatchRefills` is **still dispatch-required** until B2b. Dispute writes `InventoryAdjustment` reason `ASSIGNMENT_DISCREPANCY`. `approveReturn` works on both rows.
-
-`getDriversWithBagAndPending` fetches open assignments (`PENDING_ACK`/`DISPUTED`) in a **separate unbounded query** and merges them with a newest-100 `ACKNOWLEDGED` history slice. Don't fold them back into one `take: N` window: open rows are a work queue, and old unresolved disputes previously fell out of the window as new pushes arrived (sidebar badge counted them globally; the page couldn't show them).
-
-Disputing an assignment reverts its stock to the warehouse immediately, so a `DISPUTED` row is only a lingering notification — **dismissing it is non-destructive**. `dismissAssignment(id)` clears one (hard-deletes the row, since stock is already reconciled); `dismissAllDisputes(driverId)` bulk-clears a driver's disputes by the exact ids it read (so a dispute arriving mid-operation isn't swept away) and writes one aggregate `DISMISS_ALL_DISPUTES` audit entry. UI: per-card ✕ and a per-driver "Clear all" button (shown when >1) in the Pending/Disputed tab of `DriverStockManager`, gated behind a `ConfirmModal`.
-
-**End-of-day return (admin-initiated)** — `returnDriverStockToWarehouse(driverId, warehouseId, items[])` in `driver-stock.ts`, the mirror of `assignToDriver`: bag down (gte-guarded), warehouse up, four constant statements. UI is the "Return Items to Warehouse" button on the Current Stock tab of `DriverStockManager` → `DriverReturnModal`. The client asked for it on video: he physically takes unused stock back each evening and had **no reachable way** to record it — the only path was the per-row "WH" box on the *driver's* refill sheet plus a second Restock click in `/admin/returns`, while `DriverReturnSheet` is mounted nowhere and `DriverBagManager` lives only on the dormant `/admin/dispatches` (and merely deletes bag stock — it never credits the warehouse). Three rules:
-- **Every quantity starts empty; "Fill everything" is opt-in.** Water/7Up/Pepsi ride in the van overnight, so returning the whole bag is never the default. What's left empty stays in the bag; a short count leaves the difference on the driver rather than inventing shrinkage.
-- **No `RefillLog`, no WAC change** — same units, same cost, two locations. It writes `InventoryAdjustment` (`Driver Return to Warehouse`) + `ADMIN_DRIVER_RETURN` audit, and a low-urgency push so the driver's next sheet isn't a surprise.
-- **`ReturnVerification.status = "RESTOCKED"`, never `"APPROVED"`.** `/admin/financials`, `computePnLTotals` and `getExecutiveKpis` book **every `APPROVED` return as shrinkage at item cost** without looking at the reason or outcome. `approveReturn(…, 'RESTOCK')` used to write `APPROVED` too, so every restocked surplus was also counted as a loss; it writes `RESTOCKED` now (`LOSS` stays `APPROVED`). **Rows restocked before this change are still `APPROVED` and still inflate historical shrinkage** — they can only be told apart by pairing with the `Restocked Surplus Return` `InventoryAdjustment`, which carries no return id. Not backfilled. Any new reader of `ReturnVerification` that means "loss" must filter `status: "APPROVED"`; anything listing processed returns must include `RESTOCKED`.
-
-Still open: `approveReturn` restocks into `warehouse.findFirst()` — unordered, no `isActive` filter. Harmless with one warehouse, wrong the day there are two.
-
-**Dispatch templates** (`DispatchTemplate`/`DispatchTemplateItem`, actions in `src/actions/dispatch-templates.ts`): reusable name+item/qty presets that pre-fill the driver-stock grid. Pure config — no FK from any historical row, hard delete with cascade, warehouse-agnostic quantities. CRUD lives in the Templates tab of `/admin/manage` (`TemplateEditorModal`); `/admin/driver-stock` has a Load Template select (replaces the grid, clamps to the selected warehouse's stock with a warning toast, skips zero-stock items — merge against raw `inventory`, never `filteredInventory` which embeds the search query) and a "Save as Template" popover that captures staged quantities. Loading is client-side only; `assignToDriver` stays the sole push path and never records which template seeded it.
-
-**`Morning Load` is the client's real one** (template #4 in prod, 56 lines / 1,080 units), seeded from their case-pack sheet by `npm run db:seed-template:{dev,prod}` → `scripts/seed-dispatch-template.ts` + `prisma/seed-data-templates/Dispatch_Template_Morning_Load.csv`. It answers a live complaint: an admin was typing ~62 quantities per driver, four drivers a day, because the Load Template feature shipped with **zero templates in the database** and nobody ever created one. Actual history (61–62 lines, ~1,100–1,300 units/driver/day, and a modal quantity per item that equals `Item.default_assignment_qty` on every single item) confirms the sheet is what really goes out.
-
-Three things about that seed script, all deliberate:
-- **It matches by `Item.name`, never SKU** — the sheet's trailing codes disagree with the catalogue (`STIX RED SALT` is `0117` on the sheet, `0118` in the DB) and the client owns the sheet. The CSV therefore carries the resolved catalogue name in its own column, with the raw sheet label beside it so the mapping stays auditable. Resolution is exact-after-normalisation (case + whitespace) against **active** items only; anything fuzzier ships the wrong product, since `GODIVA RED` scores as high against `CODE RED` as against `GODIVA RED DOUBLE CHOCOLATE` under token overlap.
-- **It aborts before writing if one row fails to resolve.** A half-loaded morning template is worse than none — the missing lines look like a deliberate zero.
-- **`--env=prod` refuses to run without `PROD_DATABASE_URL`** instead of falling back to `.env`'s `DATABASE_URL` the way the older `scripts/seed-*.ts` do. That fallback points at the local stack (the Oregon URLs are commented out in `.env`), so a `:prod` run reports success having touched nothing in production. The other seed scripts still carry it.
-
-**The sheet is stale in two known ways, left as-is on purpose:** 7 active items are absent from it (`AMADA MOOD`, `ULKER SANDWICH`, `LUPPO CAKE`, `SIPP GREEN`, `DORITOS BLUE CHEESE`, `DEMAH BROWNIE`, `LIPTON PEACH ZRO`) yet are pushed 26–32× per 90 days, so they load as zero and must be added by hand; and `AQUAFINA WATER` is `80` on the sheet against a modal/default of `40` and a `(40X1)` pack on its own row — i.e. two cases. Both are the client's to correct, from the Templates tab. `SIPP GREEN` is absent because the sheet spells it `SIIP`, which is a name miss even though code `081` and qty `20` both agree.
-
-**Every multi-item write action batches its transaction into constant set-based statements.** `assignToDriver`, `logBatchRefillsDispatchless`, `submitDriverReturn`, `completePurchaseOrder`, `calibrateWarehouseStock`, `reconcileMachineAudit`, `editDriverBagStock`, `editDispatchReturn`, and `dispatchToDriver` all use raw `UPDATE…FROM (VALUES…)` (with per-row gte guards where stock can go short), raw `INSERT…ON CONFLICT` for upserts, and `createMany`/`createManyAndReturn` for audit/log rows, + a 15s tx timeout; reference reads (item prices, bag levels, prior W+M+D quantities via `groupBy`, historic `price_at_refill` via `SELECT DISTINCT ON`) happen **before** the tx.
-
-Do NOT regress to per-item loops inside `$transaction`: prod runs through the Supavisor pooler (~70-100ms/query from Vercel), so N sequential queries blows Prisma's 5s interactive-tx window on large batches (P2028 "Transaction not found" — surfaced as the driver portal's "Sync Failed" toast, and as a raw error toast on the PO receipt, which is where a real SAR 124k supplier invoice hit it). **`Promise.all` does not rescue a loop here** — an interactive transaction pins one connection, so the queries serialize on it anyway; the fix is always fewer statements, not concurrent ones. Duplicate item lines are merged before hitting SQL (`UPDATE…FROM VALUES` and `INSERT…ON CONFLICT` are both undefined when two value rows hit one target row); for absolute-set actions (both recounts, `editDriverBagStock`) that merge is last-wins, for additive ones (`completePurchaseOrder`) quantities and values sum — which is exactly equivalent to the old sequential blend.
-
-Two loops survive, both on the **dormant legacy dispatch path** (`/admin/dispatches` has no inbound link from any nav; `USE_DISPATCHLESS` is hardcoded `true`, so the driver page synthesizes dispatch id 0 → `null` and never reaches them). Both carry the 15s timeout and both are retired at B2b: the dispatch-path branch of `logBatchRefills` (~6 queries/item), and `returnDispatch` (~7 queries/item — its `Promise.all` is the trap described above). Re-linking that page means rewriting these two first.
-
-Repro harness: `scripts/repro-assign-timeout.ts` (`SIM_LATENCY_MS=100 ITEMS=25`). Raw SQL in tests: `prismaMock.$queryRaw`/`$executeRaw` in `tests/__helpers__/prisma-mock.ts`; assert the statement text and bound values, plus a **constant-statement-count test** per action (`tests/actions/orders.test.ts`, `calibration.test.ts`, `machine-audit.test.ts`) — that count is the regression guard, since jsdom can't reproduce pooler latency.
-
-## Driver refill entry (two modes, driver-selectable)
-
-The client asked for the morning case-pack quantities to be pre-filled into the refill form "instead of showing zero". Taken literally that fabricates revenue: `logBatchRefillsDispatchless` sets `items_sold_since_last_refill = refilled` and `sales_revenue = refilled × price` onto a `RefillLog` row that is never rewritten (corrections are posted, not edited). A case is also the wrong unit — 14 Lays is a **van** load; the fleet's mean refill line is **5.4 units**.
-
-Measured against 90 days of live data, the actual complaint was misdiagnosed: machines stock **25.7 items** (max 58) and the bag carries the whole morning load, but a real visit touches **7.6**. The driver was scrolling past ~50 rows to reach 8, not typing 50 numbers.
-
-So the sheet does two things, and `src/lib/refill-entry.ts` holds both rules as pure functions (no React/Prisma → unit-tested in `tests/lib/refill-entry.test.ts`, the `src/lib/forecast.ts` pattern; `DriverRefillUI` only renders them):
-
-- **Ordering** — `splitRefillRows` puts likely-needed items first and collapses the rest behind a disclosure. Flat list while searching and on the Machine tab. **Nothing is ever removed** — the estimate is an estimate and the driver is the one looking at the shelf. A real par level (`MachineStock.par_level`) is what would make this exact; it doesn't exist yet.
-- **A row's section is frozen** — `assignRefillGroup` runs **once per machine open** and writes `ItemFormState.group`; `splitRefillRows` partitions on that field and never re-derives it. `needsStock` returns true for anything staged, so deriving the section live meant the first `+` tap teleported a row out of the collapsed group to the top of the sheet and slid every row below it up one position — so the second tap of `+6` landed on a different item and booked it as sold. Pinned by two tests in `tests/lib/refill-entry.test.ts`; both fail if `splitRefillRows` goes back to calling `needsStock`. **Never re-evaluate grouping or the sort key from anything a tap can change.** The primary sort is raw `estimated_stock` for the same reason (the row's SYS display adds `refilled` — the sort must not).
-- **Seeding** — `seedRefillQuantity(mode, …)`. `quick` (default) leaves boxes empty and offers last visit's quantity as a one-tap ±batch pair; `prefill` (the client's literal ask) seeds the box and marks it `confirmed: false`.
-
-**±batch is a pair on both screens, and `adjustByBatch` clamps both ways** (also in `refill-entry.ts`). The admin grid's batch is `Item.default_assignment_qty` — a case going into the van. The refill sheet's batch is **last visit's quantity, never the case pack**: only **3.9%** of refill lines are a multiple of one, and the averages are 5.3 units refilled against a 22.4-unit case. The `−N` half is not symmetry for its own sake — `+14` was a one-way door, undoable only by fourteen presses of `−1`, retyping, or clearing the line. `+N` **clamps to what's available instead of going dead** near the ceiling, since a disabled batch button is what sends people back to the keyboard.
-
-**`RefillEntryMode` is per-device, chosen by the driver** in `/driver/settings` (`RefillModeChooser`, stored in `useDriverStore` → IndexedDB). Both ship on purpose: the trade-off is fewer taps vs. fewer numbers to read, and the people doing 8 stops a day settle it, not a spec.
-
-**The invariant across both: an unconfirmed quantity cannot be submitted.** Any edit to the refill box sets `confirmed` (and clears `prefilled` — it's the driver's number now); a seeded zero is confirmed, since there's nothing to check about not refilling. While `countUnconfirmed() > 0` the submit button diverts to `PrefillReviewSheet`, which lists every line and its total before writing. Quick mode reaches submit with nothing unconfirmed and goes straight through. **Do not add a bulk "apply all suggestions" that skips the sheet.**
-
-Suggestions come from `getRefillHints()` (`src/actions/inventory.ts`, `requireDriver`) — one `SELECT DISTINCT ON ("machineId","itemId")` over 180 days for **every** machine, cached in the driver store. Per-machine fetching would leave hints missing exactly when needed: drivers are routinely out of signal at the machine. They are advisory only — on this fleet last-visit repeats exactly **32%** of the time, is within ±1 **56%**, within ±2 **70%**. That's worth one tap and a nudge on the stepper; it is not an answer.
-
-`Item.default_assignment_qty` (seeded from the client's case-pack sheet, all 63 live items) stays what it always was: the **dispatch**-side `+N` batch button in `DriverStockManager`. It must not leak into refill quantities.
-
-## Admin data entry (case packs + keyboard)
-
-The admin keys long lists from paper — a ~60-line supplier order, a recount, a morning load — so the entry screens are built around two ideas: **start from the right number** and **never need the mouse between rows**.
-
-**PO drafting rules are pure functions in `src/lib/order-entry.ts`** (tested in `tests/lib/order-entry.test.ts`; `OrderManagerUI` only renders them, flow pinned by `tests/components/OrderManagerUI.test.tsx`):
-- **A new PO line starts at one box** — `defaultOrderQuantity(Item.pieces_per_box)`, falling back to 1 only when the item has no box size. Every line used to open at a hard-coded 1, then at the driver batch (`default_assignment_qty`) until a real box size existed. This is the opposite call from the driver refill sheet (see below, where a case pack must *not* leak in) and both are right: a supplier order really is placed in cases, and a PO line is a request, not a booked sale — what arrives is typed at receiving.
-- **`±case` buttons, and `−case` refuses rather than clamps** when it would empty the line. Clamping 24 − 24 to the floor of 1 makes the next `+24` land on 25, which is no number of cases.
-- **Bulk starting points only ever append** (`mergeOrderLines`): "Repeat last order" (per destination warehouse, uses `quantityRequested` so a short shipment doesn't shrink the next order, drops and *counts* deactivated items), "Order these again" in the history modal, and "Add N shorted items" (`pending_deficit` rounded up to whole boxes). None may overwrite a quantity the admin typed.
-- **Keyboard loop: name → Enter → Enter.** Enter in the search adds the highlighted match and lands in the new line's quantity box with the case pack *selected*; Enter there accepts it and returns to search, typing replaces it. A mouse click instead keeps focus in the search box with the list open (`onMouseDown` `preventDefault`) so several items can be picked in a row. Searching for an item already on the order jumps to its line.
-- **Lines render newest-first** so the line just added sits under the search box, not 60 rows down. State stays in insertion order, so the submitted/printed PO order is unchanged.
-- **The draft is persisted to `localStorage` (`vms:po-draft`)**, restored after mount, cleared on submit. Changing the destination warehouse **no longer wipes the lines** — they are item + quantity, nothing warehouse-specific.
-- Only `isActive` items are orderable; the unfiltered `items` prop is kept because pending/history rows still look up inactive ones. `createPurchaseOrder` now rejects empty orders, non-integer or < 1 quantities, and duplicate items server-side.
-
-**`src/lib/entry-keys.ts` — spreadsheet keys for every long grid.** Put `data-entry-group` on the container and `data-entry` on the inputs in the run; `entryKeyNav` makes Enter/↓ go to the next one and Shift+Enter/↑ the previous, selecting its contents. Order is DOM order. Wired into PO receiving, both calibration modals, `TemplateEditorModal`, and the driver-stock grid. Two rules: **leave rarely-edited fields unmarked** (at receiving only quantity and cost are in the run — the three pre-filled sell prices are skipped, Tab still reaches them), and **select on the keypress, never from `onFocus`** (the NumericInput rule). Pass `{ enter: false }` when Enter means something else on that screen (the PO draft, where it returns to search). Don't add this to a list that re-sorts or filters on the typed value — the focused row would move under the cursor (the `assignRefillGroup` lesson).
-
-`DriverStockManager`: Enter in the search box jumps to the top match's quantity; "Clear" empties the staged grid with an **Undo toast instead of a confirm dialog** (one tap each way).
-
-## Receiving in boxes (packaging)
-
-The client's rule, on video: stock **arrives in boxes but is counted and dispatched in pieces**, and a receiver must be able to say whether *this* delivery's box held 24 or 20. So a box exists in exactly one place — the warehouse door — and every stock table stays in pieces. Rules are pure functions in **`src/lib/packaging.ts`** (tested in `tests/lib/packaging.test.ts`).
-
-- **`Item.pieces_per_box`** (null = not set), **`piece_size` + `piece_size_unit`** (`g`/`kg`/`ml`/`L`, display only — "Box of 24 × 50 g", written the way the client writes `24*50GM`). Set in Manage → Items (`updateItem`'s optional `packaging` arg — omitted means *leave alone*, so no caller blanks them by accident) or in the PO "New Item" modal (`createQuickItem`). A cleared box is stored as **null, never 0**. `Item.bulk_format` stays as the free-text "Pack code" (`10*24*50GM` carries the carton count, which nothing models); it is shown only where no structured packaging exists.
-- **Receiving asks for boxes × pcs/box + loose pieces, at a price per box.** Pieces = `piecesFromBoxes`, cost per piece = box price ÷ box size. Asking for a box price is the point, not a convenience: the invoice prints one, and the old per-piece field was being fed box prices — **AQUAFINA WATER (2 SAR bottle) is costed at 31 SAR in production** for exactly that reason, and it flowed into WAC. A line whose piece cost exceeds its standard price shows a warning (the `cost > price_standard` suspect-cost heuristic, applied before the damage). The pcs/box field is pre-filled from the item and editable per line; when it differs, the row says "Usually 24 per box".
-- **`PurchaseOrderItem.boxesReceived` / `piecesPerBox`** record how a line was counted (null on lines received before this). `quantityReceived` stays the source of truth; `checkReceivedBoxes` rejects a breakdown worth more pieces than were received. Receiving also now overwrites **`PurchaseOrderItem.costPerUnit` with the per-piece cost actually paid** — it used to keep the order-time `Item.cost` snapshot forever, so the history modal's "Total Received Value" was an estimate, not the invoice. Rows received before this change still hold the estimate.
-- **Loose pieces only render next to a real box, but stay visible while they hold a number** — a hidden field that still counts is how a total goes wrong unseen.
-- **Receiving never changes the item's usual box.** A one-off 20-box shouldn't silently re-default the next order; the admin edits the item.
-- Ordering uses the box too (`orderBoxOf` in `OrderManagerUI`); the driver-stock `+N` keeps the batch. The warehouse table shows each quantity as boxes underneath ("41 boxes + 16 pcs"). Recounts (calibration) are still typed in pieces — not asked for.
-- **Backfill**: `npm run db:seed-packaging:{dev,prod}` → `scripts/seed-item-packaging.ts` + `prisma/seed-data-templates/Item_Packaging.csv`, same contract as the template seed (exact name match, abort on any bad row, prod needs `PROD_DATABASE_URL`), **fill-only** unless `--overwrite`. The CSV's Source column records where each number came from (the morning-load sheet's `(24X1)` and the client's own pack codes). **Deliberately left empty**: SNICKERS' box (sheet says 24, pack code says 20 — the client's own question), the four `45X1` cakes (45 per box or 45 g — ambiguous), Pringles' size (`30/40G`), and items with no source (`ULKER SANDWICH`, `DEMAH BROWNIE`, `LIPTON PEACH ZRO`, `landessa`).
-
-## Warehouse calibration & audit
-
-Correct warehouse stock/cost **without fake POs** (a PO at the wrong `costPerUnit` silently corrupts WAC, and WAC flows into P&L via `RefillLog.cost_at_refill` snapshots + live shrinkage). Both actions in `src/actions/inventory.ts` write `InventoryAdjustment` + `SystemAuditLog` **inside the tx**:
-- `calibrateWarehouseStock(warehouseId, items[{itemId, physicalCount, foundUnitCost?}], note?)` — recount to an absolute qty (`requireAdmin`). WAC is left unchanged for shortages and for found units valued at current WAC; a `foundUnitCost` re-blends WAC via `computeWeightedCost` (same W+M+D aggregation as `completePurchaseOrder`). Never emits `RefillLog` (warehouse stock leaving is not a sale).
-- `correctItemCost(itemId, correctedCost, note)` — direct WAC revaluation (`requireSuperAdmin`). SETs `Item.cost`; **never** rewrites frozen `RefillLog` history (post a correcting entry, don't edit the ledger).
-
-UI: "Calibrate Stock" / "Correct Cost" buttons on `/admin/warehouse` (`WarehouseAuditModal`, `CostCorrectionModal`); Correct Cost is super-admin-gated (page passes `isSuperAdmin`). Detection heuristic for bad costs: `cost > price_standard` (see `scripts/find-suspect-costs.ts`).
-
-`/admin/machine-stock` has a **sibling** "Calibrate Stock" button (`MachineInventoryTable` → `MachineAuditModal` → `reconcileMachineAudit`) that shares the warehouse modal's chrome/copy **by design** (same title pattern, explainer, columns, badges, confirm flow). Keep the two modals visually in sync, but **do not flatten the semantics**: a machine **shortage IS a sale** (booked as `RefillLog` revenue + COGS, since product leaves a machine by being vended), whereas a warehouse shortage is neutral. Each modal's explainer/confirm copy states its own financial behavior.
-
-The explainer is `src/components/CalibrationLegend.tsx` — two colour-coded outcome cards (shortage / surplus) plus one optional caveat line. It enforces exactly that split: the **structure** is shared so the pair stays in sync automatically, but every **string** is a prop, so neither modal can inherit the other's financial claim. Card headings deliberately reuse the row badges' vocabulary ("Shortage"/"Found" for warehouse, "Missing"/"Surplus" for machine) so the legend explains the badges the user sees below it. It replaced a ~45-word prose paragraph in each modal — the rules are a two-branch decision and read far faster as two labelled branches. Use `accent-pink`/`accent-green` tokens, never raw `emerald-*` (both modals were quietly using `emerald-500`, which is the same hex as `accent-green` but bypasses the token).
-
-## Admin analytics
-
-`/admin/analytics` is the **comparison** layer, and the split across the three admin pages is deliberate: `/admin` is *today* (what's happening now, who's out, what's queued), `/admin/financials` is *the books* (P&L per machine/warehouse/item, fixed costs pro-rated, Excel export), and this is *what changed* — against the previous equal-length period, against the fleet median, against each machine's own service cadence. Don't add a P&L table here or a trend chart there.
-
-All arithmetic is pure functions in **`src/lib/analytics.ts`** (no Prisma/React/ambient `Date`), unit-tested in `tests/lib/analytics.test.ts` — the `forecast.ts` / `refill-entry.ts` pattern. The page only queries and composes; the components only render.
-
-**One bounded query, not twenty.** The predecessor pulled every `RefillLog` ever written three ways, including `machine.findMany({ include: { RefillLogs: { include: { item: true } } } })` — the item catalogue joined onto every refill row, shipped into an RSC payload. The page now issues one `findMany` of scalar columns covering the current **and** previous windows and splits them in memory; names come from four small lookup tables. `computeStockoutForecast()` is called directly (it's a plain lib function, not the `ENABLE_AI_LAB`-gated action) so the at-risk queue and the 06:00 stock-alert push can never disagree.
-
-Non-obvious rules the components encode:
-
-- **One filter row, above everything.** `RangeFilter` (7/30/90 days) is a set of `<Link>`s driving `searchParams`, so every figure re-renders on the server against the same slice. No per-card controls — two cards showing different periods while looking identical is the failure mode.
-- **`collapseVisits()` is the unit of service.** One physical stop writes ~7.6 `RefillLog` rows, so counting rows overstates visits ~8x. Same machine + same driver + no gap > `VISIT_GAP_MS` (30 min) = one visit. Greedy over sorted rows, not a fixed time bucket — a bucket boundary landing mid-refill splits one visit in two.
-- **`buildDailySeries` zero-fills.** A day with no refills is a real zero; letting the axis skip it compresses quiet stretches and makes the slope lie.
-- **The Pareto is plotted in share-space.** Per-item share (columns) + cumulative share (line), both percentages on **one** axis. The textbook version puts riyals left and cumulative-% right, and a two-scale chart aligns those scales arbitrarily. **Never add a second y-axis to anything on this page.**
-- **`pctDelta` returns `null`, not 100%,** when the previous window had no basis. The UI prints "No basis to compare" / "new".
-- **Movers rank by absolute riyals, never percentage.** 4 → 12 riyals is +200% and irrelevant; the line that quietly shed 900 is the conversation.
-- **The heatmap is service visits, not sales.** There is no POS feed — the only timestamp is when the driver pressed submit, so a "sales by hour" chart would plot the route dressed as customer behaviour.
-- **The quadrant's medians are computed across the machines *plotted*,** so ~a quarter of the fleet always lands bottom-left. It ranks the fleet against itself; the caveat says so. Fixed rent/operating cost are **not** in that margin (Financials owns those).
-
-Chart colour lives in **`src/components/analytics/palette.ts`** and is validated, not chosen — every set clears the lightness band, chroma floor, CVD separation (ΔE ≥ 8) and normal-vision separation (ΔE ≥ 15) against the surface it paints on. Three things not to "simplify":
-1. **The dark column is a selected set, not a flipped one.** Raw `accent-orange` (#f97316) and `accent-green` (#10b981) sit at OKLCH L≈0.70, outside the 0.48–0.67 band a dark surface needs; dark uses `#ea580c` / `#059669`.
-2. **Slots are assigned in fixed order and never cycled.** The predecessor cycled a 10-colour array by index, so a filter changing the series count repainted the survivors. A 6th series folds into the grey `deemphasis`, it does not get a generated hue.
-3. **Orange↔rose fails the normal-vision floor (ΔE 12.7).** The intuitive "damaged = orange, expired = rose" pairing is unreadable in adjacent stack segments; `LossTrendChart` uses slots 1+2.
-
-**Mobile.** Admins check this from a phone, so the page is built to the same two breakpoints as the rest of the app:
-- **No bottom padding on the page** — the admin layout's `<main>` already carries `pb-nav`. The predecessor added `pb-20` on top of it, parking 80px of dead space under the last card on every phone.
-- **`ChartFrame` (in `ChartCard.tsx`) is how a wide plot survives 360px**: a minimum width below `sm`, released by `min-w-0` from `sm` up, so the card scrolls **horizontally** and the plot stays legible instead of collapsing into overlapping ticks. Squeezing a 30-day stacked column chart or a 13-bar angled-label Pareto into 320px does not make it smaller, it makes it wrong. **Horizontal only** — never wrap a chart in a vertical scroll box.
-- **The table view drops its `max-h` below `sm`** and grows with the page. A 360px-tall inner scroller inside a scrolling page is two scroll surfaces fighting over one thumb — the same trap that cost `DriverRefillUI` its sticky header.
-- **44px tap targets on the range filter and the chart/table toggle** (the toggle loses its text label below `sm`, so it would otherwise be a ~29px bare icon). The heatmap's 24px cells are the deliberate exception: 44px cells would make the grid 660px+ wide, and every value in it is reachable through the table view and each cell's `aria-label`.
-- The heatmap **keeps its scrollbar** (no `no-scrollbar`) because the cut-off column plus the bar are the only cues there is more week to the right, and its tooltip **flips below the cell for Sunday/Monday** — `overflow-x: auto` forces `overflow-y` to `auto` too, so a tooltip drawn above the top row is clipped rather than overhanging.
-- Verified at 390px and 360px: no page-level horizontal scroll, no element overflowing its container outside an intended scroll frame, no clipped text, no sub-44px target outside the heatmap.
-
-Every chart is wrapped in `ChartCard`, which **requires** a `table` prop — there is no path that ships a chart without a table view. That isn't decoration: two categorical slots sit below 3:1 contrast on the light surface, which is only permissible when the values are reachable without the colour, and a tooltip is useless on the phone half of this audience. Lists that are already text (`AtRiskPanel`, `DriverScorecard`) use `Panel` instead, which has no toggle because there is nothing to toggle.
-
-The donut that used to sit here is gone: it was fed the whole 10+ category catalogue through a 7-colour cycling list, and angles are the hardest encoding to compare. `CategoryMixBar` is a horizontal stacked bar, top 4 + grey "Other", figures printed beside the swatches. `AnalyticsDashboardClient.tsx` was deleted with it; **`TabbedContainer` is now unused** — it was only ever mounted here.
-
-## Super-admin console
-
-The `/super/*` zone (super-admin only via `src/proxy.ts`) is a provider oversight console — theme-aware Neo-Design. `SuperSidebar` nav: Overview `/super`, Oversight `/super/oversight`, Audit Trail `/super/audit`, Integrity `/super/integrity`, System Health `/super/system`, Support Inbox `/super/support` (see [Client communication](#client-communication-arabic-staff-english-developer)), Admin Accounts `/super/admins`. Read-only insight actions live in `src/actions/super-insights.ts` — all `requireSuperAdmin`, **no mutations / no audit rows**:
-- `getSystemHealth()` — real DB ping+latency, realtime heartbeat (last `SystemMeta` bump, key `realtime_version`), env-presence flags, exact row counts.
-- `getExecutiveKpis(range)` — P&L totals + active counts + warehouse inventory value + 14-day revenue trend.
-- `getIntegrityAlerts()` — categorised actionable anomalies (suspect costs `cost>price_standard`, pricing gaps, supplier deficits, stale machines, aging queues), each with a drill-in href to the admin page that fixes it.
-- `getOversightSummary()` — actor leaderboard + action-type distribution + sensitive-action feed (`SENSITIVE_ACTIONS`) over `SystemAuditLog`.
-
-P&L math is shared in `src/lib/pnl.ts` (`computePnLTotals`/`refillRevenueAndCogs`) — used by both `/admin/financials` and `getExecutiveKpis`; reads `RefillLog` snapshots, never live `Item`. `KpiCard` is shared at `src/components/KpiCard.tsx`; super-only presentational/chart components live in `src/components/super/`. Audit viewer: `getAuditLogsPaginated` in `history.ts`.
-
-## AI Lab (experimental, super-admin only)
-
-`/super/lab` — gated behind `ENABLE_AI_LAB` (`NEXT_PUBLIC_ENABLE_AI_LAB`, off by default; build-time so restart+hard-refresh after flipping). Nav entry is conditionally added to `SuperSidebar`. Two pure-statistics, **read-only / advisory** features (no LLM, no writes, no audit rows) in `src/actions/ai-lab.ts` (`requireSuperAdmin`):
-- `getStockoutForecast()` — per-machine-item demand forecast + replenishment recommendation. Each closed refill interval is one observation of daily sales rate (`items_sold_since_last_refill ÷ interval days`); EWMA-weights recency, estimates days-until-empty vs `MachineStock.estimated_stock`, recommends assign qty = lead-time demand + safety stock (`z·σ·√leadDays`), lead time = the machine-item's own measured visit cadence. Surfaces a confidence band.
-- `getSilentFailureAlerts()` — anomalies vs each machine's **own** baseline: demand collapse / spike (z-score on the latest interval), cadence-relative overdue-service (per-machine), abnormal damage/expiry (`ReturnVerification` recent vs window baseline).
-
-Statistics are pure functions in `src/lib/forecast.ts` (no Prisma/IO → unit-tested in `tests/lib/forecast.test.ts`); the action only reconstructs series + classifies. Caveats baked into the UI: demand is refilled-minus-returns (not POS telemetry) and stock is estimated — figures are guidance, weighted by confidence. Types `StockoutForecast`/`SilentFailureAlert` in `src/types/index.ts`; boards `StockoutRadar`/`SilentFailureBoard` in `src/components/super/`.
-
-## Conventions
-
-- **Vertical slices**: schema changes land end-to-end in one PR (Prisma, actions, `src/types/index.ts`, all UI).
-- **Shared types** in `src/types/index.ts`, mostly `Prisma.<Model>GetPayload<...>` aliases. Don't lean on `any` even though lint allows it.
-- **Server-side pagination**: archive feeds MUST return `PaginatedResult<T>`. Pattern: `getRefillLogsPaginated` in `src/actions/history.ts`. Never ship unbounded `findMany()` to the client.
-- **Pagination UI**: use the shared `<Pagination>` component in `src/components/Pagination.tsx`. Sliding window of consecutive pages (default 3) with first/prev/next/last arrows — no ellipses, no jump-by-N. Don't reimplement.
-- **Image uploads**: `@vercel/blob` `put()` inside server actions. The `writeFile`/`mkdir` imports in `inventory.ts` are legacy local-dev fallbacks.
-- **Never serialize `Driver.pin`**: it's a bcrypt hash of a 4-digit PIN — brute-forceable offline in seconds — and unqualified `include: { driver: true }` used to put it in the RSC payload of `/admin/history`, `/admin/returns` and the dashboard. It's now omitted at the Prisma client level (`src/lib/prisma.ts`), so leaking it is opt-in. The only two call sites that may re-enable it with `omit: { pin: false }` are the credential check in `src/auth.ts` and `changeDriverPin`. Adding a third means you're about to leak it.
-- **Offline refills are idempotent**: `RefillLog.clientRequestId` (unique on `(clientRequestId, itemId)`, *not* alone — one batch writes a row per item sharing the key). `DriverRefillUI` generates it once per submission and reuses it for both the online attempt and the offline-queue fallback, so a batch that commits with a lost response isn't double-counted on replay. `logBatchRefills` maps that P2002 to `success: true`. Never mint a fresh key on retry.
-- **Numeric input**: use the shared `<NumericInput>` (`src/components/NumericInput.tsx`) for every typed number field — `decimal` prop for prices/costs, optional `max`. It keeps the raw string internally so a cleared box stays empty (no sticky "0") and partial decimals ("0.5") survive re-renders, while `onChange` hands the parent a plain number (0 when empty). Never hand-roll `type="number"` or `parseInt(e.target.value) || 0` into a `value={number}` input; avoid `onFocus={e.target.select()}` (mobile re-fires focus between keystrokes). `<select>` dropdowns are exempt.
-
-## UI
-
-Neo-Design System: glassmorphism + slate. Use project tokens (`accent-blue`, `accent-green`, `neo-bg`) — never raw `bg-blue-500`. Reuse modal/dropdown/card primitives in `src/components/`. Dark mode primary (`next-themes`); always provide light variants.
-
-**Typography is three roles, not one** (`src/app/layout.tsx` + the `@theme` block in `globals.css`). The split exists because ~90% of what this app renders is small text and numbers a driver acts on, so the face setting the tables must stay quiet — which means it can't also be the interesting one:
-
-- **Display — Bricolage Grotesque** (`font-display`, token `--font-display`). Applied by a base-layer rule to `h1, h2` only, plus `KpiCard`'s value. It **caps at weight 800** — never style it `font-black` (900) or the browser synthesises a smeared fake bold; use `font-extrabold`. Loaded with `axes: ["opsz"]`: the optical-size axis is the whole reason this face is safe here (ink traps and eccentric proportions bloom large, normalise small), and dropping the axis to save ~35KB retires the argument for it. `h3` is deliberately **excluded** — 62 uses, all small card/row headings, which is text not display; opt in below `h2` with `font-display`.
-- **Body — Geist** (`font-sans`). Squared counters and flat terminals, real tabular figures, full 100–900. Deliberately neutral. Sets every table and control.
-- **Data — JetBrains Mono** (`font-mono`, ~145 call-sites). The wide-tracked uppercase micro-labels are a deliberate signature, not leftovers — keep them.
-
-`body` sets `font-variant-numeric: tabular-nums` so numeric columns align digit-for-digit in the **body** face. That was previously the job `font-mono` was quietly recruited for: the predecessor (Outfit) was a display/brand geometric with proportional figures that left financial columns ragged, and every ragged column got patched with `font-mono` one `className` at a time. Reaching for `font-mono` purely to line up digits is now redundant.
-
-Timestamps: `formatSaudiDate`/`formatSaudiTime` from `src/lib/utils.ts`, never `toLocaleString()`. Day/year boundaries: `startOfRiyadhDay()`/`endOfRiyadhDay()`/`startOfRiyadhYear()` — never `setHours(0,0,0,0)` or `new Date(y, 0, 1)`. Rolling-window math (`now - 7*24*60*60*1000`) is timezone-agnostic and fine.
-
-**Modals**: every modal calls `useModalBehavior()` (`src/hooks/useModalBehavior.ts`) for Escape, focus trap, focus restore, `role="dialog" aria-modal`, and ref-counted body scroll lock — then spreads `{...dialogProps}` and `ref={panelRef}` onto its **existing** panel div. It's a hook, not a `<Modal>` wrapper, on purpose: the panels have deliberately different chrome (the warehouse/machine audit pair is kept in sync by hand, MapModal is `h-[80vh]`, several animate with framer-motion), and one wrapper would flatten that. Pass `closeOnEscape: false` for anything holding typed data — the calibration, cost-correction and template modals all do, so a stray Escape can't bin a 40-line recount. Point `labelledBy` at the visible heading's id.
-
-`ConfirmModal` takes an optional `isPending`: supply it and the dialog stays open with a spinner and disabled buttons until the caller closes it (used by the two audit modals, cost correction, and Clear-all-disputes). **Passing it makes the dialog controlled — the caller must then close it itself.** Omit it and you keep the old fire-and-close behaviour.
-
-**Modal stacking**: the data-entry modals sit at `z-[9999]`; `ConfirmModal` sits at `z-[10000]` and must stay above them. The three modals that nest it (`WarehouseAuditModal`, `MachineAuditModal`, `CostCorrectionModal`) render it as a **sibling** under the same `createPortal` wrapper — and that wrapper is a static `<div>`, so it forms no stacking context and the two `position:fixed` layers compete directly in the root. At its original `z-[999]` the confirm step painted *behind* the parent's opaque panel, so "Apply Calibration" silently did nothing; calibration was unusable from `3a41130` (the commit that introduced it) until `feat/ux-foundations`. jsdom does not paint, so a flow test that merely finds the confirm button passes either way — `tests/components/WarehouseAuditModal.test.tsx` asserts the `z-[N]` ordering numerically instead. Any new modal that nests `ConfirmModal` must stay below `z-[10000]`.
-
-**Route states**: `loading.tsx` + `error.tsx` exist for `/`, `/admin`, `/driver`, `/super`, plus a root `global-error.tsx` for root-layout failures. Skeletons come from `src/components/Skeleton.tsx` (RSC — no `"use client"`, so they paint before hydration); error bodies from `src/components/ErrorState.tsx`. `ErrorState` shows a reference code, **never `error.message` in production** — an error boundary must not echo Prisma text to a driver or a client's admin. On mount it beacons the failure via `reportClientError` (under the Next `digest` when there is one, else a fresh `E-` code, so browser-side crashes get a reference too) and offers "Report this problem" with that code pre-attached.
-
-## Mobile
-
-Drivers are **only** ever on a phone, and admins check the dashboard from one. Two breakpoints carry the whole responsive story: `sm` (640px) separates phone from tablet chrome, `lg` (1024px) separates the mobile shell from the desktop sidebar.
-
-- **Navigation below `lg` is `src/components/MobileNav.tsx`** — a fixed bottom tab bar (4 destinations + More) plus a More bottom sheet holding the full nav and the account actions. `Sidebar` and `SuperSidebar` are `hidden lg:flex`; they used to survive to mobile as an 80px unlabelled icon rail and a full 288px panel respectively. Both navs read `src/lib/nav-config.ts`, which is the **single source of truth** — add a route there and it appears in the sidebar, the tab bar's More sheet, and the active-route matcher (`isNavItemActive`, prefix-matching except where `exact`) at once. `MobileNav` imports that config itself rather than taking it as a prop: every entry carries a lucide **component**, and functions can't cross the RSC boundary from the (server) layouts that mount it. Layouts pass only plain data (`notifications`, `user`). Any page under `/admin` or `/super` must keep `pb-nav` on its main region or its last row hides under the bar.
-- **Safe areas**: `viewport` in `src/app/layout.tsx` sets `viewportFit: "cover"`, so `env(safe-area-inset-*)` is live and anything at a screen edge must pay it back. Utilities in `globals.css`: `pb-safe` / `pt-safe` (additive via the `--safe-extra` custom property — set it inline when the element also needs base padding), `mb-safe`, and `pb-nav` (tab bar + inset). These are **no-ops off notched devices**, so apply them unconditionally.
-- **`dvh`, not `vh`, for anything full-height on a phone** — `vh` is the *expanded*-chrome height on mobile Safari, so a `90vh` box overflows the actual viewport whenever the address bar is showing.
-- **Short viewports are a desktop problem too — never size a panel to the viewport without a floor.** The client's laptop (1366×768 at 125% Windows scaling) has a ~1093×500 viewport: wide enough for the `lg` sidebar, shorter than most phones. `DriverStockManager`'s allocation panel was a fixed `h-[calc(100vh-8rem)]` whose selects, search and push bar need ~410px, so the item list got one row or none and the client reported the list as missing. Now: stacked (<`xl`) the panel is content-height and the list caps at `max(60dvh, 20rem)`; side-by-side it fills the viewport but has a `min-h` floor. Width breakpoints can't see height, so `globals.css` defines a **`tall:` variant** (`min-height: 50rem`) — the panel is only `sticky` under `xl:tall:`, because a pinned panel taller than the screen hides its own push bar.
-- **Don't nest a scroll container inside a page that already scrolls.** `DriverRefillUI` did (`overflow-hidden` shell + `overflow-y-auto` body) and it cost three things at once: `position: sticky` bound to a box that never scrolls (the machine selector silently stopped sticking), no pull-to-refresh, and no address-bar collapse. Both are `sm:`-gated now — the card look survives on desktop, the phone scrolls the page.
-- **`position: absolute` is not a sticky footer.** The driver's Submit bar was `absolute bottom-0` in a `min-h`-sized box, i.e. pinned to the bottom of the *item list*: with 20 items the only button on the screen was 20 rows down. It is `fixed sm:absolute` now, and carries a staged-count summary (`N items · +X in · Y out`) so the driver sees what they're about to write before writing it.
-- **Tap targets are 44px** on anything a driver touches repeatedly; the shared `QtyStepper` in `DriverRefillUI` is the one implementation of the +/− control (it was three copies at 40px). `globals.css` sets `touch-action: manipulation` on controls to kill the 300ms double-tap delay, and forces `font-size: max(16px, 1em)` on inputs below `sm` because iOS zooms into any focused field under 16px and never zooms back out.
-- **Leaflet is a scroll trap on touch** — one-finger drag pans the map, so a thumb landing on it can't scroll the page. `MapVisual` starts locked on coarse pointers and opts in via a "Tap to interact" overlay (`TouchGate` reaches the map instance, since `MapContainer` reads its interaction props only at creation).
-- **Wide tables get a card layout below `sm`**, via `DataCard` + `MobileSortSelect` in `src/components/DataCard.tsx`. The five tables that set `min-w-[900px]`–`[1000px]` (`WarehouseInventoryTable`, `MachineInventoryTable`, `SortableFinancialTable`, `UnifiedHistoryManager`, `OrderManagerUI`'s history) now render `sm:hidden` cards beside a `hidden sm:block` table. Two rules when adding one: **sorting lives in the `<th>`s, so hiding the table hides the feature** — pass the same `handleSort` to `MobileSortSelect`, whose keys must be a subset of the column keys; and derive any per-row computation in a shared helper (`deriveEventFacts` in `UnifiedHistoryManager` is the pattern) so the two views can't disagree about the same row. It is deliberately *not* a generic `<ResponsiveTable>` taking a column config — the five disagree about what the headline figure is and what a row links to.
-- **Driver connection/sync state is `OfflineIndicator`**, mounted once in `src/app/driver/layout.tsx` (which exists only for that). It's `sticky`, so it takes real space rather than painting over the header, and renders nothing when online with an empty queue. It replaced a pill inside `DriverRefillUI`'s header, which meant a queue was invisible the moment the driver left that one screen. Only the refill screen drains the queue, so the banner says so rather than implying it clears itself.
-- **The Saudi Riyal sign (U+20C1) is a 2025 Unicode addition** with no glyph on most Android builds and older iOS — it renders as tofu. `RiyalSymbol` / `Money` in `src/components/RiyalSymbol.tsx` keep the **real character** and fall back to `SAR` only where the device can't draw it, detected once per page load by measuring the glyph's width against U+FFFF (a permanent noncharacter, so its width *is* the .notdef box — equal widths mean tofu). Both are optimistic: server render and first paint emit the character, so hydration matches and capable devices never flicker. An SVG rendition was tried and reverted — it reads as a drawing dropped into a line of type. **`formatCurrency` in `src/lib/utils.ts` still emits the bare character across ~66 call sites** with no fallback; it returns a `string` the Excel export depends on, so it can't call a component. The way to cover those without touching any of them is an `@font-face` with `unicode-range: U+20C1` declared ahead of the body stack, which needs a font file that actually has the glyph.
-- **PWA icons are wired but the artwork is missing.** `manifest.json` and `layout.tsx` reference `/icons/icon-{192,512}.png`, `icon-maskable-512.png` and `apple-touch-icon.png`; none exist, so installs still fall back to the 64px favicon. `public/icons/README.md` has the spec — the two traps are that maskable needs an 80% safe zone and that iOS reads `apple-touch-icon` only, ignores the manifest, and composites alpha against black.
-
-## Client communication (Arabic staff, English developer)
-
-The client's staff speak Arabic and the developer doesn't; before this, a backend failure reached the client as a paragraph of English Prisma text and a new feature reached them not at all (Load Template shipped with zero templates and sat unused for weeks). Three channels, one branch (`feat/client-comms`), and one rule they share: **nothing is machine-translated at rest and nothing needs an LLM key** — every string the app authors is written in both languages, and free text the client types is stored as typed with a Google-Translate link beside it in the inbox. Full-app Arabic (the parked next-intl branch) is a separate, larger decision; these three don't depend on it.
-
-**Bilingual UI is `<Bi en ar />` (`src/components/Bi.tsx`)** — Arabic stacked over English, or `inline` for buttons (`Send · إرسال`). Not a language switch, on purpose: the admins read Arabic, the drivers' first language varies, and a toggle is one more control. Arabic is marked `lang="ar"`, which is what selects the Arabic face: `[lang="ar"]` in `globals.css` maps to IBM Plex Sans Arabic (`--font-arabic`, loaded with `preload: false` so an English-only screen never fetches it). It **cannot** simply sit in `--font-sans` after Geist — next/font's metric-matched "Geist Fallback" is Arial underneath, Arial has Arabic glyphs, and the browser never reaches Plex. Free text of unknown language gets `dir="auto"` and `lang="ar"` only when it actually contains Arabic.
-
-**1. Error codes** (`src/lib/error-codes.ts` pure + tested, `src/lib/action-error.ts` server). `classifyError` recognises Prisma structurally (`name` + `code`, no `instanceof`, so the message table can ship to the browser): P2028/P2024 → `TIMEOUT`, P2002 → `DUPLICATE`, P2003 → `IN_USE`, P2025 → `NOT_FOUND`, P1xxx/init → `DATABASE_UNREACHABLE`; a bare `Error` is `BUSINESS_RULE` (the app talking to the user); anything else is `UNEXPECTED`. Business messages pass through verbatim with **no** code — a reference number on "not enough stock" makes a typo look like an outage. Everything else becomes `English\nArabic\nRef E-7K3Q9` (the Toaster sets `white-space: pre-line` + `unicode-bidi: plaintext` so each line keeps its own direction) and the raw message + stack go to **`ErrorEvent`** under that code. Codes use a 30-char alphabet with no 0/O/1/I/L/U — they are read aloud over WhatsApp. `recordErrorEvent` is awaited (the Vercel freeze rule), capped at 2s, and can never throw: it runs inside a `catch`. Every failure is recorded, `expected: true` for business rejections, so a report can be read next to what that person hit in the half hour before. Retention is 90 days, pruned by the stock-alerts cron (the only scheduled tick; a second cron would be a third REST route). `ActionResult`'s failure branch gained an optional `code`, but UI never has to render it — it is already inside `error`, because ~100 call sites do `toast.error(result.error)` and a code that only appears where someone remembered to print it is not one the client can screenshot. `<ClientErrorReporter />` (root layout) beacons `window.onerror`/`unhandledrejection` to the same table: max 3 per page load, de-duplicated, re-entrancy-guarded (the beacon is itself a request whose rejection would report itself), network errors ignored (an offline driver is normal), and on public routes the guard rejects and nothing is written.
-
-**2. Report a problem** (`src/actions/support.ts`, `ReportProblemModal`). Reachable from the admin sidebar footer, the More sheet, `/driver/settings` → Help, and the error screen. The reporter supplies only what nobody else knows — a note (any language, `dir="auto"`) and an optional screenshot (compressed client-side to ≤1MB/1600px, uploaded to Blob under `problem-reports/<code>` **with** `addRandomSuffix`, since the URL is public and an admin screenshot shows stock and money); the form attaches the rest itself (path, viewport, DPR, installed-vs-tab, online, language, theme, timezone) and the server adds identity **from the session, never from the form** — the same structural rule as push ownership. A failed upload keeps the report. Rate limited 5/10min per user; note ≤2000 chars; 5MB image cap; something must be present (note, screenshot or an attached code). Delivery: one push to **super-admin devices only** (`sendPushToSuperAdmins` — the client's other admins must not see each other's complaints) plus an email to `SUPPORT_EMAIL` via Resend if set; both awaited, neither can fail the submission. The reporter gets an `R-` code to quote. `/super/support` is the inbox: open reports with their author's recent errors, a code lookup (`E-`, `R-`, or a boundary digest), the latest unexpected errors, and per-note "who hasn't seen it yet". Resolve/reopen is `requireSuperAdmin` + audited. Every query is `take`-bounded.
-
-**3. What's New** (`src/lib/whats-new.ts` pure + tested). Release notes are **data in the repo**, newest first, each with a stable `id`, an `audience`, `title`/`body` in both languages, optional `href` and optional media. Adding one is part of shipping a feature. The copy rule: say what they can now *do*, never how it works. Clips beat sentences for gestures — `public/whats-new/enter-key.mp4` (55KB, H.264; iOS Safari won't play webm) was recorded with Playwright against the driver-stock grid and cropped with ffmpeg; `next.config.ts` excludes `whats-new/**` from the service-worker precache so drivers don't download every clip on install. `WhatsNewPrompt` is mounted by the admin and driver layouts, which compute the unseen set server-side (`getUnseenWhatsNew`, one indexed read of **`AnnouncementSeen`**, never throws) so a note dismissed on one device doesn't flash on another. It shows at most `PROMPT_LIMIT` (3) cards but **dismissing marks every unseen entry seen** — on first rollout the whole back-catalogue is unseen and a prompt that returns three more times is one people learn to close unread; the rest live at `/admin/whats-new` and `/driver/whats-new` (nav entry via `nav-config.ts`; drivers reach it from Settings → Help). `markAnnouncementsSeen` filters ids against the repo list for the caller's own audience. Receipts exist for one reason: so the developer can see on `/super/support` whether the client has actually been shown a feature before assuming they know it exists. Super-admins read the admin set.
-
-**Env**: `SUPPORT_EMAIL` (optional; reports are always in the inbox and pushed regardless). Nothing else is new.
-
-## Domain skills
-
-`.agents/skills/*/SKILL.md` — read before non-trivial changes: `vms-accounting-wac`, `vms-audit-trail`, `vms-security-rbac`, `vms-neo-design`, `supabase-postgres-best-practices`.
+- `npm run dev` / `build` (`prisma generate && next build --webpack`) / `lint` / `test` (Vitest watch; `npx vitest run [file]` for one shot; see [TESTING.md](TESTING.md)).
+- **CI** (`.github/workflows/ci.yml`) runs `tsc` + `eslint` + `vitest` on every push to `main`. It is the only check before production. Don't touch `.npmrc`, the CI npm workarounds, `package-lock.json` or `vercel.json` without reading [build-and-deploy.md](docs/agents/build-and-deploy.md).
+- **Schema:** edit `prisma/schema.prisma` → `npx prisma db push` → `npx prisma generate`. There is no migrations folder. The production build runs `db push --accept-data-loss` and then `prisma/rls.sql`, so **merging a schema change migrates production**. **A new table gets a line in `prisma/rls.sql` in the same commit.**
+- **Seeds:** `npm run db:seed:dev` and variants. `:prod` variants write to production: run one only when the user asks.
+
+## Rules that apply everywhere
+
+### Server actions are the backend
+
+- All mutations live in `src/actions/*`, by domain. There are exactly two REST routes: `api/auth/[...nextauth]` and `api/cron/stock-alerts` (Vercel Cron can only make HTTP calls). Don't add more.
+- **Every export of a `"use server"` file is a public endpoint.** Middleware (`src/proxy.ts`) doesn't cover them, so **the first line of every action is a guard** from `src/lib/auth-utils.ts`: `requireAdmin()`, `requireSuperAdmin()`, `requireDriver()` (= any signed-in user), or `requireAdminOrDriverOwner(driverId)`. Each new action gets a test asserting `rejects.toThrow(/FORBIDDEN|UNAUTHORIZED/)`. Only `src/actions/password-reset.ts` is unauthenticated, on purpose.
+- **Who the user is comes from the session, never from a parameter.**
+- Multi-write changes run in one Prisma transaction. Inventory mutations write `RefillLog`/`InventoryAdjustment` rows that **snapshot price/cost at write time** (never re-derive them from live `Item`). Admin state changes call `writeAuditLog()` (`src/lib/audit-utils.ts`). Then call `notifyClients(tag)` + `revalidatePath()`.
+- **Every `catch` ends `return actionFailure(error, "<actionName>", "<fallback>")`** (`src/lib/action-error.ts`), never `error.message`. `throw new Error("…")` is how an action rejects input, and that message reaches the user verbatim.
+- **A transaction over many items uses a constant number of set-based statements** (`UPDATE … FROM (VALUES …)`, `INSERT … ON CONFLICT`, `createMany`). Do the reference reads before the transaction, use a 15s timeout, and merge duplicate lines first. Never loop queries inside `$transaction`: each costs ~100ms through production's pooler and the transaction dies (P2028), and `Promise.all` doesn't help. Add a statement-count test. [Details](docs/agents/driver-stock.md#batched-transactions).
+
+### Data
+
+- Soft delete: every list of active things filters `where: { isActive: true }` (drivers, machines, items, warehouses).
+- Ledger rows are never edited or deleted: `RefillLog`, `InventoryAdjustment`, `Dispatch`/`DispatchItem`. Post a correcting entry instead. Fix stock or cost with calibration, never a fake PO (it corrupts WAC).
+- `ReturnVerification.status = "APPROVED"` means **loss** (booked as shrinkage); `"RESTOCKED"` means back on the shelf.
+- `Driver.pin` is omitted at the Prisma client (`src/lib/prisma.ts`). Only `src/auth.ts` and `changeDriverPin` may opt back in.
+- `Admin.role` is `ADMIN`/`SUPER_ADMIN` in the DB and lowercase in the session.
+- Anything that lists history for the client returns `PaginatedResult<T>` (pattern: `getRefillLogsPaginated` in `src/actions/history.ts`; UI: the shared `src/components/Pagination.tsx`, not a new one). Never ship an unbounded `findMany()`.
+- Offline refills are idempotent via `RefillLog.clientRequestId`. Reuse the key on retry; never make a new one.
+- Shared types live in `src/types/index.ts` (`Prisma.<Model>GetPayload` aliases); avoid `any`. A schema change ships with its actions, types and UI in one branch.
+- Image uploads use `@vercel/blob` `put()` inside actions (the `writeFile`/`mkdir` imports in `inventory.ts` are legacy).
+
+### UI
+
+- Use Neo-Design tokens (`accent-blue|green|pink|orange|purple`, `neo-bg`), never raw palette classes (`bg-blue-500`, `emerald-*`). Dark mode is primary; always add light variants. Reuse primitives from `src/components/`.
+- Every typed number goes through `<NumericInput>` (`decimal` for money). Never hand-roll `type="number"`, and never select text `onFocus`.
+- Dates use `formatSaudiDate`/`formatSaudiTime`; day/year boundaries use `startOfRiyadhDay()`/`endOfRiyadhDay()`/`startOfRiyadhYear()` (`src/lib/utils.ts`). Never `toLocaleString()` or `setHours(0,0,0,0)`.
+- Modals call `useModalBehavior()` and spread `dialogProps` + `panelRef` onto their own panel. Modals holding typed data pass `closeOnEscape: false`. Data-entry modals sit at `z-[9999]` and `ConfirmModal` at `z-[10000]`; keep that order.
+- Phones first: 44px tap targets, `dvh` not `vh`, no scroll box inside a scrolling page, `pb-nav` on `/admin` and `/super` main regions, and a `DataCard` layout below `sm` for wide tables. New routes go in `src/lib/nav-config.ts` (it feeds both the sidebar and the mobile nav).
+- `/admin` and `/driver` are for a non-technical operator: few controls, whole sentences, no jargon, no percentages on small numbers. `/super` is the developer's console.
+- Bilingual text uses `<Bi en ar />`. Fonts: Bricolage for `h1`/`h2` (max `font-extrabold`, never `font-black`), Geist for body, JetBrains Mono for data.
+- `<RealtimeRefresher />` is mounted once at the root; never call `useRealtimeRefresh()` in a page.
+
+## Where to read before changing something
+
+| If you're touching… | Read |
+|---|---|
+| Worktree setup, Docker/DB, dev server, browser checks, logins | [local-dev.md](docs/agents/local-dev.md) |
+| CI, `vercel.json`, npm/lockfile, schema push, RLS, seed scripts | [build-and-deploy.md](docs/agents/build-and-deploy.md) |
+| Guards, login, password reset, sessions, `Driver.pin` | [auth-and-security.md](docs/agents/auth-and-security.md) + skill `vms-security-rbac` |
+| `notifyClients`, push, service worker, the stock-alert cron | [realtime-and-push.md](docs/agents/realtime-and-push.md) |
+| Items, purchase orders, receiving in boxes, WAC, warehouse/machine calibration | [inventory-and-orders.md](docs/agents/inventory-and-orders.md) + skill `vms-accounting-wac` |
+| Driver bag, assignments, disputes, returns, dispatch templates, batched transactions | [driver-stock.md](docs/agents/driver-stock.md) + skill `vms-audit-trail` |
+| The driver refill sheet (`DriverRefillUI`, `refill-entry.ts`) | [driver-refill.md](docs/agents/driver-refill.md) |
+| `/admin/analytics`, `/admin/financials`, P&L, `/super/*`, AI Lab | [analytics-and-super.md](docs/agents/analytics-and-super.md) |
+| Styling, fonts, modals, mobile layout, keyboard entry grids | [ui-and-mobile.md](docs/agents/ui-and-mobile.md) + skill `vms-neo-design` |
+| Error codes, Report a problem, What's New, Arabic text | [client-comms.md](docs/agents/client-comms.md) |
+| Tests and mocks | [TESTING.md](TESTING.md) |
+
+Skills are in `.agents/skills/*/SKILL.md` (plus `supabase-postgres-best-practices` for SQL).
+
+## Known gaps
+
+Deliberately left open. Don't "discover" these as new bugs, and remove a line when you close one.
+
+- RLS is off on `PushSubscription`, `PushDedupe`, `DispatchTemplate` and `DispatchTemplateItem`. Four lines in `prisma/rls.sql` would close it. ([build-and-deploy](docs/agents/build-and-deploy.md#row-level-security))
+- JWT sessions (30-day) survive a password reset. ([auth](docs/agents/auth-and-security.md#admin-password-reset))
+- `approveReturn` restocks into `warehouse.findFirst()`, which is unordered and has no `isActive` filter. Wrong once there are two warehouses.
+- Restocked returns from before `RESTOCKED` existed are still `APPROVED` and inflate historical shrinkage.
+- The legacy dispatch path (`logBatchRefills` dispatch branch, `returnDispatch`) still loops inside the transaction. It's dormant; rewrite it before re-linking `/admin/dispatches`.
+- `formatCurrency` emits the Riyal sign (U+20C1) with no fallback; PWA icon artwork is missing. ([ui](docs/agents/ui-and-mobile.md))
+- A service worker can't save a rotated push subscription; it's re-synced on the next app open.

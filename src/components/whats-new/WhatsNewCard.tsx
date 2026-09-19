@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, History } from "lucide-react";
 import { Bi } from "@/components/Bi";
 import { formatSaudiDate } from "@/lib/utils";
 import type { WhatsNewEntry } from "@/lib/whats-new";
@@ -16,14 +16,29 @@ export function WhatsNewCard({
     entry,
     onNavigate,
     showDate = true,
+    replacement,
 }: {
     entry: WhatsNewEntry;
     /** Lets the prompt close itself when the user follows the link. */
     onNavigate?: () => void;
     showDate?: boolean;
+    /** The newer note that supersedes this one. Marks the card outdated and drops "Try it". */
+    replacement?: WhatsNewEntry;
 }) {
     return (
         <article className="space-y-4">
+            {replacement && (
+                <a
+                    href={`#${replacement.id}`}
+                    className="flex min-h-[44px] items-start gap-2 rounded-xl border border-accent-orange/40 bg-accent-orange/10 px-3 py-2 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:bg-accent-orange/20"
+                >
+                    <History className="mt-0.5 h-4 w-4 shrink-0 text-accent-orange" />
+                    <Bi
+                        en={`Outdated — this has changed. See “${replacement.title.en}”.`}
+                        ar={`معلومة قديمة — تغيّر هذا. راجع «${replacement.title.ar}».`}
+                    />
+                </a>
+            )}
             {entry.media?.type === "video" && (
                 // Muted + playsInline is what lets iOS autoplay it in place
                 // instead of hijacking the screen with the fullscreen player.
@@ -62,7 +77,7 @@ export function WhatsNewCard({
                 <p className="text-[15px] text-slate-600 dark:text-slate-300">
                     <Bi en={entry.body.en} ar={entry.body.ar} />
                 </p>
-                {entry.href && (
+                {entry.href && !replacement && (
                     <Link
                         href={entry.href}
                         onClick={onNavigate}
