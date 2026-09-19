@@ -8,6 +8,7 @@ import {
   returnDispatch,
   deleteDriver,
   createItem,
+  updateItem,
   getMachineInventoryDetails,
   getRefillHints,
 } from '@/actions/inventory';
@@ -555,6 +556,45 @@ describe('createItem authorization', () => {
       createItem('Pepsi', 'Drinks', 'SKU-1', 5, 5, 5, 1, 999),
     ).rejects.toThrow(/FORBIDDEN/);
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('updateItem packaging', () => {
+  it('throws for driver callers', async () => {
+    setDriverSession(10);
+    await expect(updateItem(1, 'TWIX', 'Chocolate', '0044', 4, 4, 5)).rejects.toThrow(/FORBIDDEN/);
+  });
+
+  it('saves the box size and the size of one piece', async () => {
+    setAdminSession(1);
+    prismaMock.item.findUnique.mockResolvedValue(makeItem() as any);
+    prismaMock.item.update.mockResolvedValue(makeItem() as any);
+    const r = await updateItem(1, 'TWIX', 'Chocolate', '0044', 4, 4, 5, '10*24*50GM', 24, {
+      pieces_per_box: 24, piece_size: 50, piece_size_unit: 'g',
+    });
+    expect(r.success).toBe(true);
+    expect(prismaMock.item.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({ pieces_per_box: 24, piece_size: 50, piece_size_unit: 'g', default_assignment_qty: 24 }),
+    });
+  });
+
+  // Callers that don't show the packaging fields must not blank them.
+  it('leaves packaging alone when the caller does not send it', async () => {
+    setAdminSession(1);
+    prismaMock.item.findUnique.mockResolvedValue(makeItem() as any);
+    prismaMock.item.update.mockResolvedValue(makeItem() as any);
+    await updateItem(1, 'TWIX', 'Chocolate', '0044', 4, 4, 5);
+    const data = prismaMock.item.update.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('pieces_per_box');
+    expect(data).not.toHaveProperty('piece_size');
+  });
+
+  it('rejects a nonsense box size before writing', async () => {
+    setAdminSession(1);
+    const r = await updateItem(1, 'TWIX', 'Chocolate', '0044', 4, 4, 5, '', 24, { pieces_per_box: 2.5 });
+    expect(r.success).toBe(false);
+    expect(prismaMock.item.update).not.toHaveBeenCalled();
   });
 });
 

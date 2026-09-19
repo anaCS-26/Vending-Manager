@@ -9,20 +9,26 @@ vi.mock('@/actions/orders', () => ({
     createQuickItem: vi.fn(async () => ({ success: true })),
 }));
 
-import { createPurchaseOrder } from '@/actions/orders';
+import { createPurchaseOrder, completePurchaseOrder } from '@/actions/orders';
 
 const warehouses = [{ id: 1, name: 'Riyadh Central', isActive: true }] as any;
-const item = (id: number, name: string, batch: number, extra: object = {}) => ({
-    id, name, sku: `000${id}`, category: 'Snacks', bulk_format: null, cost: 2, price_standard: 3,
-    default_assignment_qty: batch, isActive: true,
+// `box` is the supplier box (Item.pieces_per_box), which is what ordering and
+// receiving count in. The driver batch is deliberately different on one item
+// (MOVENPICK: box of 10, batch of 3) to prove ordering ignores it.
+const item = (id: number, name: string, box: number | null, extra: object = {}) => ({
+    id, name, sku: `000${id}`, category: 'Snacks', bulk_format: null, cost: 2, last_purchase_cost: 2,
+    price_standard: 3, price_hospital: 3, price_hotel: 4,
+    pieces_per_box: box, piece_size: null, piece_size_unit: null,
+    default_assignment_qty: box ?? 0, isActive: true,
     WarehouseStock: [{ warehouseId: 1, quantity_on_hand: 5, pending_deficit: 0 }],
     ...extra,
 });
 const items = [
     item(1, 'LAYS CLASSIC', 14),
     item(2, 'AQUAFINA WATER', 40),
-    item(3, 'LOOSE GUM', 0),
+    item(3, 'LOOSE GUM', null),
     item(4, 'RETIRED BAR', 12, { isActive: false }),
+    item(5, 'MOVENPICK', 10, { default_assignment_qty: 3 }),
 ] as any;
 
 const lastOrder = {
@@ -53,7 +59,7 @@ beforeEach(() => {
 
 describe('OrderManagerUI — drafting a purchase order', () => {
     // The request this exists for: 60 lines, every one opening at 1.
-    it('starts a new line at the item case pack, and at 1 when it has none', async () => {
+    it('starts a new line at one box, and at 1 when the item has no box', async () => {
         await renderNewTab();
         fireEvent.change(search(), { target: { value: 'lays' } });
         fireEvent.keyDown(search(), { key: 'Enter' });
@@ -76,17 +82,24 @@ describe('OrderManagerUI — drafting a purchase order', () => {
         expect(document.activeElement).toBe(search());
     });
 
-    it('steps by whole cases and will not drop a line below one case', async () => {
+    it('orders in supplier boxes, not the driver batch', async () => {
+        await renderNewTab();
+        fireEvent.change(search(), { target: { value: 'movenpick' } });
+        fireEvent.keyDown(search(), { key: 'Enter' });
+        await waitFor(() => expect(qtyOf(5).value).toBe('10'));
+    });
+
+    it('steps by whole boxes and will not drop a line below one box', async () => {
         await renderNewTab();
         fireEvent.change(search(), { target: { value: 'lays' } });
         fireEvent.keyDown(search(), { key: 'Enter' });
         await waitFor(() => expect(qtyOf(1)).toBeTruthy());
 
-        expect(screen.getByRole('button', { name: /remove a case of 14/i })).toBeDisabled();
-        fireEvent.click(screen.getByRole('button', { name: /add a case of 14/i }));
+        expect(screen.getByRole('button', { name: /remove a box of 14/i })).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: /add a box of 14/i }));
         expect(qtyOf(1).value).toBe('28');
-        expect(screen.getByText(/2 × case of 14/)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: /remove a case of 14/i }));
+        expect(screen.getByText(/2 × box of 14/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /remove a box of 14/i }));
         expect(qtyOf(1).value).toBe('14');
     });
 
@@ -137,5 +150,90 @@ describe('OrderManagerUI — drafting a purchase order', () => {
             items: [{ itemId: 2, quantityRequested: 40 }],
         }));
         await waitFor(() => expect(window.localStorage.getItem('vms:po-draft')).toBeNull());
+    });
+});
+
+// The client: "we receive the stock in boxes, but it is dispatched by pieces —
+// and whether he received a 24-piece box or a 20-piece box needs to be specified."
+describe('OrderManagerUI — receiving a delivery in boxes', () => {
+    const pendingOrder = {
+        id: 77, warehouseId: 1, status: 'PENDING', createdAt: new Date('2026-09-18'), completedAt: null,
+        warehouse: warehouses[0],
+        Items: [
+            // 1,000 ordered; boxes of 24 → opens as 41 boxes + 16 loose.
+            { id: 501, itemId: 1, quantityRequested: 1000, quantityReceived: 0, costPerUnit: 2, boxesReceived: null, piecesPerBox: null,
+              item: { ...items[0], pieces_per_box: 24, last_purchase_cost: 1.98, price_standard: 4 } },
+            // No box size saved: counted piece by piece.
+            { id: 502, itemId: 3, quantityRequested: 30, quantityReceived: 0, costPerUnit: 0.5, boxesReceived: null, piecesPerBox: null,
+              item: { ...items[2], last_purchase_cost: 0.5 } },
+        ],
+    } as any;
+
+    const input = (id: string) => document.getElementById(id) as HTMLInputElement;
+
+    const startReceipt = async () => {
+        render(<OrderManagerUI warehouses={warehouses} items={items} pendingOrders={[pendingOrder]} completedOrders={[]} />);
+        fireEvent.click(await screen.findByRole('button', { name: /start receipt/i }));
+        await waitFor(() => expect(input('rcv-boxes-501')).toBeTruthy());
+    };
+
+    const confirm = async () => {
+        fireEvent.click(screen.getByRole('button', { name: /complete & store check-in/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /confirm receipt/i }));
+        await waitFor(() => expect(completePurchaseOrder).toHaveBeenCalled());
+        return vi.mocked(completePurchaseOrder).mock.calls[0][1];
+    };
+
+    beforeEach(() => vi.mocked(completePurchaseOrder).mockClear());
+
+    it("opens each line as the order, in the item's usual box, with a price per box", async () => {
+        await startReceipt();
+        expect(input('rcv-boxes-501').value).toBe('41');
+        expect(input('rcv-perbox-501').value).toBe('24');
+        expect(input('rcv-loose-501').value).toBe('16');
+        expect(screen.getByTestId('rcv-pieces-501')).toHaveTextContent('1,000 pcs');
+        // 1.98 a piece × 24 = 47.52 a box — what the invoice prints.
+        expect(input('rcv-price-501').value).toBe('47.52');
+
+        // An item with no box is counted in pieces, with no loose field to confuse it.
+        expect(screen.getByLabelText('Pieces', { selector: '#rcv-boxes-502' })).toBeTruthy();
+        expect(input('rcv-loose-502')).toBeNull();
+    });
+
+    it('records a 20-piece box when that is what arrived, and stores pieces', async () => {
+        await startReceipt();
+        fireEvent.change(input('rcv-boxes-501'), { target: { value: '10' } });
+        fireEvent.change(input('rcv-perbox-501'), { target: { value: '20' } });
+        fireEvent.change(input('rcv-loose-501'), { target: { value: '0' } });
+        fireEvent.change(input('rcv-price-501'), { target: { value: '40' } });
+
+        expect(screen.getByTestId('rcv-pieces-501')).toHaveTextContent('200 pcs');
+        expect(screen.getByText(/usually 24 per box/i)).toBeInTheDocument();
+
+        const payload = await confirm();
+        expect(payload).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                purchaseOrderItemId: 501,
+                quantityReceived: 200,     // stock moves in pieces
+                costPerUnit: 2,            // 40.00 a box ÷ 20
+                boxesReceived: 10,
+                piecesPerBox: 20,
+            }),
+            expect.objectContaining({ purchaseOrderItemId: 502, quantityReceived: 30, costPerUnit: 0.5, piecesPerBox: 1 }),
+        ]));
+    });
+
+    // AQUAFINA in production: a box price typed as the price of one bottle.
+    it('warns when one piece would cost more than it sells for', async () => {
+        await startReceipt();
+        expect(screen.queryByRole('alert')).toBeNull();
+        fireEvent.change(input('rcv-perbox-501'), { target: { value: '1' } });
+        expect(await screen.findByRole('alert')).toHaveTextContent(/would cost .* but sells for/i);
+    });
+
+    it('restates boxes and pieces in the confirmation', async () => {
+        await startReceipt();
+        fireEvent.click(screen.getByRole('button', { name: /complete & store check-in/i }));
+        expect(await screen.findByText(/checking in 1,030 pieces \(41 boxes\)/i)).toBeInTheDocument();
     });
 });

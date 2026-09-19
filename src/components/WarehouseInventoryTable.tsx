@@ -7,6 +7,7 @@ import type { WarehouseWithItem, WarehouseType } from "@/types";
 import type { Item } from "@prisma/client";
 import { formatCurrency } from "@/lib/utils";
 import { DataCard, MobileSortSelect } from "@/components/DataCard";
+import { describeInBoxes, describePackaging } from "@/lib/packaging";
 import WarehouseAuditModal from "./WarehouseAuditModal";
 import CostCorrectionModal from "./CostCorrectionModal";
 
@@ -243,9 +244,9 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                         <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">
                                             {stock.item.category}
                                         </span>
-                                        {item.bulk_format && (
+                                        {(describePackaging(item) ?? item.bulk_format) && (
                                             <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/5 uppercase tracking-wide">
-                                                {item.bulk_format}
+                                                {describePackaging(item) ?? item.bulk_format}
                                             </span>
                                         )}
                                         {selectedWarehouseId === "all" && (
@@ -257,7 +258,16 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                 }
                                 highlight={{
                                     label: "In stock",
-                                    value: stock.quantity_on_hand.toLocaleString(),
+                                    value: (
+                                        <>
+                                            {stock.quantity_on_hand.toLocaleString()}
+                                            {!isZero && describeInBoxes(stock.quantity_on_hand, item.pieces_per_box) && (
+                                                <span className="block text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                                                    {describeInBoxes(stock.quantity_on_hand, item.pieces_per_box)}
+                                                </span>
+                                            )}
+                                        </>
+                                    ),
                                     tone: isZero ? "warn" : "default",
                                 }}
                                 fields={[
@@ -347,7 +357,8 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                         <tbody className="divide-y divide-slate-200 dark:divide-white/5">
                             {paginatedData.map((stock, index) => {
                                 const totalAmount = stock.quantity_on_hand * (stock.item as any).cost;
-                                const bulkFormat = (stock.item as any).bulk_format ? ` (${(stock.item as any).bulk_format}) ` : " ";
+                                const bulkFormat = describePackaging(stock.item) ?? stock.item.bulk_format ?? "";
+                                const inBoxes = stock.quantity_on_hand === 0 ? null : describeInBoxes(stock.quantity_on_hand, stock.item.pieces_per_box);
                                 const isZero = stock.quantity_on_hand === 0;
                                 const globalIndex = (currentPage - 1) * PAGE_SIZE + index + 1;
 
@@ -381,6 +392,9 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                                     {stock.quantity_on_hand.toLocaleString()}
                                                 </span>
                                             </div>
+                                            {inBoxes && (
+                                                <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">{inBoxes}</p>
+                                            )}
                                         </td>
                                         <td className="px-3 py-3 md:px-6 md:py-4 text-right">
                                             <div className="flex flex-col items-end">

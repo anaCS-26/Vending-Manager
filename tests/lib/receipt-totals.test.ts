@@ -4,7 +4,7 @@ import { computeReceiptTotals, SAUDI_VAT_RATE } from '@/lib/receipt-totals';
 describe('computeReceiptTotals', () => {
     it('returns zeros for an empty receipt', () => {
         const t = computeReceiptTotals([]);
-        expect(t).toEqual({ lineCount: 0, totalUnits: 0, subtotal: 0, vat: 0, grandTotal: 0 });
+        expect(t).toEqual({ lineCount: 0, totalUnits: 0, totalBoxes: 0, subtotal: 0, vat: 0, grandTotal: 0 });
     });
 
     it('sums units and value across lines', () => {
@@ -60,7 +60,27 @@ describe('computeReceiptTotals', () => {
         expect(t.grandTotal).toBeCloseTo(14946.3, 2);
     });
 
-    it('uses the 15% Saudi VAT rate by default and accepts an override', () => {
+    // The same invoice, entered the way the receiving screen now asks for it:
+  // boxes and the price of one box, divided into pieces before it is summed.
+  // The totals must not move — the invoice is the invoice.
+  it('matches the same invoice when it is counted in boxes of pieces', () => {
+    const line = (boxes: number, perBox: number, boxPrice: number) => ({
+      quantity: boxes * perBox,
+      unitCost: boxPrice / perBox,
+      boxes,
+    });
+    const t = computeReceiptTotals([
+      line(30, 18, 17.5), line(8, 24, 28), line(5, 24, 28), line(8, 24, 28), line(5, 24, 28),
+      line(55, 12, 30.5), line(8, 24, 62), line(5, 24, 62), line(14, 30, 78.17), line(70, 30, 45.22),
+      line(50, 40, 11), line(2, 24, 375), line(3, 20, 483), line(3, 30, 263), line(15, 25, 65),
+      line(15, 24, 32.5),
+    ]);
+    expect(t.totalBoxes).toBe(296);                 // the invoice's quantity column
+    expect(t.subtotal).toBeCloseTo(12996.78, 2);    // invoice "Total Amount"
+    expect(t.grandTotal).toBeCloseTo(14946.3, 2);
+  });
+
+  it('uses the 15% Saudi VAT rate by default and accepts an override', () => {
         expect(SAUDI_VAT_RATE).toBe(0.15);
         const t = computeReceiptTotals([{ quantity: 1, unitCost: 100 }], 0);
         expect(t.vat).toBe(0);

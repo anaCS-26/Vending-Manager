@@ -2,16 +2,21 @@
  * Purchase-order drafting rules, as pure functions (no React/Prisma) — the
  * `refill-entry.ts` / `forecast.ts` pattern. `OrderManagerUI` only renders them.
  *
- * The unit throughout is `Item.default_assignment_qty`: the case pack. Unlike
- * the driver's refill sheet (where a case is the wrong unit — see
- * `refill-entry.ts`), a supplier order really is placed in cases, so the case
- * pack is the right default here and nothing about it fabricates a figure:
- * a PO line is a request, and what arrives is typed at receiving.
+ * The unit throughout is `Item.pieces_per_box`: the supplier's box. Unlike
+ * the driver's refill sheet (where a box is the wrong unit — see
+ * `refill-entry.ts`), a supplier order really is placed in boxes, so one box
+ * is the right default here and nothing about it fabricates a figure: a PO
+ * line is a request, and what arrives is counted at receiving.
+ *
+ * This used to be `Item.default_assignment_qty`, the driver batch, for want of
+ * a real box size. The two agree for most items but not all — MOVENPICK comes
+ * in boxes of 10 and goes out to a driver 3 at a time — so the dispatch-side
+ * `+N` keeps the batch and ordering uses the box.
  */
 
 export type OrderLine = { itemId: number; quantityRequested: number };
 
-/** A new line starts at one case; items with no case pack start at 1. */
+/** A new line starts at one box; items with no box size start at 1. */
 export function defaultOrderQuantity(batch: number | null | undefined): number {
     return typeof batch === "number" && Number.isFinite(batch) && batch > 0 ? Math.floor(batch) : 1;
 }
@@ -28,7 +33,7 @@ export function adjustOrderQuantity(current: number, delta: number): number {
     return next >= 1 ? next : Math.max(1, Math.floor(current));
 }
 
-/** Smallest whole number of cases covering `qty` (suppliers don't split one). */
+/** Smallest whole number of boxes covering `qty` (suppliers don't split one). */
 export function roundUpToBatch(qty: number, batch: number | null | undefined): number {
     if (!Number.isFinite(qty) || qty <= 0) return 0;
     const size = defaultOrderQuantity(batch);
@@ -83,12 +88,12 @@ export function linesFromPreviousOrder(
 
 /**
  * Lines covering what the supplier still owes this warehouse
- * (`WarehouseStock.pending_deficit`), rounded up to whole cases.
+ * (`WarehouseStock.pending_deficit`), rounded up to whole boxes.
  */
 export function linesFromDeficits(
     items: Array<{
         id: number;
-        default_assignment_qty: number;
+        pieces_per_box: number | null;
         WarehouseStock?: Array<{ warehouseId: number; pending_deficit?: number }>;
     }>,
     warehouseId: number,
@@ -97,7 +102,7 @@ export function linesFromDeficits(
     for (const item of items) {
         const deficit = item.WarehouseStock?.find((ws) => ws.warehouseId === warehouseId)?.pending_deficit ?? 0;
         if (deficit > 0) {
-            lines.push({ itemId: item.id, quantityRequested: roundUpToBatch(deficit, item.default_assignment_qty) });
+            lines.push({ itemId: item.id, quantityRequested: roundUpToBatch(deficit, item.pieces_per_box) });
         }
     }
     return lines;

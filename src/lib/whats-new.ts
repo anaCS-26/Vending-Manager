@@ -55,6 +55,20 @@ export type WhatsNewEntry = {
 /** Newest first. */
 export const WHATS_NEW: WhatsNewEntry[] = [
     {
+        id: "2026-09-receive-in-boxes",
+        date: "2026-09-19",
+        audience: ["admin"],
+        title: {
+            en: "Receive deliveries in boxes",
+            ar: "استلام البضاعة بالكرتون",
+        },
+        body: {
+            en: "When a delivery arrives, open Manage Orders → Pending Receipts and press Start Receipt. For each item, type how many boxes came and the price of one box, exactly as the supplier's invoice shows them. The app works out the pieces for you, and stock is still counted and sent to drivers in pieces. If a box in this delivery holds a different number (20 instead of 24), change “Pcs / box” on that line. Set each item's usual box size and the weight of one piece once, in Manage System → Items.",
+            ar: "عند وصول شحنة، افتح «إدارة الطلبات» ثم «الاستلامات المعلّقة» واضغط «بدء الاستلام». لكل صنف، اكتب عدد الكراتين وسعر الكرتون الواحد كما هو مكتوب في فاتورة المورّد. التطبيق يحسب عدد الحبّات بنفسه، ويبقى المخزون محسوباً بالحبّة ويُصرف للسائقين بالحبّة. إذا كان الكرتون في هذه الشحنة يحتوي عدداً مختلفاً (20 بدل 24)، غيّر خانة «Pcs / box» في ذلك السطر. حدّد حجم الكرتون المعتاد ووزن الحبّة لكل صنف مرة واحدة من «إدارة النظام» ← «الأصناف».",
+        },
+        href: "/admin/orders",
+    },
+    {
         id: "2026-09-return-to-warehouse",
         date: "2026-09-17",
         audience: ["admin"],
