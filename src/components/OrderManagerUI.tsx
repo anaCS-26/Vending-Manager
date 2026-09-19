@@ -9,6 +9,7 @@ import { formatCurrency, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { computeReceiptTotals } from "@/lib/receipt-totals";
 import { adjustOrderQuantity, defaultOrderQuantity, linesFromDeficits, linesFromPreviousOrder, mergeOrderLines, type OrderLine } from "@/lib/order-entry";
 import { entryKeyNav } from "@/lib/entry-keys";
+import { boxPriceFromPieceCost, boxSize, costPerPiece, describeInBoxes, describePackaging, describeReceivedLine, MAX_PIECES_PER_BOX, PIECE_SIZE_UNITS, piecesFromBoxes, splitIntoBoxes } from "@/lib/packaging";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { NumericInput } from "@/components/NumericInput";
 import { DataCard } from "@/components/DataCard";
@@ -33,6 +34,40 @@ type Props = {
 
 const DRAFT_KEY = "vms:po-draft";
 
+/**
+ * One line of a delivery as the receiver counts it: full boxes of `perBox`,
+ * plus loose pieces, at the invoice's price for one box. Pieces and the
+ * per-piece cost (what stock and WAC need) are derived — see packaging.ts.
+ */
+type ReceivedLine = {
+    boxes: number;
+    perBox: number;
+    loose: number;
+    boxPrice: number;
+    price_standard: number;
+    price_hospital: number;
+    price_hotel: number;
+};
+
+const receivedPieces = (l: ReceivedLine) => piecesFromBoxes(l.boxes, l.perBox, l.loose);
+const receivedPieceCost = (l: ReceivedLine) => costPerPiece(l.boxPrice, l.perBox);
+
+/** Receipt-summary lines. A "box" of one is a piece, so it isn't counted as a box. */
+const toReceiptLines = (order: OrderWithRelations, lines: Record<number, ReceivedLine>) =>
+    order.Items.map(oi => {
+        const l = lines[oi.id];
+        if (!l) return { quantity: oi.quantityRequested, unitCost: 0 };
+        return { quantity: receivedPieces(l), unitCost: receivedPieceCost(l), boxes: boxSize(l.perBox) > 1 ? l.boxes : 0 };
+    });
+
+/** What an item is packed as, for the line under its name. */
+const packagingLabel = (item: Item) => describePackaging(item) ?? item.bulk_format ?? "Units";
+
+/** The item's box size for ordering, or 0 when it has none (no ±box buttons). */
+const orderBoxOf = (item: Item) => (item.pieces_per_box && item.pieces_per_box > 1 ? item.pieces_per_box : 0);
+
+const emptyNewItem = { name: "", sku: "", category: "", pieces_per_box: 0, piece_size: 0, piece_size_unit: "g" };
+
 export default function OrderManagerUI({ warehouses, items, pendingOrders, completedOrders }: Props) {
     const [activeTab, setActiveTab] = useState<"NEW" | "PENDING" | "HISTORY">("PENDING");
     const [isPending, startTransition] = useTransition();
@@ -50,12 +85,13 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
 
     // New Item State
     const [isCreatingItem, setIsCreatingItem] = useState(false);
-    const [newItemForm, setNewItemForm] = useState({ name: "", sku: "", category: "", bulk_format: "" });
+    const [newItemForm, setNewItemForm] = useState(emptyNewItem);
 
     // -- Receive Order State --
     const [receivingOrderId, setReceivingOrderId] = useState<number | null>(null);
-    const [receivedQtys, setReceivedQtys] = useState<Record<number, number>>({});
-    const [receivedPrices, setReceivedPrices] = useState<Record<number, { cost: number, price_standard: number, price_hospital: number, price_hotel: number }>>({});
+    const [receivedLines, setReceivedLines] = useState<Record<number, ReceivedLine>>({});
+    const updateReceived = (orderItemId: number, patch: Partial<ReceivedLine>) =>
+        setReceivedLines(prev => ({ ...prev, [orderItemId]: { ...prev[orderItemId], ...patch } }));
 
     // -- Order History State --
     const [historySearchQuery, setHistorySearchQuery] = useState("");
@@ -130,10 +166,10 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
     }, [pendingQtyFocus]);
 
     /**
-     * Adds a line at one case (`Item.default_assignment_qty`).
+     * Adds a line at one box (`Item.pieces_per_box`).
      *
      * From the keyboard, focus lands in the new line's quantity box with the
-     * case pack selected: Enter accepts it and returns to the search box, typing
+     * box quantity selected: Enter accepts it and returns to the search box, typing
      * replaces it. So a long order is "name, Enter, Enter" per item and the hands
      * never leave the keys. From a click, focus stays in the search box with the
      * list open, so several items can be picked in a row.
@@ -149,7 +185,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
         const item = items.find(i => i.id === itemId);
         if (!item) return;
 
-        setOrderLines([...orderLines, { itemId, quantityRequested: defaultOrderQuantity(item.default_assignment_qty) }]);
+        setOrderLines([...orderLines, { itemId, quantityRequested: defaultOrderQuantity(item.pieces_per_box) }]);
         setItemSearchQuery("");
         setHighlightedIndex(0);
         if (via === "key") {
@@ -211,30 +247,39 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                 // Add it directly to the order line using the returned item
                 setOrderLines(prev => {
                     if (prev.find(l => l.itemId === res.item!.id)) return prev;
-                    return [...prev, { itemId: res.item!.id, quantityRequested: 1 }];
+                    return [...prev, { itemId: res.item!.id, quantityRequested: defaultOrderQuantity(res.item!.pieces_per_box) }];
                 });
 
                 setIsCreatingItem(false);
-                setNewItemForm({ name: "", sku: "", category: "", bulk_format: "" });
+                setNewItemForm(emptyNewItem);
             } else {
                 toast.error(res.success ? "Failed to create new item" : res.error);
             }
         });
     };
 
+    /**
+     * Pre-fills every line with what was ordered, in the item's usual box: 1,000
+     * TWIX in boxes of 24 opens as 41 boxes + 16 loose. The box price comes from
+     * the last per-piece cost, so the receiver only overwrites what the invoice
+     * says differently.
+     */
     const handleStartReceiving = (order: OrderWithRelations) => {
-        const initialQtys = order.Items.reduce((acc: Record<number, number>, curr: any) => {
-            acc[curr.id] = curr.quantityRequested; // Default to expected amount
-            return acc;
-        }, {} as Record<number, number>);
-
-        const initialPrices = order.Items.reduce((acc: Record<number, { cost: number, price_standard: number, price_hospital: number, price_hotel: number }>, curr: any) => {
-            acc[curr.id] = { cost: (curr.item as any).last_purchase_cost || 0, price_standard: curr.item.price_standard || 0, price_hospital: curr.item.price_hospital || 0, price_hotel: curr.item.price_hotel || 0 };
-            return acc;
-        }, {} as Record<number, { cost: number, price_standard: number, price_hospital: number, price_hotel: number }>);
-
-        setReceivedQtys(initialQtys);
-        setReceivedPrices(initialPrices);
+        const initial: Record<number, ReceivedLine> = {};
+        for (const oi of order.Items) {
+            const perBox = boxSize(oi.item.pieces_per_box);
+            const { boxes, loose } = splitIntoBoxes(oi.quantityRequested, perBox);
+            initial[oi.id] = {
+                boxes,
+                perBox,
+                loose,
+                boxPrice: boxPriceFromPieceCost(oi.item.last_purchase_cost || 0, perBox),
+                price_standard: oi.item.price_standard || 0,
+                price_hospital: oi.item.price_hospital || 0,
+                price_hotel: oi.item.price_hotel || 0,
+            };
+        }
+        setReceivedLines(initial);
         setReceivingOrderId(order.id);
     };
 
@@ -260,13 +305,17 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
         if (confirmModal.action === "RECEIVE") {
             const orderId = confirmModal.payload;
             startTransition(async () => {
-                const payload = Object.keys(receivedQtys).map(k => ({
-                    purchaseOrderItemId: Number(k),
-                    quantityReceived: receivedQtys[Number(k)],
-                    costPerUnit: receivedPrices[Number(k)]?.cost || 0,
-                    price_standard: receivedPrices[Number(k)]?.price_standard || 0,
-                    price_hospital: receivedPrices[Number(k)]?.price_hospital || 0,
-                    price_hotel: receivedPrices[Number(k)]?.price_hotel || 0
+                // Stock and WAC run on pieces; the box count and size ride along
+                // so the line records how the delivery was actually counted.
+                const payload = Object.entries(receivedLines).map(([id, l]) => ({
+                    purchaseOrderItemId: Number(id),
+                    quantityReceived: receivedPieces(l),
+                    costPerUnit: receivedPieceCost(l),
+                    boxesReceived: l.boxes,
+                    piecesPerBox: boxSize(l.perBox),
+                    price_standard: l.price_standard || 0,
+                    price_hospital: l.price_hospital || 0,
+                    price_hotel: l.price_hotel || 0
                 }));
                 const res = await completePurchaseOrder(orderId, payload);
                 if (res.success) {
@@ -360,10 +409,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
         ? pendingOrders.find(o => o.id === confirmModal.payload)
         : null;
     const confirmTotals = confirmingOrder
-        ? computeReceiptTotals(confirmingOrder.Items.map(oi => ({
-            quantity: receivedQtys[oi.id] ?? oi.quantityRequested,
-            unitCost: receivedPrices[oi.id]?.cost ?? 0,
-        })))
+        ? computeReceiptTotals(toReceiptLines(confirmingOrder, receivedLines))
         : null;
 
     const filteredHistory = completedOrders.filter(o =>
@@ -472,7 +518,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                 }
                                             }
                                             const nextSku = String(maxNumericSku + 1).padStart(4, '0');
-                                            setNewItemForm({ name: "", sku: nextSku, category: "", bulk_format: "" });
+                                            setNewItemForm({ ...emptyNewItem, sku: nextSku });
                                             setIsCreatingItem(true);
                                         }} className="px-4 py-3 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-900 dark:text-white rounded-xl text-sm font-bold transition-all whitespace-nowrap border border-slate-300 dark:border-white/10 flex items-center gap-2">
                                             <Plus className="w-4 h-4" /> New Item
@@ -529,7 +575,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                             {formatCurrency((item as any).price_standard || 0)}
                                                                         </p>
                                                                         <span className="flex items-center gap-1 text-xs font-bold text-slate-400 group-hover:text-accent-purple transition-all">
-                                                                            <Plus className="w-5 h-5" />{defaultOrderQuantity(item.default_assignment_qty)}
+                                                                            <Plus className="w-5 h-5" />{defaultOrderQuantity(item.pieces_per_box)}
                                                                         </span>
                                                                     </>
                                                                 )}
@@ -544,7 +590,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                             <span>•</span>
                                                             <span>{item.category || "Uncategorized"}</span>
                                                             <span>•</span>
-                                                            <span>{item.bulk_format || "Units"}</span>
+                                                            <span>{packagingLabel(item)}</span>
                                                             <span>•</span>
                                                             <span className="flex items-center gap-1">
                                                                 <History className="w-3 h-3" /> {item._count?.DispatchItems || 0} historical dispatches
@@ -608,7 +654,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                     {[...orderLines].reverse().map((line) => {
                                         const item = items.find(i => i.id === line.itemId);
                                         if (!item) return null;
-                                        const batch = item.default_assignment_qty;
+                                        const batch = orderBoxOf(item);
 
                                         const currentStock = selectedWarehouseId && item.WarehouseStock
                                             ? item.WarehouseStock.find(ws => ws.warehouseId === selectedWarehouseId)?.quantity_on_hand || 0
@@ -623,7 +669,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                         <span>•</span>
                                                         <span>{item.category || "Uncategorized"}</span>
                                                         <span>•</span>
-                                                        <span>{item.bulk_format || "Units"}</span>
+                                                        <span>{packagingLabel(item)}</span>
 
                                                         {selectedWarehouseId && (
                                                             <>
@@ -646,8 +692,8 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                             {batch > 0 && (
                                                                 <span className="ml-2 normal-case tracking-normal font-semibold text-slate-400">
                                                                     {line.quantityRequested % batch === 0
-                                                                        ? `${line.quantityRequested / batch} × case of ${batch}`
-                                                                        : `case of ${batch}`}
+                                                                        ? `${line.quantityRequested / batch} × box of ${batch}`
+                                                                        : `box of ${batch}`}
                                                                 </span>
                                                             )}
                                                         </label>
@@ -658,7 +704,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                     tabIndex={-1}
                                                                     onClick={() => setLineQuantity(line.itemId, adjustOrderQuantity(line.quantityRequested, -batch))}
                                                                     disabled={line.quantityRequested - batch < 1}
-                                                                    aria-label={`Remove a case of ${batch} ${item.name}`}
+                                                                    aria-label={`Remove a box of ${batch} ${item.name}`}
                                                                     className="min-h-11 min-w-11 px-2 rounded-lg text-xs font-bold bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-white/10 transition-colors disabled:opacity-40"
                                                                 >
                                                                     −{batch}
@@ -670,7 +716,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                 value={line.quantityRequested}
                                                                 onChange={q => setLineQuantity(line.itemId, q)}
                                                                 onBlur={() => {
-                                                                    // A cleared box falls back to one case, the same value the line started at.
+                                                                    // A cleared input falls back to one box, the same value the line started at.
                                                                     if (!line.quantityRequested) setLineQuantity(line.itemId, defaultOrderQuantity(batch));
                                                                 }}
                                                                 onKeyDown={e => {
@@ -685,7 +731,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                     type="button"
                                                                     tabIndex={-1}
                                                                     onClick={() => setLineQuantity(line.itemId, adjustOrderQuantity(line.quantityRequested, batch))}
-                                                                    aria-label={`Add a case of ${batch} ${item.name}`}
+                                                                    aria-label={`Add a box of ${batch} ${item.name}`}
                                                                     className="min-h-11 min-w-11 px-2 rounded-lg text-xs font-bold bg-accent-purple/10 hover:bg-accent-purple/20 text-accent-purple border border-accent-purple/20 transition-colors"
                                                                 >
                                                                     +{batch}
@@ -775,9 +821,18 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Category (e.g., Snacks)</label>
                                                 <input type="text" value={newItemForm.category} onChange={e => setNewItemForm({ ...newItemForm, category: e.target.value })} className="w-full px-4 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple" placeholder="Enter category..." />
                                             </div>
-                                            <div className="col-span-2">
-                                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Bulk Format</label>
-                                                <input type="text" value={newItemForm.bulk_format} onChange={e => setNewItemForm({ ...newItemForm, bulk_format: e.target.value })} className="w-full px-4 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple" placeholder="e.g., Box of 24" />
+                                            <div>
+                                                <label htmlFor="new-item-per-box" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Pieces per box</label>
+                                                <NumericInput id="new-item-per-box" max={MAX_PIECES_PER_BOX} value={newItemForm.pieces_per_box} onChange={pieces_per_box => setNewItemForm({ ...newItemForm, pieces_per_box })} className="w-full px-4 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple" placeholder="e.g. 24" />
+                                            </div>
+                                            <div>
+                                                <label htmlFor="new-item-size" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Size of one piece</label>
+                                                <div className="flex gap-2">
+                                                    <NumericInput id="new-item-size" decimal value={newItemForm.piece_size} onChange={piece_size => setNewItemForm({ ...newItemForm, piece_size })} className="w-full min-w-0 px-4 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple" placeholder="e.g. 50" />
+                                                    <select aria-label="Size unit" value={newItemForm.piece_size_unit} onChange={e => setNewItemForm({ ...newItemForm, piece_size_unit: e.target.value })} className="px-2 py-2 bg-slate-100 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:border-accent-purple">
+                                                        {PIECE_SIZE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                                    </select>
+                                                </div>
                                             </div>
                                         </div>
                                         <button onClick={handleCreateItemAndAdd} disabled={isPending || !newItemForm.name || !newItemForm.sku} className="w-full py-3 bg-accent-purple text-white rounded-xl font-bold mt-4 disabled:opacity-50 flex justify-center items-center gap-2">
@@ -805,10 +860,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                 {pendingOrders.map(order => {
                                     const isReceiving = receivingOrderId === order.id;
                                     const receiptTotals = isReceiving
-                                        ? computeReceiptTotals(order.Items.map(oi => ({
-                                            quantity: receivedQtys[oi.id] ?? oi.quantityRequested,
-                                            unitCost: receivedPrices[oi.id]?.cost ?? 0,
-                                        })))
+                                        ? computeReceiptTotals(toReceiptLines(order, receivedLines))
                                         : null;
                                     return (
                                         <div key={order.id} className="glass-panel border border-slate-300 shadow-sm dark:border-white/10 rounded-[2rem] p-6 lg:p-8 relative overflow-hidden group">
@@ -843,105 +895,146 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Line Items ({order.Items.length})</p>
                                                         {isReceiving && (
                                                             <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 mb-3">
-                                                                Press Enter to move through quantity and cost line by line. Selling prices are pre-filled — change them only if the invoice does.
+                                                                Count in boxes, the way the invoice does. Press Enter to move through boxes and price line by line. Box sizes and selling prices are pre-filled — change them only if this delivery or the invoice differs.
                                                             </p>
                                                         )}
                                                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3" data-entry-group>
-                                                            {order.Items.map((oi: any) => (
+                                                            {order.Items.map(oi => {
+                                                                const line = isReceiving ? receivedLines[oi.id] : undefined;
+                                                                const pieces = line ? receivedPieces(line) : oi.quantityRequested;
+                                                                const perBox = boxSize(line ? line.perBox : oi.item.pieces_per_box);
+                                                                const pieceCost = line ? receivedPieceCost(line) : 0;
+                                                                const usualBox = oi.item.pieces_per_box;
+                                                                const requestedInBoxes = describeInBoxes(oi.quantityRequested, usualBox);
+                                                                return (
                                                                 <div key={oi.id} className="flex flex-col p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl border border-slate-200 dark:border-white/5">
-                                                                    <div className="flex justify-between items-start mb-2">
-                                                                        <div>
-                                                                            <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight mb-1">{oi.item.name}</p>
-                                                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono font-semibold text-slate-500 mb-2">
-                                                                                <span className="flex items-center gap-2 whitespace-nowrap">#{oi.item.sku} <span className="opacity-50">•</span></span>
-                                                                                <span className="flex items-center gap-2 whitespace-nowrap">{formatCurrency(oi.costPerUnit)} <span className="opacity-50">•</span></span>
-                                                                                <span className="flex items-center gap-2 whitespace-nowrap">{oi.item.bulk_format || 'Unit'} <span className="opacity-50">•</span></span>
-                                                                                <span className="whitespace-nowrap">{oi.item.category || 'Uncategorized'}</span>
-                                                                            </div>
-                                                                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold tracking-widest bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 uppercase">
-                                                                                <Package className="w-3 h-3 opacity-70" />
-                                                                                Live WH Stock: <span className="font-mono text-emerald-700 dark:text-emerald-300">{items.find(i => i.id === oi.itemId)?.WarehouseStock?.find(ws => ws.warehouseId === order.warehouseId)?.quantity_on_hand || 0}</span>
-                                                                            </div>
+                                                                    <div className="mb-2">
+                                                                        <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight mb-1">{oi.item.name}</p>
+                                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono font-semibold text-slate-500 mb-2">
+                                                                            <span className="flex items-center gap-2 whitespace-nowrap">#{oi.item.sku} <span className="opacity-50">•</span></span>
+                                                                            {!isReceiving && <span className="flex items-center gap-2 whitespace-nowrap">{formatCurrency(oi.costPerUnit)} / pc <span className="opacity-50">•</span></span>}
+                                                                            <span className="flex items-center gap-2 whitespace-nowrap">{packagingLabel(oi.item)} <span className="opacity-50">•</span></span>
+                                                                            <span className="whitespace-nowrap">{oi.item.category || 'Uncategorized'}</span>
                                                                         </div>
-                                                                        {isReceiving && (
-                                                                            <div className="flex flex-col gap-2 ml-4">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <label className="text-[10px] font-bold text-slate-500 uppercase flex-1 text-right">RCV QTY:</label>
+                                                                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold tracking-widest bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 uppercase">
+                                                                            <Package className="w-3 h-3 opacity-70" />
+                                                                            Live WH Stock: <span className="font-mono text-emerald-700 dark:text-emerald-300">{items.find(i => i.id === oi.itemId)?.WarehouseStock?.find(ws => ws.warehouseId === order.warehouseId)?.quantity_on_hand || 0}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    {line && (
+                                                                        <div className="space-y-3 mt-1">
+                                                                            {/* What arrived: boxes × box size + loose = pieces. */}
+                                                                            <div className="flex flex-wrap items-end gap-x-2 gap-y-2">
+                                                                                <ReceiveField id={`rcv-boxes-${oi.id}`} label={perBox > 1 ? "Boxes" : "Pieces"}>
                                                                                     <NumericInput
+                                                                                        id={`rcv-boxes-${oi.id}`}
                                                                                         data-entry
                                                                                         onKeyDown={entryKeyNav}
-                                                                                        value={receivedQtys[oi.id] ?? oi.quantityRequested}
-                                                                                        onChange={q => setReceivedQtys({ ...receivedQtys, [oi.id]: q })}
-                                                                                        className="w-20 px-2 py-1 bg-white dark:bg-[#18181b] border border-accent-orange/50 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-accent-orange/50"
+                                                                                        value={line.boxes}
+                                                                                        onChange={boxes => updateReceived(oi.id, { boxes })}
+                                                                                        className="w-20 px-2 py-2 bg-white dark:bg-[#18181b] border border-accent-orange/50 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-accent-orange/50"
                                                                                     />
-                                                                                </div>
-                                                                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Cost:</label>
-                                                                                        <NumericInput
-                                                                                            decimal
-                                                                                            data-entry
-                                                                                            onKeyDown={entryKeyNav}
-                                                                                            value={receivedPrices[oi.id]?.cost ?? 0}
-                                                                                            onChange={cost => setReceivedPrices({
-                                                                                                ...receivedPrices,
-                                                                                                [oi.id]: { ...receivedPrices[oi.id], cost }
-                                                                                            })}
-                                                                                            className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
-                                                                                        />
-                                                                                    </div>
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Standard:</label>
-                                                                                        <NumericInput
-                                                                                            decimal
-                                                                                            value={receivedPrices[oi.id]?.price_standard ?? 0}
-                                                                                            onChange={price_standard => setReceivedPrices({
-                                                                                                ...receivedPrices,
-                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_standard }
-                                                                                            })}
-                                                                                            className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
-                                                                                        />
-                                                                                    </div>
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Hospital:</label>
-                                                                                        <NumericInput
-                                                                                            decimal
-                                                                                            value={receivedPrices[oi.id]?.price_hospital ?? 0}
-                                                                                            onChange={price_hospital => setReceivedPrices({
-                                                                                                ...receivedPrices,
-                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_hospital }
-                                                                                            })}
-                                                                                            className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
-                                                                                        />
-                                                                                    </div>
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        <label className="text-[8px] font-bold text-slate-500 uppercase flex-1 text-right">Hotel:</label>
-                                                                                        <NumericInput
-                                                                                            decimal
-                                                                                            value={receivedPrices[oi.id]?.price_hotel ?? 0}
-                                                                                            onChange={price_hotel => setReceivedPrices({
-                                                                                                ...receivedPrices,
-                                                                                                [oi.id]: { ...receivedPrices[oi.id], price_hotel }
-                                                                                            })}
-                                                                                            className="w-16 px-1 py-1 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
-                                                                                        />
-                                                                                    </div>
+                                                                                </ReceiveField>
+                                                                                <span aria-hidden className="pb-2.5 text-sm font-bold text-slate-400">×</span>
+                                                                                <ReceiveField id={`rcv-perbox-${oi.id}`} label="Pcs / box">
+                                                                                    <NumericInput
+                                                                                        id={`rcv-perbox-${oi.id}`}
+                                                                                        max={MAX_PIECES_PER_BOX}
+                                                                                        value={line.perBox}
+                                                                                        onChange={next => updateReceived(oi.id, { perBox: next })}
+                                                                                        // A cleared box size is not a box of nothing — put the usual one back.
+                                                                                        onBlur={() => { if (!line.perBox) updateReceived(oi.id, { perBox: boxSize(usualBox) }); }}
+                                                                                        className="w-16 px-2 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
+                                                                                    />
+                                                                                </ReceiveField>
+                                                                                {/* Loose pieces only mean something next to a real box — but stay
+                                                                                    visible while they hold a number, so nothing counts unseen. */}
+                                                                                {(perBox > 1 || line.loose > 0) && (
+                                                                                    <>
+                                                                                        <span aria-hidden className="pb-2.5 text-sm font-bold text-slate-400">+</span>
+                                                                                        <ReceiveField id={`rcv-loose-${oi.id}`} label="Loose pcs">
+                                                                                            <NumericInput
+                                                                                                id={`rcv-loose-${oi.id}`}
+                                                                                                value={line.loose}
+                                                                                                onChange={loose => updateReceived(oi.id, { loose })}
+                                                                                                className="w-16 px-2 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
+                                                                                            />
+                                                                                        </ReceiveField>
+                                                                                    </>
+                                                                                )}
+                                                                                <span aria-hidden className="pb-2.5 text-sm font-bold text-slate-400">=</span>
+                                                                                <p className="pb-2 text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap" data-testid={`rcv-pieces-${oi.id}`}>
+                                                                                    {pieces.toLocaleString()} pcs
+                                                                                </p>
+                                                                            </div>
+                                                                            {usualBox && boxSize(line.perBox) !== usualBox ? (
+                                                                                <p className="text-[11px] font-semibold text-accent-orange">Usually {usualBox} per box — this delivery is being counted as {boxSize(line.perBox)}.</p>
+                                                                            ) : null}
+                                                                            {!usualBox && perBox === 1 && (
+                                                                                <p className="text-[11px] text-slate-500 dark:text-slate-400">No box size saved for this item. If it came in boxes, type how many pieces are in one.</p>
+                                                                            )}
+
+                                                                            {/* What it cost: the invoice's price for one box, split into pieces. */}
+                                                                            <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+                                                                                <ReceiveField id={`rcv-price-${oi.id}`} label={perBox > 1 ? "Price / box" : "Price / pc"}>
+                                                                                    <NumericInput
+                                                                                        id={`rcv-price-${oi.id}`}
+                                                                                        decimal
+                                                                                        data-entry
+                                                                                        onKeyDown={entryKeyNav}
+                                                                                        value={line.boxPrice}
+                                                                                        onChange={boxPrice => updateReceived(oi.id, { boxPrice })}
+                                                                                        className="w-24 px-2 py-2 bg-white dark:bg-[#18181b] border border-accent-orange/50 rounded-lg text-center text-sm font-bold text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-accent-orange/50"
+                                                                                    />
+                                                                                </ReceiveField>
+                                                                                {perBox > 1 && (
+                                                                                    <p className="pb-2 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">= {formatCurrency(pieceCost)} per piece</p>
+                                                                                )}
+                                                                            </div>
+                                                                            {line.price_standard > 0 && pieceCost > line.price_standard && (
+                                                                                <p role="alert" className="flex items-start gap-1.5 text-[11px] font-semibold text-accent-orange">
+                                                                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                                                                                    One piece would cost {formatCurrency(pieceCost)} but sells for {formatCurrency(line.price_standard)}. Check the box size and the price.
+                                                                                </p>
+                                                                            )}
+
+                                                                            {/* Selling prices stay per piece — that is what a machine sells. */}
+                                                                            <div>
+                                                                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Selling price per piece</p>
+                                                                                <div className="grid grid-cols-3 gap-2">
+                                                                                    {([
+                                                                                        ["price_standard", "Standard"],
+                                                                                        ["price_hospital", "Hospital"],
+                                                                                        ["price_hotel", "Hotel"],
+                                                                                    ] as const).map(([key, label]) => (
+                                                                                        <div key={key} className="flex flex-col gap-1">
+                                                                                            <label htmlFor={`rcv-${key}-${oi.id}`} className="text-[9px] font-bold text-slate-500 uppercase">{label}</label>
+                                                                                            <NumericInput
+                                                                                                id={`rcv-${key}-${oi.id}`}
+                                                                                                decimal
+                                                                                                value={line[key]}
+                                                                                                onChange={v => updateReceived(oi.id, { [key]: v })}
+                                                                                                className="w-full px-1 py-1.5 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-white/10 rounded-lg text-center text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-accent-purple"
+                                                                                            />
+                                                                                        </div>
+                                                                                    ))}
                                                                                 </div>
                                                                             </div>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex items-center justify-between text-xs text-slate-500 font-mono mt-1 pt-2 border-t border-slate-200 dark:border-white/5 w-full">
-                                                                        <span>REQ QTY: {oi.quantityRequested}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="flex items-center justify-between gap-2 text-xs text-slate-500 font-mono mt-3 pt-2 border-t border-slate-200 dark:border-white/5 w-full">
+                                                                        <span>REQ: {oi.quantityRequested.toLocaleString()} pcs{requestedInBoxes ? ` (${requestedInBoxes})` : ""}</span>
                                                                         {!isReceiving && <span className="text-slate-400">WAITING</span>}
-                                                                        {isReceiving && (receivedQtys[oi.id] ?? oi.quantityRequested) !== oi.quantityRequested && (
-                                                                            <span className="text-accent-pink font-bold flex items-center gap-1"><ArrowRight className="w-3 h-3" /> Variance detected</span>
+                                                                        {isReceiving && pieces !== oi.quantityRequested && (
+                                                                            <span className="text-accent-pink font-bold flex items-center gap-1 whitespace-nowrap"><ArrowRight className="w-3 h-3" /> Variance detected</span>
                                                                         )}
-                                                                        {isReceiving && (receivedQtys[oi.id] ?? oi.quantityRequested) === oi.quantityRequested && (
+                                                                        {isReceiving && pieces === oi.quantityRequested && (
                                                                             <span className="text-accent-green font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Match</span>
                                                                         )}
                                                                     </div>
                                                                 </div>
-                                                            ))}
+                                                                );
+                                                            })}
                                                         </div>
                                                     </div>
 
@@ -957,8 +1050,11 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                     <p className="text-lg font-bold text-slate-900 dark:text-white">{receiptTotals.lineCount}</p>
                                                                 </div>
                                                                 <div>
-                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Total Units</p>
-                                                                    <p className="text-lg font-bold text-slate-900 dark:text-white">{receiptTotals.totalUnits}</p>
+                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Pieces</p>
+                                                                    <p className="text-lg font-bold text-slate-900 dark:text-white">{receiptTotals.totalUnits.toLocaleString()}</p>
+                                                                    {receiptTotals.totalBoxes > 0 && (
+                                                                        <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">in {receiptTotals.totalBoxes.toLocaleString()} {receiptTotals.totalBoxes === 1 ? "box" : "boxes"}</p>
+                                                                    )}
                                                                 </div>
                                                                 <div>
                                                                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Subtotal (excl. VAT)</p>
@@ -974,7 +1070,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                 </div>
                                                             </div>
                                                             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">
-                                                                Enter unit costs excluding VAT. Supplier invoices round VAT per line, so the grand total may differ by a few halalas.
+                                                                Enter box prices excluding VAT, as printed on the invoice. Supplier invoices round VAT per line, so the grand total may differ by a few halalas.
                                                             </p>
                                                         </div>
                                                     )}
@@ -1133,7 +1229,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                     <th className="py-3 px-2">Item</th>
                                                     <th className="py-3 px-2 text-center">Req Qty</th>
                                                     <th className="py-3 px-2 text-center">Rcvd Qty</th>
-                                                    <th className="py-3 px-2 text-right">Cost/Unit</th>
+                                                    <th className="py-3 px-2 text-right">Cost / pc</th>
                                                     <th className="py-3 px-2 text-right">Total Line</th>
                                                 </tr>
                                             </thead>
@@ -1145,7 +1241,12 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                             <p className="text-[10px] font-mono text-slate-500 mt-1">#{oi.item.sku} • {oi.item.category || "Uncategorized"}</p>
                                                         </td>
                                                         <td className="py-4 px-2 text-center text-sm font-mono text-slate-600 dark:text-slate-400">{oi.quantityRequested}</td>
-                                                        <td className="py-4 px-2 text-center text-sm font-mono font-bold text-slate-900 dark:text-white">{oi.quantityReceived}</td>
+                                                        <td className="py-4 px-2 text-center text-sm font-mono font-bold text-slate-900 dark:text-white">
+                                                            {oi.quantityReceived}
+                                                            {describeReceivedLine(oi) && (
+                                                                <p className="text-[10px] font-semibold text-slate-500 mt-1">{describeReceivedLine(oi)}</p>
+                                                            )}
+                                                        </td>
                                                         <td className="py-4 px-2 text-right text-sm font-mono text-slate-600 dark:text-slate-400">{formatCurrency(oi.costPerUnit)}</td>
                                                         <td className="py-4 px-2 text-right text-sm font-bold font-mono text-slate-900 dark:text-white">{formatCurrency(oi.costPerUnit * oi.quantityReceived)}</td>
                                                     </tr>
@@ -1203,7 +1304,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                     <th className="p-3 border-r border-black">Item Name</th>
                                     <th className="p-3 border-r border-black">SKU</th>
                                     <th className="p-3 border-r border-black">Category</th>
-                                    <th className="p-3 border-r border-black hidden sm:table-cell">Bulk Format</th>
+                                    <th className="p-3 border-r border-black hidden sm:table-cell">Packing</th>
                                     <th className="p-3 text-center w-24">Req Qty</th>
                                 </tr>
                             </thead>
@@ -1213,8 +1314,13 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                         <td className="p-3 border-r border-black font-semibold">{oi.item.name}</td>
                                         <td className="p-3 border-r border-black font-mono text-slate-600">{oi.item.sku}</td>
                                         <td className="p-3 border-r border-black text-slate-600">{oi.item.category || "-"}</td>
-                                        <td className="p-3 border-r border-black text-slate-600 hidden sm:table-cell">{oi.item.bulk_format || "-"}</td>
-                                        <td className="p-3 text-center font-black text-lg">{oi.quantityRequested}</td>
+                                        <td className="p-3 border-r border-black text-slate-600 hidden sm:table-cell">{describePackaging(oi.item) ?? oi.item.bulk_format ?? "-"}</td>
+                                        <td className="p-3 text-center font-black text-lg">
+                                            {oi.quantityRequested}
+                                            {describeInBoxes(oi.quantityRequested, oi.item.pieces_per_box) && (
+                                                <span className="block text-xs font-semibold">{describeInBoxes(oi.quantityRequested, oi.item.pieces_per_box)}</span>
+                                            )}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -1246,7 +1352,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                     confirmModal.action === "CANCEL"
                         ? "Are you sure you want to cancel this order? This action cannot be undone."
                         : confirmTotals
-                            ? `You are checking in ${confirmTotals.totalUnits} units across ${confirmTotals.lineCount} line items — ${formatCurrency(confirmTotals.grandTotal)} incl. 15% VAT (${formatCurrency(confirmTotals.subtotal)} + ${formatCurrency(confirmTotals.vat)} VAT). Make sure this matches the supplier invoice. This action cannot be undone.`
+                            ? `You are checking in ${confirmTotals.totalUnits.toLocaleString()} pieces${confirmTotals.totalBoxes > 0 ? ` (${confirmTotals.totalBoxes.toLocaleString()} boxes)` : ""} across ${confirmTotals.lineCount} line items — ${formatCurrency(confirmTotals.grandTotal)} incl. 15% VAT (${formatCurrency(confirmTotals.subtotal)} + ${formatCurrency(confirmTotals.vat)} VAT). Make sure this matches the supplier invoice. This action cannot be undone.`
                             : "Are you sure you want to finalize this receipt? This action cannot be undone."
                 }
                 confirmText={confirmModal.action === "CANCEL" ? "Yes, Cancel Order" : "Confirm Receipt"}
@@ -1263,6 +1369,16 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                 onCancel={() => setConfirmClear(false)}
             />
         </>
+    );
+}
+
+/** A label stacked over one receiving input. */
+function ReceiveField({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
+    return (
+        <div className="flex flex-col gap-1">
+            <label htmlFor={id} className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{label}</label>
+            {children}
+        </div>
     );
 }
 

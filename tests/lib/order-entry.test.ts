@@ -119,14 +119,14 @@ describe('linesFromPreviousOrder', () => {
 
 describe('linesFromDeficits', () => {
   const items = [
-    { id: 1, default_assignment_qty: 24, WarehouseStock: [{ warehouseId: 7, pending_deficit: 30 }] },
-    { id: 2, default_assignment_qty: 0, WarehouseStock: [{ warehouseId: 7, pending_deficit: 5 }] },
-    { id: 3, default_assignment_qty: 12, WarehouseStock: [{ warehouseId: 7, pending_deficit: 0 }] },
-    { id: 4, default_assignment_qty: 12, WarehouseStock: [{ warehouseId: 9, pending_deficit: 40 }] },
-    { id: 5, default_assignment_qty: 12 },
+    { id: 1, pieces_per_box: 24, WarehouseStock: [{ warehouseId: 7, pending_deficit: 30 }] },
+    { id: 2, pieces_per_box: null, WarehouseStock: [{ warehouseId: 7, pending_deficit: 5 }] },
+    { id: 3, pieces_per_box: 12, WarehouseStock: [{ warehouseId: 7, pending_deficit: 0 }] },
+    { id: 4, pieces_per_box: 12, WarehouseStock: [{ warehouseId: 9, pending_deficit: 40 }] },
+    { id: 5, pieces_per_box: 12 },
   ];
 
-  it('orders what the supplier still owes this warehouse, in whole cases', () => {
+  it('orders what the supplier still owes this warehouse, in whole boxes', () => {
     expect(linesFromDeficits(items, 7)).toEqual([
       { itemId: 1, quantityRequested: 48 },
       { itemId: 2, quantityRequested: 5 },

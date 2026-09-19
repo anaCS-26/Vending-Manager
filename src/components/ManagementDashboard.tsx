@@ -10,6 +10,7 @@ import { deleteDispatchTemplate } from "@/actions/dispatch-templates";
 import TemplateEditorModal from "./TemplateEditorModal";
 import type { DispatchTemplateWithItems } from "@/types";
 import { formatCurrency } from "@/lib/utils";
+import { describePackaging, formatPieceSize, MAX_PIECES_PER_BOX, PIECE_SIZE_UNITS } from "@/lib/packaging";
 import { ConfirmModal } from "./ConfirmModal";
 import { NumericInput } from "./NumericInput";
 import AddressAutocomplete from "./AddressAutocomplete";
@@ -29,6 +30,9 @@ type ItemWithWarehouse = {
     imageUrl?: string | null;
     bulk_format?: string | null;
     default_assignment_qty: number;
+    pieces_per_box: number | null;
+    piece_size: number | null;
+    piece_size_unit: string | null;
     isActive?: boolean;
     WarehouseStock: {
         quantity_on_hand: number;
@@ -120,7 +124,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
     // Forms
     const [driverForm, setDriverForm] = useState({ name: "", phone: "", email: "", pin: "" });
     const [machineForm, setMachineForm] = useState({ location_name: "", district: "", address: "", notes: "", terminalId: "", latitude: undefined as number | undefined, longitude: undefined as number | undefined, operating_cost: 0, rental_cost: 0, tier: "STANDARD" });
-    const [itemForm, setItemForm] = useState({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", default_assignment_qty: 0, warehouseId: undefined as number | undefined, initialStock: 0 });
+    const [itemForm, setItemForm] = useState({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", default_assignment_qty: 0, pieces_per_box: 0, piece_size: 0, piece_size_unit: "g", warehouseId: undefined as number | undefined, initialStock: 0 });
     const [warehouseForm, setWarehouseForm] = useState({ name: "", location: "", address: "", latitude: undefined as number | undefined, longitude: undefined as number | undefined, operating_cost: 0, rental_cost: 0 });
     const [bulkQty, setBulkQty] = useState<string>("");
 
@@ -130,7 +134,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
         setEditingId(null);
         setDriverForm({ name: "", phone: "", email: "", pin: "" });
         setMachineForm({ location_name: "", district: "", address: "", notes: "", terminalId: "", latitude: undefined, longitude: undefined, operating_cost: 0, rental_cost: 0, tier: "STANDARD" });
-        setItemForm({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", default_assignment_qty: 0, warehouseId: undefined, initialStock: 0 });
+        setItemForm({ name: "", category: "", sku: "", price_standard: 0, price_hospital: 0, price_hotel: 0, bulk_format: "", default_assignment_qty: 0, pieces_per_box: 0, piece_size: 0, piece_size_unit: "g", warehouseId: undefined, initialStock: 0 });
         setWarehouseForm({ name: "", location: "", address: "", latitude: undefined, longitude: undefined, operating_cost: 0, rental_cost: 0 });
     };
 
@@ -189,7 +193,11 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
     const handleSaveItem = (id?: number) => {
         startTransition(async () => {
             let res;
-            if (id) res = await updateItem(id, itemForm.name, itemForm.category, itemForm.sku, itemForm.price_standard, itemForm.price_hospital, itemForm.price_hotel, itemForm.bulk_format, itemForm.default_assignment_qty);
+            if (id) res = await updateItem(id, itemForm.name, itemForm.category, itemForm.sku, itemForm.price_standard, itemForm.price_hospital, itemForm.price_hotel, itemForm.bulk_format, itemForm.default_assignment_qty, {
+                pieces_per_box: itemForm.pieces_per_box,
+                piece_size: itemForm.piece_size,
+                piece_size_unit: itemForm.piece_size_unit,
+            });
             else res = await createItem(itemForm.name, itemForm.category, itemForm.sku, itemForm.price_standard, itemForm.price_hospital, itemForm.price_hotel, itemForm.warehouseId, itemForm.initialStock, itemForm.bulk_format);
 
             if (res.success) {
@@ -308,6 +316,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                     "SKU": i.sku,
                                     "Name": i.name,
                                     "Bulk Format": i.bulk_format || "N/A",
+                                    "Pieces per Box": i.pieces_per_box ?? "",
+                                    "Size of One Piece": formatPieceSize(i.piece_size, i.piece_size_unit) ?? "",
                                     "Standard Price": formatCurrency(i.price_standard),
                                     "Hospital Price": formatCurrency(i.price_hospital),
                                     "Hotel Price": formatCurrency(i.price_hotel),
@@ -341,8 +351,8 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         <input type="text" value={itemForm.sku} onChange={e => setItemForm({ ...itemForm, sku: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="SKU" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Bulk</label>
-                                                        <input type="text" value={itemForm.bulk_format} onChange={e => setItemForm({ ...itemForm, bulk_format: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="14x1" />
+                                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Pack code</label>
+                                                        <input type="text" value={itemForm.bulk_format} onChange={e => setItemForm({ ...itemForm, bulk_format: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="10*24*50GM" />
                                                     </div>
                                                     <div>
                                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Std Pr</label>
@@ -361,8 +371,43 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                     <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Category</label>
                                                     <input type="text" value={itemForm.category} onChange={e => setItemForm({ ...itemForm, category: e.target.value })} className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none" placeholder="Category" />
                                                 </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label htmlFor={`item-per-box-${item.id}`} className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Pieces per box</label>
+                                                        <NumericInput
+                                                            id={`item-per-box-${item.id}`}
+                                                            max={MAX_PIECES_PER_BOX}
+                                                            value={itemForm.pieces_per_box}
+                                                            onChange={pieces_per_box => setItemForm({ ...itemForm, pieces_per_box })}
+                                                            className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none"
+                                                            placeholder="e.g. 24"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label htmlFor={`item-size-${item.id}`} className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Size of one piece</label>
+                                                        <div className="flex gap-1.5">
+                                                            <NumericInput
+                                                                id={`item-size-${item.id}`}
+                                                                decimal
+                                                                value={itemForm.piece_size}
+                                                                onChange={piece_size => setItemForm({ ...itemForm, piece_size })}
+                                                                className="w-full min-w-0 bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none"
+                                                                placeholder="e.g. 50"
+                                                            />
+                                                            <select
+                                                                aria-label="Size unit"
+                                                                value={itemForm.piece_size_unit}
+                                                                onChange={e => setItemForm({ ...itemForm, piece_size_unit: e.target.value })}
+                                                                className="bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none"
+                                                            >
+                                                                {PIECE_SIZE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <p className="col-span-2 text-[10px] text-slate-500 dark:text-slate-400 px-1">How the supplier packs it. Deliveries are received in these boxes; stock is still counted in pieces. Leave empty if it comes loose.</p>
+                                                </div>
                                                 <div>
-                                                    <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Case / Batch Qty</label>
+                                                    <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1 block px-1">Driver batch</label>
                                                     <NumericInput
                                                         max={100}
                                                         value={itemForm.default_assignment_qty}
@@ -370,7 +415,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         className="w-full bg-white dark:bg-black/50 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-brand-500 focus:outline-none"
                                                         placeholder="e.g. 30"
                                                     />
-                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 px-1">Units in one case. New purchase order lines start at this quantity, and it is the +N button on orders and driver stock. Set to 0 for none. Max 100.</p>
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 px-1">Pieces added by the +N button on the driver stock screen. Usually one box, but can be less. Set to 0 for none. Max 100.</p>
                                                 </div>
                                                 <div className="flex gap-2 pt-2">
                                                     <button onClick={() => setEditingId(null)} className="flex-1 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-white/10 text-slate-900 dark:text-white rounded-lg text-xs font-medium transition-colors">Cancel</button>
@@ -412,12 +457,17 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight">Std</span>
                                                                         <span className="text-[11px] text-brand-400 font-bold">{formatCurrency(item.price_standard)}</span>
                                                                     </div>
-                                                                    {(item as any).bulk_format && (
+                                                                    {describePackaging(item) ? (
+                                                                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight">Pack</span>
+                                                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-300 font-bold">{describePackaging(item)}</span>
+                                                                        </div>
+                                                                    ) : item.bulk_format ? (
                                                                         <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                                             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight">Bulk</span>
-                                                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-300 font-bold">{(item as any).bulk_format}</span>
+                                                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-300 font-bold">{item.bulk_format}</span>
                                                                         </div>
-                                                                    )}
+                                                                    ) : null}
                                                                     {item.default_assignment_qty > 0 && (
                                                                         <div className="flex items-center gap-1.5 whitespace-nowrap" title="Default driver batch quantity">
                                                                             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight">Batch</span>
@@ -429,7 +479,7 @@ export default function ManagementDashboard({ drivers, machines, warehouses, ite
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
-                                                        <button onClick={() => { setEditingId(item.id); setItemForm({ name: item.name, sku: item.sku, category: item.category, price_standard: item.price_standard || 0, price_hospital: item.price_hospital || 0, price_hotel: item.price_hotel || 0, bulk_format: (item as any).bulk_format || "", default_assignment_qty: item.default_assignment_qty ?? 0, warehouseId: undefined, initialStock: 0 }); }} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-md transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                        <button onClick={() => { setEditingId(item.id); setItemForm({ name: item.name, sku: item.sku, category: item.category, price_standard: item.price_standard || 0, price_hospital: item.price_hospital || 0, price_hotel: item.price_hotel || 0, bulk_format: item.bulk_format || "", default_assignment_qty: item.default_assignment_qty ?? 0, pieces_per_box: item.pieces_per_box ?? 0, piece_size: item.piece_size ?? 0, piece_size_unit: item.piece_size_unit || "g", warehouseId: undefined, initialStock: 0 }); }} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-white/10 rounded-md transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
                                                         <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-accent-pink bg-slate-100 dark:bg-white/5 hover:bg-accent-pink/20 rounded-md transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                                     </div>
                                                 </div>

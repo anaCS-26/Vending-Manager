@@ -14,6 +14,7 @@ import { requireAdmin, requireSuperAdmin, requireDriver, requireAdminOrDriverOwn
 import { writeAuditLog } from "@/lib/audit-utils";
 import { computeWeightedCost } from "@/lib/wac-math";
 import { actionFailure } from "@/lib/action-error";
+import { parsePackaging, type PackagingInput } from "@/lib/packaging";
 
 /**
  * ============================================================================
@@ -1395,8 +1396,11 @@ export async function createItem(name: string, category: string, sku: string, pr
     }
 }
 
-/** Updates standard pricing and metadata for an item. */
-export async function updateItem(id: number, name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, bulk_format?: string, default_assignment_qty?: number): Promise<ActionResult> {
+/**
+ * Updates standard pricing and metadata for an item. `packaging` is optional so
+ * a caller that doesn't show those fields can't blank them by omission.
+ */
+export async function updateItem(id: number, name: string, category: string, sku: string, price_standard: number, price_hospital: number, price_hotel: number, bulk_format?: string, default_assignment_qty?: number, packaging?: PackagingInput): Promise<ActionResult> {
     const session = await requireAdmin();
     try {
         if (default_assignment_qty !== undefined) {
@@ -1404,12 +1408,17 @@ export async function updateItem(id: number, name: string, category: string, sku
                 return { success: false, error: "Batch quantity must be an integer between 0 and 100" };
             }
         }
+        const parsedPackaging = packaging ? parsePackaging(packaging) : null;
+        if (parsedPackaging && !parsedPackaging.ok) {
+            return { success: false, error: parsedPackaging.error };
+        }
         const oldState = await prisma.item.findUnique({ where: { id } });
         const updated = await prisma.item.update({
             where: { id },
             data: {
                 name, category, sku, price_standard, price_hospital, price_hotel, bulk_format,
                 ...(default_assignment_qty !== undefined ? { default_assignment_qty } : {}),
+                ...(parsedPackaging?.ok ? parsedPackaging.value : {}),
             }
         })
 

@@ -3,6 +3,7 @@ import {
   createPurchaseOrder,
   completePurchaseOrder,
   cancelPurchaseOrder,
+  createQuickItem,
 } from '@/actions/orders';
 import { prismaMock } from '../__helpers__/prisma-mock';
 import { setAdminSession, setDriverSession } from '../__helpers__/session-mock';
@@ -256,8 +257,9 @@ describe('completePurchaseOrder', () => {
     const [itemId, cost] = rawValues(stmtWith('UPDATE "Item"'));
     expect(itemId).toBe(1);
     expect(cost).toBeCloseTo(6.4, 6);
-    // Both PurchaseOrderItem rows still get their own quantityReceived.
-    expect(rawValues(stmtWith('UPDATE "PurchaseOrderItem"'))).toEqual([99, 60, 98, 40]);
+    // Both PurchaseOrderItem rows still get their own quantity and cost.
+    // (id, qty, costPerUnit, boxesReceived, piecesPerBox) — no box breakdown sent.
+    expect(rawValues(stmtWith('UPDATE "PurchaseOrderItem"'))).toEqual([99, 60, 7, null, null, 98, 40, 9, null, null]);
   });
 
   /**
@@ -293,6 +295,51 @@ describe('completePurchaseOrder', () => {
     expect(prismaMock.purchaseOrderItem.update).not.toHaveBeenCalled();
   });
 
+  // The client's ask: receive in boxes, keep stock in pieces, and record
+  // whether it was a 24 box or a 20 box that arrived.
+  it('stores stock in pieces and records the boxes they were counted in', async () => {
+    setAdminSession(1);
+    wireReads({ items: [{ id: 99, itemId: 1, quantityRequested: 240 }], cost: 2 });
+
+    // 10 boxes of 20 + 3 loose; the invoice said 40.00 a box → 2.00 a piece.
+    const r = await completePurchaseOrder(700, [
+      { purchaseOrderItemId: 99, quantityReceived: 203, costPerUnit: 2,
+        boxesReceived: 10, piecesPerBox: 20,
+        price_standard: 4, price_hospital: 4, price_hotel: 5 },
+    ]);
+    expect(r.success).toBe(true);
+
+    const poi = stmtWith('UPDATE "PurchaseOrderItem"');
+    expect(rawSql(poi)).toContain('"boxesReceived" = v.boxes');
+    expect(rawSql(poi)).toContain('"piecesPerBox" = v.per_box');
+    // The per-piece cost actually paid replaces the order-time estimate.
+    expect(rawSql(poi)).toContain('"costPerUnit" = v.cost');
+    expect(rawValues(poi)).toEqual([99, 203, 2, 10, 20]);
+    // Stock moves in pieces; 37 short of the 240 ordered.
+    expect(rawValues(stmtWith('INSERT INTO "WarehouseStock"'))).toEqual([1, 1, 203, 37]);
+    // Still four statements — the box columns ride on the existing update.
+    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(4);
+  });
+
+  it.each([
+    ['boxes worth more pieces than were received', { quantityReceived: 200, boxesReceived: 10, piecesPerBox: 24 }],
+    ['a box size with no box count', { quantityReceived: 240, boxesReceived: null, piecesPerBox: 24 }],
+    ['a box of zero', { quantityReceived: 0, boxesReceived: 10, piecesPerBox: 0 }],
+    ['a cost that is not a number', { quantityReceived: 240, costPerUnit: Number.NaN }],
+    ['an infinite cost', { quantityReceived: 240, costPerUnit: Number.POSITIVE_INFINITY }],
+    ['a negative cost', { quantityReceived: 240, costPerUnit: -1 }],
+  ])('rejects %s before touching the database', async (_label, line) => {
+    setAdminSession(1);
+    wireReads({ items: [{ id: 99, itemId: 1, quantityRequested: 240 }] });
+
+    const r = await completePurchaseOrder(700, [
+      { purchaseOrderItemId: 99, costPerUnit: 2, price_standard: 4, price_hospital: 4, price_hotel: 5, ...line } as any,
+    ]);
+    expect(r.success).toBe(false);
+    expect(prismaMock.purchaseOrder.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.$executeRaw).not.toHaveBeenCalled();
+  });
+
   it('rejects a non-integer received quantity before touching the database', async () => {
     setAdminSession(1);
     wireReads({ items: [{ id: 99, itemId: 1, quantityRequested: 10 }] });
@@ -304,6 +351,41 @@ describe('completePurchaseOrder', () => {
     expect(r.success).toBe(false);
     expect((r as any).error).toMatch(/whole number/);
     expect(prismaMock.purchaseOrder.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('createQuickItem', () => {
+  it('throws for driver callers', async () => {
+    setDriverSession(10);
+    await expect(createQuickItem({ name: 'X', sku: '1', category: 'Y' })).rejects.toThrow(/FORBIDDEN/);
+  });
+
+  it('saves the box size and piece size with the new item', async () => {
+    setAdminSession(1);
+    prismaMock.item.create.mockResolvedValue({ id: 70 } as any);
+    const r = await createQuickItem({
+      name: 'TWIX', sku: '0044', category: 'Chocolate', pieces_per_box: 24, piece_size: 50, piece_size_unit: 'g',
+    });
+    expect(r.success).toBe(true);
+    expect(prismaMock.item.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ pieces_per_box: 24, piece_size: 50, piece_size_unit: 'g' }),
+    });
+  });
+
+  it('stores an empty box size as not set', async () => {
+    setAdminSession(1);
+    prismaMock.item.create.mockResolvedValue({ id: 71 } as any);
+    await createQuickItem({ name: 'GUM', sku: '0200', category: 'Misc', pieces_per_box: 0, piece_size: 0, piece_size_unit: 'g' });
+    expect(prismaMock.item.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ pieces_per_box: null, piece_size: null, piece_size_unit: null }),
+    });
+  });
+
+  it('rejects a nonsense box size before writing', async () => {
+    setAdminSession(1);
+    const r = await createQuickItem({ name: 'X', sku: '1', category: 'Y', pieces_per_box: -24 });
+    expect(r.success).toBe(false);
+    expect(prismaMock.item.create).not.toHaveBeenCalled();
   });
 });
 

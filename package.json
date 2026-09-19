@@ -18,6 +18,8 @@
     "db:seed-default-qty:prod": "tsx scripts/seed-default-assignment-qty.ts --env=prod",
     "db:seed-template:dev": "tsx scripts/seed-dispatch-template.ts --env=dev",
     "db:seed-template:prod": "tsx scripts/seed-dispatch-template.ts --env=prod",
+    "db:seed-packaging:dev": "tsx scripts/seed-item-packaging.ts --env=dev",
+    "db:seed-packaging:prod": "tsx scripts/seed-item-packaging.ts --env=prod",
     "test": "vitest",
     "test:coverage": "vitest run --coverage"
   },

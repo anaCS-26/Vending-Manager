@@ -8,6 +8,7 @@ import { writeAuditLog } from "@/lib/audit-utils";
 import { notifyClients } from "@/lib/notify";
 import { computeWeightedCost } from "@/lib/wac-math";
 import { actionFailure } from "@/lib/action-error";
+import { checkReceivedBoxes, parsePackaging } from "@/lib/packaging";
 
 /**
  * ============================================================================
@@ -93,7 +94,19 @@ export async function createPurchaseOrder(data: {
  */
 export async function completePurchaseOrder(
     orderId: number,
-    receivedData: Array<{ purchaseOrderItemId: number; quantityReceived: number; costPerUnit: number; price_standard: number; price_hospital: number; price_hotel: number }>
+    receivedData: Array<{
+        purchaseOrderItemId: number;
+        /** Pieces — always the source of truth for stock. */
+        quantityReceived: number;
+        /** Per piece, excl. VAT (the screen divides the invoice's box price). */
+        costPerUnit: number;
+        /** How the pieces were counted; recorded on the line, never used for stock. */
+        boxesReceived?: number | null;
+        piecesPerBox?: number | null;
+        price_standard: number;
+        price_hospital: number;
+        price_hotel: number;
+    }>
 ) {
     const session = await requireAdmin();
     try {
@@ -118,6 +131,13 @@ export async function completePurchaseOrder(
             if (!Number.isInteger(received.quantityReceived) || received.quantityReceived < 0) {
                 throw new Error("Received quantity must be a whole number >= 0.");
             }
+            // The cost is now a box price divided on the client, and a
+            // NaN/Infinity would be stored and blended into WAC as-is.
+            if (!Number.isFinite(received.costPerUnit) || received.costPerUnit < 0) {
+                throw new Error("Cost must be a number of 0 or more.");
+            }
+            const boxProblem = checkReceivedBoxes(received);
+            if (boxProblem) throw new Error(boxProblem);
         }
 
         // Two PurchaseOrderItem rows can reference the same Item; the old loop
@@ -210,10 +230,16 @@ export async function completePurchaseOrder(
             }
 
             if (lines.length > 0) {
+                // costPerUnit held the order-time Item.cost snapshot; from here
+                // on it is what was actually paid per piece, so the history
+                // modal's "Total Received Value" is the invoice, not a guess.
                 await tx.$executeRaw`
                     UPDATE "PurchaseOrderItem" AS poi
-                    SET "quantityReceived" = v.qty
-                    FROM (VALUES ${Prisma.join(lines.map((l) => Prisma.sql`(${l.received.purchaseOrderItemId}::int, ${l.received.quantityReceived}::int)`))}) AS v(id, qty)
+                    SET "quantityReceived" = v.qty,
+                        "costPerUnit" = v.cost,
+                        "boxesReceived" = v.boxes,
+                        "piecesPerBox" = v.per_box
+                    FROM (VALUES ${Prisma.join(lines.map((l) => Prisma.sql`(${l.received.purchaseOrderItemId}::int, ${l.received.quantityReceived}::int, ${l.received.costPerUnit}::double precision, ${l.received.boxesReceived ?? null}::int, ${l.received.piecesPerBox ?? null}::int)`))}) AS v(id, qty, cost, boxes, per_box)
                     WHERE poi.id = v.id
                 `;
             }
@@ -301,15 +327,27 @@ export async function cancelPurchaseOrder(orderId: number) {
  * Expedited item creation for procurement workflows. 
  * Allows creating a placeholder item record when not found in the master catalog during PO entry. 
  */
-export async function createQuickItem(data: { name: string; sku: string; category: string; bulk_format?: string }) {
+export async function createQuickItem(data: {
+    name: string;
+    sku: string;
+    category: string;
+    bulk_format?: string;
+    pieces_per_box?: number | null;
+    piece_size?: number | null;
+    piece_size_unit?: string | null;
+}) {
     const session = await requireAdmin();
     try {
+        const packaging = parsePackaging(data);
+        if (!packaging.ok) return { success: false as const, error: packaging.error };
+
         const item = await prisma.item.create({
             data: {
                 name: data.name,
                 sku: data.sku,
                 category: data.category,
-                bulk_format: data.bulk_format || null
+                bulk_format: data.bulk_format || null,
+                ...packaging.value,
             }
         });
         
