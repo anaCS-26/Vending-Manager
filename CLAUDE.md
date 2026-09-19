@@ -80,11 +80,13 @@ Before reporting: `git fetch origin; git rebase origin/main`. Resolve conflicts 
    cd C:\Users\asadn\Desktop\Projects\vending && git switch main && git pull --ff-only && git merge --no-ff <branch> -m "Merge branch '<branch>'" && git push origin main
    ```
 
-4. **Cleanup command**: one line, run after the merge. It does nothing if the branch isn't in `main` yet. Stop any dev server running from that folder first.
+4. **Cleanup command**: one line, run after the merge. It does nothing if the branch isn't in `main` yet. Stop any dev server running from that folder first. Fill in both paths with backslashes: the worktree folder, and its bookkeeping folder, which is `git rev-parse --git-dir` run inside the worktree (`…\vending\.git\worktrees\<name>`).
 
    ```powershell
-   cd C:\Users\asadn\Desktop\Projects\vending && git merge-base --is-ancestor <branch> main && git worktree remove <worktree path> && git branch -d <branch>
+   cd C:\Users\asadn\Desktop\Projects\vending && git merge-base --is-ancestor <branch> main && cmd /c "rmdir /s /q <worktree path>" && cmd /c "rmdir /s /q <git-dir path>" && git branch -d <branch>
    ```
+
+   Don't use `git worktree remove`. Folders here pick up a Windows read-only flag while they're in use, and git can't delete a read-only folder: it stops with "Permission denied" and asks "Should I try again? (y/n)". `rmdir /s /q` deletes them without asking.
 
    If you created a separate database, add `&& docker exec supabase_db_vending psql -U postgres -c "DROP DATABASE vending_<topic>"` to the end.
 
