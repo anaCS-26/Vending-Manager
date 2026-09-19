@@ -6,12 +6,13 @@ import { cn } from "@/lib/utils";
 /**
  * The phone half of every wide admin table.
  *
- * The tables in this app carry 9–12 columns and set `min-w-[900px]`–`[1000px]`
+ * Several tables in this app carry 9–12 columns and set `min-w-[900px]`–`[1000px]`
  * inside an `overflow-x-auto`, which on a 390px screen is a slab you drag
  * sideways two columns at a time — and the column headers, which is where all
- * the sorting lives, scroll away with it. Below `sm` the table is hidden and the
- * same rows render as cards: identity on the left, the one number that matters
- * on the right, everything else as label/value pairs.
+ * the sorting lives, scroll away with it. (The two stock tables now fit their
+ * panel instead; see `StockTableBits.tsx`.) Below `sm` every wide table is
+ * hidden and the same rows render as cards: identity on the left, the one
+ * number that matters on the right, everything else as label/value pairs.
  *
  * Deliberately a pair of primitives rather than a generic <ResponsiveTable> that
  * takes a column config. The five call sites disagree about what the headline

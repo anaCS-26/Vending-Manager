@@ -65,6 +65,20 @@ export type WhatsNewEntry = {
 /** Newest first. */
 export const WHATS_NEW: WhatsNewEntry[] = [
     {
+        id: "2026-09-stock-tables-fit-screen",
+        date: "2026-09-19",
+        audience: ["admin"],
+        title: {
+            en: "Stock tables now fit your screen",
+            ar: "جداول المخزون صارت تناسب شاشتك",
+        },
+        body: {
+            en: "Warehouse Stock and Machine Stock no longer scroll sideways. Each item takes one short row: its name and code, then its box size underneath. In Warehouse Stock, anything a supplier still owes you shows under the stock number, and the hospital and hotel prices sit under the sell price. Empty items say “empty”, and machine items that are running low say so. Click any column title to sort by it.",
+            ar: "لم تعد صفحتا «مخزون المستودع» (Warehouse Stock) و«مخزون المكائن» (Machine Stock) تحتاجان إلى تمرير جانبي. كل صنف يأخذ سطراً قصيراً واحداً: اسمه ورمزه، وتحته حجم الكرتون. في مخزون المستودع، يظهر ما لا يزال المورّد مديناً به تحت رقم المخزون، وتظهر أسعار المستشفى والفندق تحت سعر البيع. الأصناف الفارغة تُكتب بجانبها «empty»، وأصناف المكائن التي أوشكت على النفاد تُكتب بجانبها «Running low». اضغط على عنوان أي عمود للترتيب حسبه.",
+        },
+        href: "/admin/warehouse",
+    },
+    {
         id: "2026-09-receive-in-boxes",
         date: "2026-09-19",
         audience: ["admin"],
