@@ -253,7 +253,8 @@ export default async function SuperSupportPage({
             <section className="glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">Who has seen each release note</h2>
                 <ul className="space-y-4">
-                    {WHATS_NEW.map((entry) => {
+                    {/* Outdated notes are never prompted, so their "not seen" list would never clear. */}
+                    {WHATS_NEW.filter((entry) => !entry.supersededBy).map((entry) => {
                         const seenAdmins = new Set(receipts.filter((r) => r.entryId === entry.id && r.adminId !== null).map((r) => r.adminId));
                         const seenDrivers = new Set(receipts.filter((r) => r.entryId === entry.id && r.driverId !== null).map((r) => r.driverId));
                         const missing = [

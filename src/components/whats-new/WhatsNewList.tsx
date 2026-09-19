@@ -1,9 +1,13 @@
 import { Sparkles } from "lucide-react";
 import { Bi } from "@/components/Bi";
 import { WhatsNewCard } from "@/components/whats-new/WhatsNewCard";
-import type { WhatsNewEntry } from "@/lib/whats-new";
+import { replacementFor, type WhatsNewEntry } from "@/lib/whats-new";
 
-/** The permanent, scrollable list behind /admin/whats-new and /driver/whats-new. */
+/**
+ * The permanent, scrollable list behind /admin/whats-new and /driver/whats-new.
+ * Outdated notes stay in date order, dimmed, with a link down to the card that
+ * replaced them — each card's id is its anchor.
+ */
 export function WhatsNewList({ entries }: { entries: WhatsNewEntry[] }) {
     return (
         <div className="space-y-6">
@@ -14,11 +18,18 @@ export function WhatsNewList({ entries }: { entries: WhatsNewEntry[] }) {
                 </h1>
             </div>
             <div className="space-y-4">
-                {entries.map((entry) => (
-                    <div key={entry.id} className="glass-panel rounded-3xl p-5 sm:p-6">
-                        <WhatsNewCard entry={entry} />
-                    </div>
-                ))}
+                {entries.map((entry) => {
+                    const replacement = replacementFor(entry, entries);
+                    return (
+                        <div
+                            key={entry.id}
+                            id={entry.id}
+                            className={`glass-panel rounded-3xl p-5 sm:p-6 scroll-mt-6 ${replacement ? "opacity-70" : ""}`}
+                        >
+                            <WhatsNewCard entry={entry} replacement={replacement} />
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

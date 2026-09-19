@@ -14,6 +14,8 @@ import type { Bilingual } from "@/lib/error-codes";
  *      the cursor jumps") — a clip needs no translation. Drop the file in
  *      public/whats-new/ (mp4/H.264 — iOS Safari won't play webm).
  *   3. Write `en`, draft `ar`, and let the client correct the Arabic once.
+ *   4. If the change alters something an older entry describes, set that
+ *      entry's `supersededBy` to the new id. Never delete or rewrite it.
  *
  * The first time each user opens the app after a deploy they get the unseen
  * entries as a card stack (WhatsNewPrompt); the full list lives permanently at
@@ -50,6 +52,14 @@ export type WhatsNewEntry = {
     media?: WhatsNewMedia;
     /** Where to go and try it. */
     href?: string;
+    /**
+     * Set on an OLDER entry once a newer one changes what it describes — the id
+     * of that newer entry. The old card stays on the list page (ids are
+     * forever), labelled outdated and pointing at the newer note, and is never
+     * put in the prompt: a note that teaches the old way is worse than none.
+     * Point at the newest entry; when that one is superseded in turn, repoint.
+     */
+    supersededBy?: string;
 };
 
 /** Newest first. */
@@ -171,6 +181,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "كل صنف جديد في الطلبية يبدأ الآن بكرتون كامل بدلاً من حبة واحدة، مع أزرار لإضافة كرتون أو إزالته. وزر «تكرار آخر طلبية» ينسخ طلبيتك السابقة لتعدّل ما اختلف فقط.",
         },
         href: "/admin/orders",
+        // The "case" here was the driver batch; orders now start at the item's real box.
+        supersededBy: "2026-09-item-box-size",
     },
     {
         id: "2026-09-driver-return",
@@ -185,6 +197,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "في نهاية اليوم، افتح «مخزون السائق» ← «المخزون الحالي» واضغط «إرجاع الأصناف إلى المستودع». أدخل فقط ما تم إرجاعه، وما تتركه فارغاً يبقى مع السائق.",
         },
         href: "/admin/driver-stock",
+        // Same feature announced twice by two parallel branches.
+        supersededBy: "2026-09-return-to-warehouse",
     },
     {
         id: "2026-08-refill-last-visit",
@@ -229,14 +243,19 @@ export function entriesFor(audience: Audience, entries: WhatsNewEntry[] = WHATS_
     return entries.filter((e) => e.audience.includes(audience));
 }
 
-/** Everything this audience hasn't dismissed, newest first. */
+/** Everything current this audience hasn't dismissed, newest first. Outdated notes are never prompted. */
 export function unseenEntries(
     audience: Audience,
     seenIds: Iterable<string>,
     entries: WhatsNewEntry[] = WHATS_NEW,
 ): WhatsNewEntry[] {
     const seen = new Set(seenIds);
-    return entriesFor(audience, entries).filter((e) => !seen.has(e.id));
+    return entriesFor(audience, entries).filter((e) => !e.supersededBy && !seen.has(e.id));
+}
+
+/** The newer note that replaced this one, if any. */
+export function replacementFor(entry: WhatsNewEntry, entries: WhatsNewEntry[] = WHATS_NEW): WhatsNewEntry | undefined {
+    return entry.supersededBy ? entries.find((e) => e.id === entry.supersededBy) : undefined;
 }
 
 /**
