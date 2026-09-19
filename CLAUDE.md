@@ -23,7 +23,7 @@ Set-Location $wt; npm ci; npx prisma generate               # skip both for docs
 
 - The main checkout (`vending/`) stays on `main` and belongs to the user. Don't edit, switch, stash or clean there.
 - Never share `node_modules` between worktrees. `scripts/` and seed CSVs are gitignored; copy them in only if you need them.
-- Commit on your branch in small, scoped commits. **Don't merge, push `main`, or delete branches yourself.** The user runs the scripts from step 6.
+- Commit on your branch in small, scoped commits. **Don't merge, push `main`, or delete branches yourself.** The user runs the commands from step 6.
 
 Details and pitfalls: [local-dev.md](docs/agents/local-dev.md#worktrees).
 
@@ -74,27 +74,19 @@ Before reporting: `git fetch origin; git rebase origin/main`. Resolve conflicts 
 
 1. **What changed on the website.** For each screen: what someone can now do and where, in plain words. Name the What's New entry you added (or say why none), plus any entry you marked outdated. Call out anything that **affects production on merge**: schema changes (the build runs `prisma db push --accept-data-loss`), new env vars, and seeds to run.
 2. **How to test it.** Numbered steps the user can follow: start the app from the worktree (`cd <worktree>; npm run dev`), the login to use, the URL, what to click, and what they should see. Include a phone-width check if it's a phone screen.
-3. **Merge script** (PowerShell 7; fill in `<branch>`):
+3. **Merge command**: one line, with the real branch name filled in. Each step runs only if the one before it worked. If it stops at `CONFLICT`, the user runs `git merge --abort` and hands it back to you.
 
    ```powershell
-   # Merge <branch> into main and deploy (Vercel builds every push to main)
-   $repo = 'C:\Users\asadn\Desktop\Projects\vending'; $branch = '<branch>'
-   git -C $repo switch main &&
-     git -C $repo pull --ff-only &&
-     git -C $repo merge --no-ff $branch -m "Merge branch '$branch'"
-   if ($LASTEXITCODE) { git -C $repo merge --abort 2>$null; "Stopped - nothing was pushed. Paste the error above to the agent." } else { git -C $repo push origin main }
+   cd C:\Users\asadn\Desktop\Projects\vending && git switch main && git pull --ff-only && git merge --no-ff <branch> -m "Merge branch '<branch>'" && git push origin main
    ```
 
-4. **Cleanup script** (run after the merge; it refuses to touch a branch that isn't in `main` yet):
+4. **Cleanup command**: one line, run after the merge. It does nothing if the branch isn't in `main` yet. Stop any dev server running from that folder first.
 
    ```powershell
-   # Remove the <topic> worktree and its branch (close any terminal or dev server using that folder first)
-   $repo = 'C:\Users\asadn\Desktop\Projects\vending'; $branch = '<branch>'; $wt = '<worktree path>'
-   git -C $repo merge-base --is-ancestor $branch main
-   if ($LASTEXITCODE) { "Not merged into main yet - nothing was removed." } else { git -C $repo worktree remove $wt && git -C $repo branch -d $branch }
+   cd C:\Users\asadn\Desktop\Projects\vending && git merge-base --is-ancestor <branch> main && git worktree remove <worktree path> && git branch -d <branch>
    ```
 
-   If you created a separate database, append `docker exec supabase_db_vending psql -U postgres -c "DROP DATABASE vending_<topic>"`.
+   If you created a separate database, add `&& docker exec supabase_db_vending psql -U postgres -c "DROP DATABASE vending_<topic>"` to the end.
 
 ---
 
