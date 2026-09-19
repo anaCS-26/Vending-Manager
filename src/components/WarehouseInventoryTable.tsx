@@ -1,13 +1,13 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
-import { Package, MapPin, Search, Plus, AlertCircle, ArrowUp, ArrowDown, Scale, AlertTriangle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Package, MapPin, Search, Scale, AlertTriangle } from "lucide-react";
 import Pagination from "@/components/Pagination";
-import { SortIcon } from "@/components/SortIcon";
 import type { WarehouseWithItem, WarehouseType } from "@/types";
 import type { Item } from "@prisma/client";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { DataCard, MobileSortSelect } from "@/components/DataCard";
-import { describeInBoxes, describePackaging } from "@/lib/packaging";
+import { describeInBoxes } from "@/lib/packaging";
+import { CELL, FIT, ItemIdentity, SortableTh, itemDetailLine } from "@/components/StockTableBits";
 import WarehouseAuditModal from "./WarehouseAuditModal";
 import CostCorrectionModal from "./CostCorrectionModal";
 
@@ -18,43 +18,94 @@ type Props = {
     isSuperAdmin?: boolean;
 };
 
-type SortKey = "name" | "quantity_on_hand" | "pending_deficit" | "cost" | "price_standard" | "price_hospital" | "price_hotel" | "total_amount" | "location";
+export type WarehouseSortKey = "name" | "quantity_on_hand" | "pending_deficit" | "cost" | "price_standard" | "total_amount" | "location";
 
-// Mirrors the sortable column headers, minus the two tier prices that nobody
-// sorts a phone list by. Same keys, so both views drive one `handleSort`.
-const MOBILE_SORT_OPTIONS: { key: SortKey; label: string }[] = [
+// Same keys as the column headers, so both views drive one `handleSort`.
+const MOBILE_SORT_OPTIONS: { key: WarehouseSortKey; label: string }[] = [
     { key: "name", label: "Item name" },
-    { key: "quantity_on_hand", label: "Stock remaining" },
-    { key: "total_amount", label: "Total value" },
+    { key: "quantity_on_hand", label: "In stock" },
+    { key: "total_amount", label: "Stock value" },
     { key: "cost", label: "Unit cost" },
-    { key: "price_standard", label: "Std price" },
-    { key: "pending_deficit", label: "Due / owed" },
+    { key: "price_standard", label: "Sell price" },
+    { key: "pending_deficit", label: "Owed by supplier" },
     { key: "location", label: "Location" },
 ];
 
+const PAGE_SIZE = 15;
+
+/**
+ * Everything a row shows, computed once so the table and the phone cards
+ * can't disagree. Exported for the tests.
+ */
+export function deriveWarehouseRow(stock: WarehouseWithItem) {
+    const item = stock.item;
+    const cost = item.cost || 0;
+    const qty = stock.quantity_on_hand;
+    const hospital = item.price_hospital || 0;
+    const hotel = item.price_hotel || 0;
+    // The tier prices only earn a line when they differ from the standard
+    // price — on this catalogue that is most rows, but not all.
+    const tierPrices = hospital !== item.price_standard || hotel !== item.price_standard ? { hospital, hotel } : null;
+    return {
+        qty,
+        isZero: qty === 0,
+        inBoxes: qty === 0 ? null : describeInBoxes(qty, item.pieces_per_box),
+        owed: stock.pending_deficit > 0 ? stock.pending_deficit : 0,
+        cost,
+        price: item.price_standard,
+        tierPrices,
+        value: qty * cost,
+        location: stock.warehouse?.name || "Unknown",
+    };
+}
+
+export function sortWarehouseRows(
+    rows: WarehouseWithItem[],
+    sort: { key: WarehouseSortKey | null; direction: "asc" | "desc" },
+): WarehouseWithItem[] {
+    if (!sort.key) return rows;
+    const key = sort.key;
+    const pick = (s: WarehouseWithItem): string | number => {
+        switch (key) {
+            case "name": return s.item.name;
+            case "quantity_on_hand": return s.quantity_on_hand;
+            case "pending_deficit": return s.pending_deficit;
+            case "cost": return s.item.cost || 0;
+            case "price_standard": return s.item.price_standard || 0;
+            case "total_amount": return s.quantity_on_hand * (s.item.cost || 0);
+            case "location": return s.warehouse?.name || "";
+        }
+    };
+    const dir = sort.direction === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+        const av = pick(a), bv = pick(b);
+        if (av < bv) return -dir;
+        if (av > bv) return dir;
+        return 0;
+    });
+}
+
 export default function WarehouseInventoryTable({ inventory, warehouses, existingItems, isSuperAdmin = false }: Props) {
-    const topScrollRef = useRef<HTMLDivElement>(null);
-    const tableScrollRef = useRef<HTMLDivElement>(null);
-    const [tableWidth, setTableWidth] = useState<number>(900);
-    const [isScrollable, setIsScrollable] = useState(false);
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | "all">("all");
     const [searchQuery, setSearchQuery] = useState("");
-    const [sortConfig, setSortConfig] = useState<{ key: SortKey | null; direction: "asc" | "desc" }>({ key: null, direction: "desc" });
+    const [sortConfig, setSortConfig] = useState<{ key: WarehouseSortKey | null; direction: "asc" | "desc" }>({ key: null, direction: "desc" });
     const [currentPage, setCurrentPage] = useState(1);
     const [isRecountOpen, setIsRecountOpen] = useState(false);
     const [isCostOpen, setIsCostOpen] = useState(false);
-    const PAGE_SIZE = 10;
 
     useEffect(() => {
         setCurrentPage(1);
     }, [searchQuery, selectedWarehouseId]);
 
-    // Filter stock based on selected warehouse
+    // A Location column only means something when there is more than one
+    // location on the page.
+    const showLocation = selectedWarehouseId === "all" && warehouses.length > 1;
+
     let filteredInventory = selectedWarehouseId === "all"
         ? inventory
         : inventory.filter(stock => stock.warehouseId === selectedWarehouseId);
 
-    // Filter by search query (Item Code/SKU, Name, or SR# via index)
+    // Search by name, item code, or the row's SR# as listed.
     if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         filteredInventory = filteredInventory.filter((stock, index) => {
@@ -67,96 +118,26 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
         });
     }
 
-    const handleSort = (key: SortKey) => {
+    const handleSort = (key: WarehouseSortKey) => {
         if (sortConfig.key === key) {
             setSortConfig({ key, direction: sortConfig.direction === "desc" ? "asc" : "desc" });
         } else {
-            // Defaulting string columns to asc, numbers to desc
             const isStringColumn = key === "name" || key === "location";
             setSortConfig({ key, direction: isStringColumn ? "asc" : "desc" });
         }
     };
 
-    const sortedInventory = [...filteredInventory].sort((a, b) => {
-        if (!sortConfig.key) return 0;
-
-        let aVal: any = 0;
-        let bVal: any = 0;
-
-        switch (sortConfig.key) {
-            case "name":
-                aVal = a.item.name;
-                bVal = b.item.name;
-                break;
-            case "quantity_on_hand":
-                aVal = a.quantity_on_hand;
-                bVal = b.quantity_on_hand;
-                break;
-            case "pending_deficit":
-                aVal = a.pending_deficit;
-                bVal = b.pending_deficit;
-                break;
-            case "cost":
-                aVal = (a.item as any).cost || 0;
-                bVal = (b.item as any).cost || 0;
-                break;
-            case "price_standard":
-                aVal = (a.item as any).price_standard || 0;
-                bVal = (b.item as any).price_standard || 0;
-                break;
-            case "price_hospital":
-                aVal = (a.item as any).price_hospital || 0;
-                bVal = (b.item as any).price_hospital || 0;
-                break;
-            case "price_hotel":
-                aVal = (a.item as any).price_hotel || 0;
-                bVal = (b.item as any).price_hotel || 0;
-                break;
-            case "total_amount":
-                aVal = a.quantity_on_hand * ((a.item as any).cost || 0);
-                bVal = b.quantity_on_hand * ((b.item as any).cost || 0);
-                break;
-            case "location":
-                aVal = a.warehouse?.name || "";
-                bVal = b.warehouse?.name || "";
-                break;
-        }
-
-        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
-        return 0;
-    });
-
+    const sortedInventory = sortWarehouseRows(filteredInventory, sortConfig);
     const totalPages = Math.ceil(sortedInventory.length / PAGE_SIZE);
     const paginatedData = sortedInventory.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
     const handlePageChange = (newPage: number) => {
-        if (newPage >= 1 && newPage <= totalPages) {
-            setCurrentPage(newPage);
-        }
+        if (newPage >= 1 && newPage <= totalPages) setCurrentPage(newPage);
     };
-
-    // Keep the top scrollbar track perfectly synchronized with the true width of the table content
-    useEffect(() => {
-        if (!tableScrollRef.current) return;
-        const observer = new ResizeObserver(() => {
-            if (tableScrollRef.current) {
-                const scrollW = tableScrollRef.current.scrollWidth;
-                const clientW = tableScrollRef.current.clientWidth;
-                setTableWidth(scrollW);
-                setIsScrollable(scrollW > clientW);
-            }
-        });
-        observer.observe(tableScrollRef.current);
-        if (tableScrollRef.current.firstElementChild) {
-            observer.observe(tableScrollRef.current.firstElementChild);
-        }
-        return () => observer.disconnect();
-    }, [filteredInventory]);
 
     return (
         <>
-            <div className="glass-panel border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden relative space-y-4 shadow-xl">
+            <div className="glass-panel border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden relative shadow-xl">
                 <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-200 dark:border-white/5 flex flex-col lg:flex-row items-start lg:items-center justify-between bg-white/[0.02] gap-4">
                     <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2 tracking-tight whitespace-nowrap">
                         <Package className="w-4 h-4 text-slate-600 dark:text-slate-400" />
@@ -175,21 +156,24 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                             />
                         </div>
 
-                        <div className="flex items-center gap-2 bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 min-w-[200px]">
-                            <MapPin className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                            <select
-                                className="bg-transparent text-sm text-slate-900 dark:text-white focus:outline-none w-full cursor-pointer appearance-none"
-                                value={selectedWarehouseId}
-                                onChange={(e) => setSelectedWarehouseId(e.target.value === "all" ? "all" : parseInt(e.target.value))}
-                            >
-                                <option value="all" className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">All Locations</option>
-                                {warehouses.map(w => (
-                                    <option key={w.id} value={w.id} className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">
-                                        {w.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                        {warehouses.length > 1 && (
+                            <div className="flex items-center gap-2 bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 min-w-[200px]">
+                                <MapPin className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                                <select
+                                    aria-label="Location"
+                                    className="bg-transparent text-sm text-slate-900 dark:text-white focus:outline-none w-full cursor-pointer appearance-none"
+                                    value={selectedWarehouseId}
+                                    onChange={(e) => setSelectedWarehouseId(e.target.value === "all" ? "all" : parseInt(e.target.value))}
+                                >
+                                    <option value="all" className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">All Locations</option>
+                                    {warehouses.map(w => (
+                                        <option key={w.id} value={w.id} className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-900">
+                                            {w.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
 
                         <div className="flex items-center gap-2">
                             <button
@@ -202,7 +186,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                             {isSuperAdmin && (
                                 <button
                                     onClick={() => setIsCostOpen(true)}
-                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-xl text-sm font-bold transition-colors whitespace-nowrap"
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-accent-orange/10 hover:bg-accent-orange/20 border border-accent-orange/30 text-accent-orange rounded-xl text-sm font-bold transition-colors whitespace-nowrap"
                                 >
                                     <AlertTriangle className="w-4 h-4" />
                                     Correct Cost
@@ -213,7 +197,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                 </div>
 
                 {/* Phone: cards. The table below is `hidden sm:block`. */}
-                <div className="sm:hidden px-4 pb-4 space-y-3">
+                <div className="sm:hidden px-4 py-4 space-y-3">
                     <MobileSortSelect
                         options={MOBILE_SORT_OPTIONS}
                         sortKey={sortConfig.key}
@@ -221,15 +205,14 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                         onSort={handleSort}
                     />
                     {paginatedData.map((stock, index) => {
-                        const item = stock.item as any;
-                        const totalAmount = stock.quantity_on_hand * (item.cost || 0);
-                        const isZero = stock.quantity_on_hand === 0;
+                        const r = deriveWarehouseRow(stock);
                         const globalIndex = (currentPage - 1) * PAGE_SIZE + index + 1;
+                        const detail = itemDetailLine(stock.item);
 
                         return (
                             <DataCard
                                 key={`${stock.warehouseId}-${stock.itemId}`}
-                                accentBorder={stock.pending_deficit > 0}
+                                accentBorder={r.owed > 0}
                                 title={
                                     <span className="uppercase">
                                         <span className="font-mono text-[10px] text-slate-400 mr-1.5">{globalIndex}</span>
@@ -241,17 +224,12 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                         <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 uppercase">
                                             #{stock.item.sku}
                                         </span>
-                                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">
-                                            {stock.item.category}
-                                        </span>
-                                        {(describePackaging(item) ?? item.bulk_format) && (
-                                            <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/5 uppercase tracking-wide">
-                                                {describePackaging(item) ?? item.bulk_format}
-                                            </span>
+                                        {detail && (
+                                            <span className="text-[11px] text-slate-500 dark:text-slate-400">{detail}</span>
                                         )}
-                                        {selectedWarehouseId === "all" && (
+                                        {showLocation && (
                                             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                                                {stock.warehouse?.name || "Unknown"}
+                                                {r.location}
                                             </span>
                                         )}
                                     </>
@@ -260,34 +238,31 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                     label: "In stock",
                                     value: (
                                         <>
-                                            {stock.quantity_on_hand.toLocaleString()}
-                                            {!isZero && describeInBoxes(stock.quantity_on_hand, item.pieces_per_box) && (
+                                            {r.qty.toLocaleString()}
+                                            {r.inBoxes && (
                                                 <span className="block text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                                                    {describeInBoxes(stock.quantity_on_hand, item.pieces_per_box)}
+                                                    {r.inBoxes}
                                                 </span>
                                             )}
                                         </>
                                     ),
-                                    tone: isZero ? "warn" : "default",
+                                    tone: r.isZero ? "warn" : "default",
                                 }}
                                 fields={[
-                                    { label: "Unit cost", value: formatCurrency(item.cost || 0), tone: "muted" },
-                                    { label: "Std price", value: formatCurrency(item.price_standard) },
-                                    { label: "Hosp price", value: formatCurrency(item.price_hospital || 0), tone: "muted" },
-                                    { label: "Hotel price", value: formatCurrency(item.price_hotel || 0), tone: "muted" },
-                                    {
-                                        label: "Total value",
-                                        value: formatCurrency(totalAmount),
-                                        tone: isZero ? "warn" : "default",
-                                    },
-                                    // Only worth a slot when there is one — a column of
-                                    // zeroes is what made the table too wide to read.
-                                    ...(stock.pending_deficit > 0
+                                    { label: "Sell price", value: formatCurrency(r.price) },
+                                    { label: "Unit cost", value: formatCurrency(r.cost), tone: "muted" },
+                                    ...(r.tierPrices
                                         ? [{
-                                            label: "Owed by supplier",
-                                            value: `+${stock.pending_deficit.toLocaleString()}`,
-                                            tone: "warn" as const,
+                                            label: "Hospital / hotel price",
+                                            value: `${formatCurrency(r.tierPrices.hospital)} / ${formatCurrency(r.tierPrices.hotel)}`,
+                                            tone: "muted" as const,
+                                            wide: true,
                                         }]
+                                        : []),
+                                    { label: "Stock value", value: formatCurrency(r.value), tone: r.isZero ? "warn" : "default" },
+                                    // Only worth a slot when there is one.
+                                    ...(r.owed > 0
+                                        ? [{ label: "Owed by supplier", value: `+${r.owed.toLocaleString()}`, tone: "warn" as const }]
                                         : []),
                                 ]}
                             />
@@ -295,154 +270,85 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                     })}
                 </div>
 
-                {isScrollable && (
-                    <div
-                        className="hidden sm:block overflow-x-auto custom-scrollbar w-full border-b border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]"
-                        ref={topScrollRef}
-                        style={{ height: '14px' }}
-                        onScroll={(e) => {
-                            if (tableScrollRef.current && topScrollRef.current) {
-                                tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
-                            }
-                        }}
-                    >
-                        <div style={{ width: `${tableWidth}px`, height: '1px' }}></div>
-                    </div>
-                )}
-                
-                <div
-                    className="hidden sm:block overflow-x-auto custom-scrollbar"
-                    ref={tableScrollRef}
-                    onScroll={(e) => {
-                        if (tableScrollRef.current && topScrollRef.current) {
-                            topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
-                        }
-                    }}
-                >
-                    <table className="w-full text-left border-collapse min-w-[900px]">
-                        <thead>
-                            <tr className="border-b border-slate-200 dark:border-white/5 text-[11px] text-slate-600 dark:text-slate-400 font-bold bg-slate-50 dark:bg-black/20 tracking-wider">
-                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase w-16 text-center whitespace-nowrap">SR #</th>
-                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("name")}>
-                                    <div className="flex items-center">Item Name <SortIcon columnKey="name" sortConfig={sortConfig} /></div>
-                                </th>
-                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("quantity_on_hand")}>
-                                    <div className="flex items-center justify-end"><SortIcon columnKey="quantity_on_hand" sortConfig={sortConfig} /> Stock Remain</div>
-                                </th>
-                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("pending_deficit")}>
-                                    <div className="flex items-center justify-end"><SortIcon columnKey="pending_deficit" sortConfig={sortConfig} /> Due / Owed</div>
-                                </th>
-                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("cost")}>
-                                    <div className="flex items-center justify-end"><SortIcon columnKey="cost" sortConfig={sortConfig} /> Unit Cost</div>
-                                </th>
-                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_standard")}>
-                                    <div className="flex items-center justify-end"><SortIcon columnKey="price_standard" sortConfig={sortConfig} /> Std Price</div>
-                                </th>
-                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right text-slate-400 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_hospital")}>
-                                    <div className="flex items-center justify-end"><SortIcon columnKey="price_hospital" sortConfig={sortConfig} /> Hosp Price</div>
-                                </th>
-                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right text-slate-400 cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("price_hotel")}>
-                                    <div className="flex items-center justify-end"><SortIcon columnKey="price_hotel" sortConfig={sortConfig} /> Hotel Price</div>
-                                </th>
-                                <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-right cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap leading-snug" onClick={() => handleSort("total_amount")}>
-                                    <div className="flex items-center justify-end"><SortIcon columnKey="total_amount" sortConfig={sortConfig} /> Total Value</div>
-                                </th>
-                                {selectedWarehouseId === "all" && (
-                                    <th className="px-3 py-3 md:px-6 md:py-4 uppercase text-center cursor-pointer group hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap" onClick={() => handleSort("location")}>
-                                        <div className="flex items-center justify-center">Location <SortIcon columnKey="location" sortConfig={sortConfig} /></div>
-                                    </th>
-                                )}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-white/5">
-                            {paginatedData.map((stock, index) => {
-                                const totalAmount = stock.quantity_on_hand * (stock.item as any).cost;
-                                const bulkFormat = describePackaging(stock.item) ?? stock.item.bulk_format ?? "";
-                                const inBoxes = stock.quantity_on_hand === 0 ? null : describeInBoxes(stock.quantity_on_hand, stock.item.pieces_per_box);
-                                const isZero = stock.quantity_on_hand === 0;
-                                const globalIndex = (currentPage - 1) * PAGE_SIZE + index + 1;
+                {/*
+                  Tablet and up. `@container` makes the `@2xl:`/`@3xl:`/`@4xl:`
+                  columns key off this panel's width: Unit cost from 672px, Stock
+                  value from 768px, Location from 896px. Item takes the remaining
+                  width, so nothing wraps and nothing scrolls sideways.
+                */}
+                <div className="hidden sm:block @container">
+                    <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-200 dark:border-white/5 text-[11px] text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-black/20 tracking-wider">
+                                    <th scope="col" className={cn(CELL, FIT, "font-bold uppercase text-center")}>#</th>
+                                    <SortableTh columnKey="name" sortConfig={sortConfig} onSort={handleSort} className="min-w-[200px]">Item</SortableTh>
+                                    <SortableTh columnKey="quantity_on_hand" sortConfig={sortConfig} onSort={handleSort} align="right" className={FIT}>In stock</SortableTh>
+                                    <SortableTh columnKey="cost" sortConfig={sortConfig} onSort={handleSort} align="right" className={cn(FIT, "hidden @2xl:table-cell")}>Unit cost</SortableTh>
+                                    <SortableTh columnKey="price_standard" sortConfig={sortConfig} onSort={handleSort} align="right" className={FIT}>Sell price</SortableTh>
+                                    <SortableTh columnKey="total_amount" sortConfig={sortConfig} onSort={handleSort} align="right" className={cn(FIT, "hidden @3xl:table-cell")}>Stock value</SortableTh>
+                                    {showLocation && (
+                                        <SortableTh columnKey="location" sortConfig={sortConfig} onSort={handleSort} className={cn(FIT, "hidden @4xl:table-cell")}>Location</SortableTh>
+                                    )}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-white/5">
+                                {paginatedData.map((stock, index) => {
+                                    const r = deriveWarehouseRow(stock);
+                                    const globalIndex = (currentPage - 1) * PAGE_SIZE + index + 1;
 
-                                return (
-                                    <tr key={`${stock.warehouseId}-${stock.itemId}`} className={`group hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all duration-300 border-b border-slate-200 dark:border-white/[0.02] last:border-0 ${isZero ? 'bg-yellow-500/[0.02]' : ''}`}>
-                                        <td className="px-3 py-3 md:px-6 md:py-4 text-center font-mono text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-slate-500 dark:text-slate-400 dark:text-slate-300 transition-colors">
-                                            {globalIndex}
-                                        </td>
-                                        <td className="px-3 py-3 md:px-6 md:py-4">
-                                            <div className="flex flex-col gap-0.5 group/name">
-                                                <div className="flex items-baseline gap-2 flex-wrap">
-                                                    <span className="font-bold text-slate-900 dark:text-white text-xs md:text-sm tracking-tight group-hover/name:text-brand-400 transition-colors uppercase">
-                                                        {stock.item.name}
-                                                    </span>
-                                                    {bulkFormat.trim() && (
-                                                        <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/5 uppercase tracking-wide">
-                                                            {bulkFormat.trim()}
-                                                        </span>
-                                                    )}
-                                                    <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase">
-                                                        #{stock.item.sku}
-                                                    </span>
-                                                </div>
-                                                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{stock.item.category}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                {isZero && <AlertCircle className="w-3.5 h-3.5 text-yellow-500" />}
-                                                <span className={`text-xs md:text-sm font-bold font-mono ${isZero ? 'text-yellow-500' : 'text-slate-900 dark:text-white'}`}>
-                                                    {stock.quantity_on_hand.toLocaleString()}
-                                                </span>
-                                            </div>
-                                            {inBoxes && (
-                                                <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">{inBoxes}</p>
+                                    return (
+                                        <tr
+                                            key={`${stock.warehouseId}-${stock.itemId}`}
+                                            className={cn(
+                                                "hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors",
+                                                r.isZero && "bg-accent-orange/[0.04]",
                                             )}
-                                        </td>
-                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
-                                            <div className="flex flex-col items-end">
-                                                <span className={`text-xs md:text-sm font-bold font-mono ${stock.pending_deficit > 0 ? 'text-accent-orange' : 'text-slate-400 opacity-50'}`}>
-                                                    {stock.pending_deficit > 0 ? `+${stock.pending_deficit.toLocaleString()}` : '0'}
-                                                </span>
-                                                {stock.pending_deficit > 0 && (
-                                                    <span className="text-[9px] font-bold text-accent-orange/70 uppercase tracking-tighter">Owed by Supplier</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
-                                            <span className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
-                                                {formatCurrency((stock.item as any).cost || 0)}
-                                            </span>
-                                        </td>
-                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
-                                            <span className="text-xs md:text-sm font-bold text-slate-900 dark:text-white font-mono whitespace-nowrap" dir="ltr">
-                                                {formatCurrency((stock.item as any).price_standard)}
-                                            </span>
-                                        </td>
-                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
-                                            <span className="text-xs md:text-sm font-bold text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
-                                                {formatCurrency((stock.item as any).price_hospital || 0)}
-                                            </span>
-                                        </td>
-                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
-                                            <span className="text-xs md:text-sm font-bold text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap" dir="ltr">
-                                                {formatCurrency((stock.item as any).price_hotel || 0)}
-                                            </span>
-                                        </td>
-                                        <td className="px-3 py-3 md:px-6 md:py-4 text-right">
-                                            <span className={`text-xs md:text-sm font-bold font-mono whitespace-nowrap ${isZero ? 'text-yellow-600/80' : 'text-slate-600 dark:text-slate-400'}`} dir="ltr">
-                                                {formatCurrency(totalAmount)}
-                                            </span>
-                                        </td>
-                                        {selectedWarehouseId === "all" && (
-                                            <td className="px-3 py-3 md:px-6 md:py-4 text-center">
-                                                <span className="block mx-auto px-2 py-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 dark:text-slate-300 text-[10px] font-bold uppercase tracking-widest rounded-md truncate max-w-[150px]">
-                                                    {stock.warehouse?.name || 'Unknown'}
-                                                </span>
+                                        >
+                                            <td className={cn(CELL, FIT, "text-center font-mono text-[10px] text-slate-400 dark:text-slate-500")}>
+                                                {globalIndex}
                                             </td>
-                                        )}
-                                    </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
+                                            <td className={cn(CELL, "max-w-0 min-w-[200px]")}>
+                                                <ItemIdentity item={stock.item} />
+                                            </td>
+                                            <td className={cn(CELL, FIT, "text-right")}>
+                                                <div className={cn("text-sm font-bold", r.isZero ? "text-accent-orange" : "text-slate-900 dark:text-white")}>
+                                                    {r.isZero ? "0 · empty" : r.qty.toLocaleString()}
+                                                </div>
+                                                {r.inBoxes && (
+                                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">{r.inBoxes}</div>
+                                                )}
+                                                {r.owed > 0 && (
+                                                    <div className="text-[10px] font-semibold text-accent-orange leading-tight">
+                                                        +{r.owed.toLocaleString()} owed by supplier
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className={cn(CELL, FIT, "text-right text-sm text-slate-500 dark:text-slate-400 hidden @2xl:table-cell")} dir="ltr">
+                                                {formatCurrency(r.cost)}
+                                            </td>
+                                            <td className={cn(CELL, FIT, "text-right")} dir="ltr">
+                                                <div className="text-sm font-semibold text-slate-900 dark:text-white">{formatCurrency(r.price)}</div>
+                                                {r.tierPrices && (
+                                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                                                        Hosp {formatCurrency(r.tierPrices.hospital)} · Hotel {formatCurrency(r.tierPrices.hotel)}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className={cn(CELL, FIT, "text-right text-sm font-semibold hidden @3xl:table-cell", r.isZero ? "text-accent-orange/80" : "text-slate-600 dark:text-slate-300")} dir="ltr">
+                                                {formatCurrency(r.value)}
+                                            </td>
+                                            {showLocation && (
+                                                <td className={cn(CELL, FIT, "text-xs text-slate-500 dark:text-slate-400 hidden @4xl:table-cell")}>
+                                                    {r.location}
+                                                </td>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 {sortedInventory.length === 0 && (
@@ -456,7 +362,7 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                 )}
 
                 {totalPages > 1 && (
-                    <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 bg-slate-50/50 dark:bg-white/[0.02] border-t border-slate-200 dark:border-white/5 gap-4">
+                    <div className="flex flex-col sm:flex-row items-center justify-between px-4 sm:px-6 py-3 bg-slate-50/50 dark:bg-white/[0.02] border-t border-slate-200 dark:border-white/5 gap-3">
                         <div className="text-xs font-medium text-slate-500 dark:text-slate-400 text-center sm:text-left">
                             Showing <span className="text-slate-900 dark:text-white font-bold">{(currentPage - 1) * PAGE_SIZE + 1}</span> to <span className="text-slate-900 dark:text-white font-bold">{Math.min(currentPage * PAGE_SIZE, sortedInventory.length)}</span> of <span className="text-slate-900 dark:text-white font-bold">{sortedInventory.length}</span> items
                         </div>
