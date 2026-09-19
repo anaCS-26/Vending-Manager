@@ -63,10 +63,24 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "استلام البضاعة بالكرتون",
         },
         body: {
-            en: "When a delivery arrives, open Manage Orders → Pending Receipts and press Start Receipt. For each item, type how many boxes came and the price of one box, exactly as the supplier's invoice shows them. The app works out the pieces for you, and stock is still counted and sent to drivers in pieces. If a box in this delivery holds a different number (20 instead of 24), change “Pcs / box” on that line. Set each item's usual box size and the weight of one piece once, in Manage System → Items.",
-            ar: "عند وصول شحنة، افتح «إدارة الطلبات» ثم «الاستلامات المعلّقة» واضغط «بدء الاستلام». لكل صنف، اكتب عدد الكراتين وسعر الكرتون الواحد كما هو مكتوب في فاتورة المورّد. التطبيق يحسب عدد الحبّات بنفسه، ويبقى المخزون محسوباً بالحبّة ويُصرف للسائقين بالحبّة. إذا كان الكرتون في هذه الشحنة يحتوي عدداً مختلفاً (20 بدل 24)، غيّر خانة «Pcs / box» في ذلك السطر. حدّد حجم الكرتون المعتاد ووزن الحبّة لكل صنف مرة واحدة من «إدارة النظام» ← «الأصناف».",
+            en: "When a delivery arrives, open Manage Orders → Pending Receipts and press Start Receipt. For each item, type how many boxes came and the price of one box, exactly as the supplier's invoice shows them — the app works out the pieces and the price of one piece. Stock is still counted and sent to drivers in pieces. If a box in this delivery holds a different number (20 instead of 24), change “Pcs / box” on that line; that changes this delivery only. Use “Loose pcs” for pieces that came outside a full box. If an orange note says one piece would cost more than it sells for, check the box size and the price before you finish. Order History now shows how each line was counted.",
+            ar: "عند وصول شحنة، افتح «إدارة الطلبات» (Manage Orders) ثم «الاستلامات المعلّقة» (Pending Receipts) واضغط «بدء الاستلام» (Start Receipt). لكل صنف، اكتب عدد الكراتين وسعر الكرتون الواحد كما هو في فاتورة المورّد، والتطبيق يحسب عدد الحبّات وسعر الحبّة بنفسه. يبقى المخزون محسوباً بالحبّة ويُصرف للسائقين بالحبّة. إذا كان الكرتون في هذه الشحنة يحتوي عدداً مختلفاً (20 بدل 24)، غيّر خانة «Pcs / box» في ذلك السطر، وهذا يغيّر هذه الشحنة فقط. استخدم خانة «Loose pcs» للحبّات التي وصلت خارج كرتون كامل. إذا ظهر تنبيه برتقالي بأن سعر الحبّة أعلى من سعر بيعها، راجع حجم الكرتون والسعر قبل الإنهاء. ويظهر الآن في «سجل الطلبات» (Order History) كيف تم عدّ كل سطر.",
         },
         href: "/admin/orders",
+    },
+    {
+        id: "2026-09-item-box-size",
+        date: "2026-09-19",
+        audience: ["admin"],
+        title: {
+            en: "Every item has a box size — here is how to change it",
+            ar: "لكل صنف حجم كرتون — وهكذا تغيّره",
+        },
+        body: {
+            en: "Items now show their box, for example “Box of 24 × 50 g”, on the Items, Orders and Warehouse Stock pages, and Warehouse Stock also shows how many boxes you have. New orders start at one box, and the + and − buttons add or remove a whole box. To change an item's box size: open Manage System and choose the Items tab. Search for the item, move the mouse over its card and click the pencil in the top corner. Change “Pieces per box” (and “Size of one piece” if needed), then press Save. Leave “Pieces per box” empty if the item comes loose. A few items don't have a box size yet — please add them the same way.",
+            ar: "يظهر الآن حجم الكرتون لكل صنف، مثلاً «Box of 24 × 50 g» (كرتون فيه 24 حبة، وزن الحبة 50 غرام)، في صفحات الأصناف والطلبات ومخزون المستودع، ويعرض مخزون المستودع عدد الكراتين أيضاً. الطلبات الجديدة تبدأ بكرتون واحد، وزرّا + و − يضيفان أو ينقصان كرتوناً كاملاً. لتغيير حجم الكرتون لصنف: افتح «إدارة النظام» (Manage System) واختر تبويب «الأصناف» (Items). ابحث عن الصنف، ومرّر الفأرة فوق بطاقته واضغط على أيقونة القلم في الزاوية العليا. غيّر «Pieces per box» (وكذلك «Size of one piece» إن لزم)، ثم اضغط «Save». اترك «Pieces per box» فارغاً إذا كان الصنف يأتي بالحبّة. بعض الأصناف ليس لها حجم كرتون بعد — أضِفه بالطريقة نفسها.",
+        },
+        href: "/admin/manage",
     },
     {
         id: "2026-09-return-to-warehouse",
