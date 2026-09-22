@@ -16,12 +16,18 @@ export function WhatsNewCard({
     entry,
     onNavigate,
     showDate = true,
+    showTitle = true,
+    showLink = true,
     replacement,
 }: {
     entry: WhatsNewEntry;
     /** Lets the prompt close itself when the user follows the link. */
     onNavigate?: () => void;
     showDate?: boolean;
+    /** Off when the title is already on screen — the What's New page's collapsed rows. */
+    showTitle?: boolean;
+    /** Off where "Try it" would point at the page already open (the in-page hint). */
+    showLink?: boolean;
     /** The newer note that supersedes this one. Marks the card outdated and drops "Try it". */
     replacement?: WhatsNewEntry;
 }) {
@@ -61,7 +67,8 @@ export function WhatsNewCard({
                     src={entry.media.src}
                     alt={`${entry.media.alt.ar} — ${entry.media.alt.en}`}
                     loading="lazy"
-                    className="w-full rounded-2xl border border-slate-200 dark:border-white/10"
+                    // A screenshot at full panel width reads as the page itself, not a picture of it.
+                    className="w-full max-w-lg rounded-2xl border border-slate-200 dark:border-white/10"
                 />
             )}
 
@@ -71,13 +78,15 @@ export function WhatsNewCard({
                         {formatSaudiDate(`${entry.date}T12:00:00+03:00`, { year: "numeric", month: "short", day: "numeric" })}
                     </p>
                 )}
-                <h3 className="font-display text-xl font-extrabold text-slate-900 dark:text-white leading-snug">
-                    <Bi en={entry.title.en} ar={entry.title.ar} />
-                </h3>
+                {showTitle && (
+                    <h3 className="font-display text-xl font-extrabold text-slate-900 dark:text-white leading-snug">
+                        <Bi en={entry.title.en} ar={entry.title.ar} />
+                    </h3>
+                )}
                 <p className="text-[15px] text-slate-600 dark:text-slate-300">
                     <Bi en={entry.body.en} ar={entry.body.ar} />
                 </p>
-                {entry.href && !replacement && (
+                {entry.href && showLink && !replacement && (
                     <Link
                         href={entry.href}
                         onClick={onNavigate}

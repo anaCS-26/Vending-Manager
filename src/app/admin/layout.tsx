@@ -5,7 +5,9 @@ import { auth } from "@/auth";
 import prisma from "@/lib/prisma";
 import { Package } from "lucide-react";
 import { WhatsNewPrompt } from "@/components/whats-new/WhatsNewPrompt";
+import { WhatsNewHint } from "@/components/whats-new/WhatsNewHint";
 import { getUnseenWhatsNew } from "@/lib/whats-new-server";
+import { entriesFor, hintCandidates } from "@/lib/whats-new";
 
 export default async function AdminLayout({
     children,
@@ -56,6 +58,7 @@ export default async function AdminLayout({
                     the bar is gone and the padding goes back to the normal rhythm. */}
                 <main className="flex-1 p-4 md:p-8 pb-nav lg:pb-8">
                     <div className="max-w-6xl mx-auto">
+                        <WhatsNewHint entries={hintCandidates(entriesFor("admin"), new Date())} />
                         {children}
                     </div>
                 </main>

@@ -56,7 +56,7 @@ $i = 0; do { Start-Sleep 2; docker exec supabase_db_vending pg_isready -U postgr
 
 **When:** any change a client admin or driver would notice (a new screen, button or flow, a changed way of doing something, or a fix to something they hit). **Skip it** for refactors, invisible performance work, tests/docs/tooling, and `/super/*` (the developer's own console). If unsure, add one: a feature nobody is told about doesn't exist for them.
 
-**How:** add an entry at the **top** of `WHATS_NEW` in `src/lib/whats-new.ts`, in the same branch as the feature.
+**How:** add **one** entry at the **top** of `WHATS_NEW` in `src/lib/whats-new.ts`, in the same branch as the feature: one card per change the client notices, even when it touches several screens. Three cards for one change is how a reader learns to skip the page; a detail that only matters on one screen belongs on that screen (helper text), not in another card. Set `href` to the page where the change is: the card also appears there as a "New on this page" strip for 30 days.
 
 - **Short and plain.** Title ≤ 8 words saying what they can now do. Body 1–3 sentences (≤ ~50 words): where to find it (menu and button names exactly as they appear on screen), what to do, and what happens. No internals, no jargon, no percentages. Write the Arabic too (`ar`), just as simple.
 - **Media is your call.** Use a short silent mp4 clip for a gesture or sequence, a cropped screenshot when the hard part is *finding* the button, and nothing when a sentence is enough (most of the time). Recipe: [client-comms.md](docs/agents/client-comms.md#media-you-decide).

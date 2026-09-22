@@ -37,11 +37,17 @@ Limits: 5 reports per 10 min per user; note ≤2000 chars; 5MB image cap; at lea
 
 Release notes are **data in the repo**: `WHATS_NEW` in `src/lib/whats-new.ts`, newest first. `tests/lib/whats-new.test.ts` enforces the shape: unique ids, both languages, newest-first dates, media files exist, links inside the audience's zone, and valid `supersededBy` targets.
 
-How it reaches people: `WhatsNewPrompt` is mounted by the admin and driver layouts, which compute the unseen set on the server (`getUnseenWhatsNew`, one indexed read of **`AnnouncementSeen`**, never throws), so a note dismissed on one device doesn't flash on another. It shows at most `PROMPT_LIMIT` (3) cards, but **dismissing marks every unseen entry as seen**: on first rollout the whole back-catalogue is unseen, and a prompt that comes back three more times is one people learn to close unread. The full list lives at `/admin/whats-new` and `/driver/whats-new` (drivers reach it from Settings → Help). `markAnnouncementsSeen` filters ids against the repo list for the caller's own audience. Super-admins read the admin set. The receipts exist so the developer can see on `/super/support` whether the client has actually been shown a feature before assuming they know about it.
+The reader is a non-technical admin who reads little English, and every note is written twice (Arabic, then English). So the rules below are about **how little** he has to read, not only what: one card per change, the note shown where the change is, and a page whose length doesn't grow with the catalogue.
+
+How it reaches people, in three places:
+
+**1. The pop-up after a deploy.** `WhatsNewPrompt` is mounted by the admin and driver layouts, which compute the unseen set on the server (`getUnseenWhatsNew`, one indexed read of **`AnnouncementSeen`**, never throws), so a note dismissed on one device doesn't flash on another. It shows at most `PROMPT_LIMIT` (3) cards, but **dismissing marks every unseen entry as seen**: on first rollout the whole back-catalogue is unseen, and a prompt that comes back three more times is one people learn to close unread. **2. "New on this page" (admin).** `WhatsNewHint`, mounted above the page content in the admin layout, shows a one-line strip on the screen a note's `href` points at (that page or one under it): the title, "Show me" to read the note in place, and ✕ to close it for good. It shows the newest such note, for `HINT_DAYS` (30) after it ships, and never an outdated one (`hintFor`). The pop-up catches people when they aren't doing the task; the strip catches them when they are. Closing is stored in `localStorage` (`vms:whats-new-hints-closed`), per device, not in `AnnouncementSeen`, because the receipts already record the prompt. The layout sends only notes young enough to hint (`hintCandidates`), not the whole catalogue. Drivers don't get the strip yet: their screens are full-bleed cards with no shared content column.
+
+**3. The page.** The full list lives at `/admin/whats-new` and `/driver/whats-new` (drivers reach it from Settings → Help). It is laid out by `pageSections` so it stays short: the newest release open at the top (notes sharing the newest date, at most `LATEST_LIMIT` = 3), every older current note as one title per row under its month (a native `<details>`, no client JS), and outdated notes behind a single "Older notes that have since changed (n)" link at the bottom. It used to render every note fully open, outdated ones included. `markAnnouncementsSeen` filters ids against the repo list for the caller's own audience. Super-admins read the admin set. The receipts exist so the developer can see on `/super/support` whether the client has actually been shown a feature before assuming they know about it.
 
 ### Writing an entry
 
-Add an entry to the **top** of `WHATS_NEW` in the same branch as the feature.
+Add **one** entry to the **top** of `WHATS_NEW` in the same branch as the feature. **One change, one card**, even when it touches several screens (the carton change covers ordering, receiving and the item editor in one card). A detail that only matters on one screen goes on that screen as helper text. If a branch really ships two unrelated changes, two cards is fine; `tests/lib/whats-new.test.ts` fails if the latest release would open more than three.
 
 | Field | Rule |
 |---|---|
@@ -51,7 +57,7 @@ Add an entry to the **top** of `WHATS_NEW` in the same branch as the feature.
 | `title` | What they can now do, in ≤ 8 words. "Return a driver's leftover stock to the warehouse." |
 | `body` | 1–3 short sentences, ≤ ~50 words: **where** (menu and button names exactly as they appear on screen, in quotes), **what to do**, **what happens**. Nothing about how it works internally, no percentages, no jargon. |
 | `ar` | Write both `title.ar` and `body.ar`. Keep the English on-screen label in parentheses after the Arabic name where the UI is English, e.g. «مخزون السائق» (Driver Stock). |
-| `href` | The page to try it on. It must be inside the audience's zone (`/admin…` → admin only, `/driver…` → driver only). |
+| `href` | The page where the change is: it's the "Try it" link **and** where the "New on this page" strip appears. It must be inside the audience's zone (`/admin…` → admin only, `/driver…` → driver only). |
 | `media` | Optional; see below. |
 | `supersededBy` | Set on an **older** entry, never on your new one; see below. |
 
