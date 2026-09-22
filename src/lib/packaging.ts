@@ -1,28 +1,43 @@
 /**
- * Boxes vs pieces, as pure functions (no React/Prisma) — the `order-entry.ts`
- * / `refill-entry.ts` pattern. Tested in tests/lib/packaging.test.ts.
+ * Cartons, packets and pieces, as pure functions (no React/Prisma) — the
+ * `order-entry.ts` / `refill-entry.ts` pattern. Tested in tests/lib/packaging.test.ts.
  *
- * The client's rule: stock arrives in boxes but is counted and dispatched in
- * pieces. So a box exists in exactly one place, the warehouse door, where
- * "10 boxes of 24" is multiplied out to 240 pieces before anything is stored.
- * Every stock table stays in pieces.
+ * The client's rule: stock arrives in cartons but is counted and dispatched in
+ * pieces. So a carton exists in exactly one place, the warehouse door (ordering
+ * and receiving), where "5 cartons" is multiplied out to pieces before anything
+ * is stored. Every stock table stays in pieces.
  *
- * Why receiving asks for a price per BOX: the supplier invoice prints one,
+ * Up to three levels, the way the client writes them ("8*20*5GM"):
+ *
+ *   carton  →  packet  →  piece
+ *     8 packets of 20 pieces = 160 pieces a carton    (SIPP GREEN)
+ *     40 pieces, no packets  =  40 pieces a carton    (AQUAFINA WATER)
+ *
+ * `Item.pieces_per_box` is the innermost unit (the packet, or the carton when
+ * there are no packets) and `Item.packets_per_carton` the level above it. The
+ * second level was added after the client reported that "1 carton × 8 packets
+ * × 20 pieces" came out as "1 carton × packet + piece": the app used to model
+ * one level, and for 26 items that level was his packet, not his carton.
+ *
+ * Why receiving asks for a price per CARTON: the supplier invoice prints one,
  * and the old screen asked for a price per piece. Production shows the two
  * being confused — AQUAFINA WATER, a 2 SAR bottle, is costed at 31 SAR because
- * a box price went into the piece field and from there into WAC. Receiving now
- * asks for exactly what the invoice prints and does the division here.
+ * a carton price went into the piece field and from there into WAC. Receiving
+ * now asks for exactly what the invoice prints and does the division here.
  */
 
 export const PIECE_SIZE_UNITS = ["g", "kg", "ml", "L"] as const;
 export type PieceSizeUnit = (typeof PIECE_SIZE_UNITS)[number];
 
-/** Generous ceiling — the largest box in the live catalogue holds 40. */
+/** Generous ceiling — the largest packet in the live catalogue holds 45. */
 export const MAX_PIECES_PER_BOX = 1000;
+/** Generous ceiling — the most packets in a live carton is 32 (BISKREM). */
+export const MAX_PACKETS_PER_CARTON = 200;
 const MAX_PIECE_SIZE = 100_000;
 
 export type Packaging = {
     pieces_per_box: number | null;
+    packets_per_carton: number | null;
     piece_size: number | null;
     piece_size_unit: string | null;
 };
@@ -32,44 +47,103 @@ export function isPieceSizeUnit(unit: unknown): unit is PieceSizeUnit {
 }
 
 /**
- * The box to count in. An item with no box size is received piece by piece,
- * i.e. in boxes of one — so every caller can multiply without a branch.
+ * A pack size to multiply by. Anything that isn't a positive whole number is a
+ * pack of one — so every caller can multiply without a branch.
  */
 export function boxSize(piecesPerBox: number | null | undefined): number {
     return typeof piecesPerBox === "number" && Number.isInteger(piecesPerBox) && piecesPerBox > 0 ? piecesPerBox : 1;
 }
 
-/** `boxes` full boxes plus `loose` pieces, in pieces. */
-export function piecesFromBoxes(boxes: number, piecesPerBox: number | null | undefined, loose = 0): number {
-    const b = Number.isFinite(boxes) && boxes > 0 ? Math.floor(boxes) : 0;
-    const l = Number.isFinite(loose) && loose > 0 ? Math.floor(loose) : 0;
-    return b * boxSize(piecesPerBox) + l;
+/**
+ * The two pack sizes of an item (or of one delivery), normalised: a missing
+ * level is a level of one. Packets are ignored without a packet size, since a
+ * "carton of 8 packets of nothing" means nothing.
+ */
+export type Levels = { perPacket: number; packetsPerCarton: number };
+
+export function levelsOf(p: { pieces_per_box?: number | null; packets_per_carton?: number | null } | null | undefined): Levels {
+    const perPacket = boxSize(p?.pieces_per_box);
+    if (perPacket <= 1) return { perPacket: 1, packetsPerCarton: 1 };
+    return { perPacket, packetsPerCarton: boxSize(p?.packets_per_carton) };
 }
 
-/** Whole boxes in `pieces`, and the pieces left over. */
-export function splitIntoBoxes(
-    pieces: number,
-    piecesPerBox: number | null | undefined,
-): { boxes: number; loose: number } {
-    if (!Number.isFinite(pieces) || pieces <= 0) return { boxes: 0, loose: 0 };
-    const size = boxSize(piecesPerBox);
-    const whole = Math.floor(pieces);
-    return { boxes: Math.floor(whole / size), loose: whole % size };
+/** Pieces in one carton. 1 when the item comes loose. */
+export const cartonSize = (l: Levels) => l.perPacket * l.packetsPerCarton;
+export const hasCarton = (l: Levels) => cartonSize(l) > 1;
+export const hasPackets = (l: Levels) => l.packetsPerCarton > 1;
+
+/** How a quantity was counted at the door. */
+export type Count = { cartons: number; packets: number; pieces: number };
+
+const whole = (n: number | undefined) => (typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
+
+/**
+ * Cartons + packets + loose pieces, in pieces. Each level only counts when the
+ * item has it — for a carton of 40 there is nothing between the carton and the
+ * piece, and a loose item has no carton — matching the fields the screen shows.
+ */
+export function piecesFromCount(c: Partial<Count>, l: Levels): number {
+    return (hasCarton(l) ? whole(c.cartons) * cartonSize(l) : 0) + (hasPackets(l) ? whole(c.packets) * l.perPacket : 0) + whole(c.pieces);
 }
 
-/** Cost of one piece, from the invoice's price for one box. */
-export function costPerPiece(boxPrice: number, piecesPerBox: number | null | undefined): number {
-    if (!Number.isFinite(boxPrice) || boxPrice <= 0) return 0;
-    return boxPrice / boxSize(piecesPerBox);
+/** Whole cartons first, then whole packets, then what's left. */
+export function splitCount(pieces: number, l: Levels): Count {
+    let rest = whole(pieces);
+    const cartons = hasCarton(l) ? Math.floor(rest / cartonSize(l)) : 0;
+    rest -= cartons * cartonSize(l);
+    const packets = hasPackets(l) ? Math.floor(rest / l.perPacket) : 0;
+    rest -= packets * l.perPacket;
+    return { cartons, packets, pieces: rest };
 }
 
 /**
- * The box price to pre-fill from a known per-piece cost, rounded to the halala
- * because that is what an invoice prints.
+ * How a delivery count is stored on its PO line (see PurchaseOrderItem):
+ * full packs of the innermost unit, plus — when there are packets — how many
+ * of those came as whole cartons. A loose item records nothing.
  */
-export function boxPriceFromPieceCost(pieceCost: number, piecesPerBox: number | null | undefined): number {
+export function recordCount(c: Partial<Count>, l: Levels): {
+    boxesReceived: number | null;
+    piecesPerBox: number | null;
+    cartonsReceived: number | null;
+    packetsPerCarton: number | null;
+} {
+    if (!hasCarton(l)) return { boxesReceived: null, piecesPerBox: null, cartonsReceived: null, packetsPerCarton: null };
+    const cartons = whole(c.cartons);
+    if (!hasPackets(l)) return { boxesReceived: cartons, piecesPerBox: l.perPacket, cartonsReceived: null, packetsPerCarton: null };
+    return {
+        boxesReceived: cartons * l.packetsPerCarton + whole(c.packets),
+        piecesPerBox: l.perPacket,
+        cartonsReceived: cartons,
+        packetsPerCarton: l.packetsPerCarton,
+    };
+}
+
+const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
+
+/** "21 cartons + 1 packet + 4 pcs" — a piece count as packs. Null for a loose item. */
+export function describeCount(pieces: number, l: Levels): string | null {
+    if (!hasCarton(l)) return null;
+    const { cartons, packets, pieces: loose } = splitCount(pieces, l);
+    const parts: string[] = [];
+    if (cartons > 0) parts.push(plural(cartons, "carton", "cartons"));
+    if (packets > 0) parts.push(plural(packets, "packet", "packets"));
+    if (loose > 0) parts.push(plural(loose, "pc", "pcs"));
+    return parts.length > 0 ? parts.join(" + ") : "0 cartons";
+}
+
+/** Cost of one piece, from the invoice's price for one pack of `piecesInPack`. */
+export function costPerPiece(packPrice: number, piecesInPack: number | null | undefined): number {
+    if (!Number.isFinite(packPrice) || packPrice <= 0) return 0;
+    return packPrice / boxSize(piecesInPack);
+}
+
+/**
+ * The pack price to pre-fill from a known per-piece cost, rounded to the
+ * halala because that is what an invoice prints.
+ */
+export function boxPriceFromPieceCost(pieceCost: number, piecesInPack: number | null | undefined): number {
     if (!Number.isFinite(pieceCost) || pieceCost <= 0) return 0;
-    return Math.round(pieceCost * boxSize(piecesPerBox) * 100) / 100;
+    return Math.round(pieceCost * boxSize(piecesInPack) * 100) / 100;
 }
 
 const trim = (n: number) => String(Math.round(n * 100) / 100);
@@ -81,46 +155,75 @@ export function formatPieceSize(size: number | null | undefined, unit: string | 
 }
 
 /**
- * One line for wherever an item is listed: "Box of 24 × 50 g". Written the way
- * the client already writes it on their own sheets ("24*50GM"), so it reads as
- * theirs. A box of one says nothing about a box, so it is left out.
+ * One line for wherever an item is listed: "Carton of 8 packets × 20 × 5 g",
+ * "Carton of 24 × 50 g". Written in the order the client writes his own pack
+ * codes ("8*20*5GM"), so it reads as his. A loose item shows only its size.
  */
 export function describePackaging(p: Partial<Packaging> | null | undefined): string | null {
     const size = formatPieceSize(p?.piece_size, p?.piece_size_unit);
-    const perBox = typeof p?.pieces_per_box === "number" && p.pieces_per_box > 1 ? p.pieces_per_box : null;
-    if (perBox && size) return `Box of ${perBox} × ${size}`;
-    if (perBox) return `Box of ${perBox}`;
+    const l = levelsOf(p);
+    const tail = size ? ` × ${size}` : "";
+    if (hasPackets(l)) return `Carton of ${l.packetsPerCarton} packets × ${l.perPacket}${tail}`;
+    if (hasCarton(l)) return `Carton of ${l.perPacket}${tail}`;
     return size;
 }
 
-/** "41 boxes + 16 pcs" — a piece count as boxes. Null when the item has no box. */
-export function describeInBoxes(pieces: number, piecesPerBox: number | null | undefined): string | null {
-    const size = boxSize(piecesPerBox);
-    if (size <= 1) return null;
-    const { boxes, loose } = splitIntoBoxes(pieces, size);
-    const parts: string[] = [];
-    if (boxes > 0) parts.push(`${boxes} ${boxes === 1 ? "box" : "boxes"}`);
-    if (loose > 0) parts.push(`${loose} ${loose === 1 ? "pc" : "pcs"}`);
-    return parts.length > 0 ? parts.join(" + ") : "0 boxes";
+/** "1 carton = 8 packets × 20 = 160 pcs" — the multiplication, spelled out. */
+export function describeCartonSum(l: Levels): string | null {
+    if (hasPackets(l)) return `1 carton = ${l.packetsPerCarton} packets × ${l.perPacket} = ${cartonSize(l).toLocaleString("en-US")} pcs`;
+    if (hasCarton(l)) return `1 carton = ${l.perPacket} pcs`;
+    return null;
 }
 
 /**
- * How a received PO line was counted — "10 boxes of 24 + 3 pcs" — or null for
- * lines received before box counting existed, and for boxes of one.
+ * How a received PO line was counted — "2 cartons of 8 × 20 + 3 packets + 5 pcs"
+ * — or null for lines received before counting existed, and for loose items.
  */
 export function describeReceivedLine(line: {
     quantityReceived: number;
     boxesReceived: number | null;
     piecesPerBox: number | null;
+    cartonsReceived?: number | null;
+    packetsPerCarton?: number | null;
 }): string | null {
-    if (line.boxesReceived === null || line.piecesPerBox === null || line.piecesPerBox <= 1) return null;
-    const loose = line.quantityReceived - line.boxesReceived * line.piecesPerBox;
-    const boxes = `${line.boxesReceived} ${line.boxesReceived === 1 ? "box" : "boxes"} of ${line.piecesPerBox}`;
-    return loose > 0 ? `${boxes} + ${loose} ${loose === 1 ? "pc" : "pcs"}` : boxes;
+    const { quantityReceived, boxesReceived: boxes, piecesPerBox: perBox } = line;
+    if (boxes === null || perBox === null || perBox <= 1) return null;
+    const loosePieces = quantityReceived - boxes * perBox;
+    const ppc = line.packetsPerCarton ?? null;
+    const cartons = line.cartonsReceived ?? null;
+    const parts: string[] = [];
+    if (ppc !== null && ppc > 1 && cartons !== null) {
+        const loosePackets = boxes - cartons * ppc;
+        if (cartons > 0 || (loosePackets <= 0 && loosePieces <= 0)) parts.push(`${plural(cartons, "carton", "cartons")} of ${ppc} × ${perBox}`);
+        if (loosePackets > 0) parts.push(plural(loosePackets, "packet", "packets"));
+    } else {
+        parts.push(`${plural(boxes, "carton", "cartons")} of ${perBox}`);
+    }
+    if (loosePieces > 0) parts.push(plural(loosePieces, "pc", "pcs"));
+    return parts.join(" + ");
+}
+
+/**
+ * Packets per carton, read from the client's pack code when it can be read
+ * without guessing: exactly two plain counts plus a size, one of the counts
+ * being the packet already saved. `8*20*5GM` with packets of 20 → 8;
+ * `25G*14*6` (size first) with packets of 14 → 6. `30*240ML`, `45X1` and
+ * `12*30/40G` hold no packet level → null.
+ */
+export function packetsPerCartonFromPackCode(code: string | null | undefined, piecesPerBox: number | null | undefined): number | null {
+    if (!code || typeof piecesPerBox !== "number" || piecesPerBox <= 1) return null;
+    const tokens = code.split(/[*xX×]/).map((t) => t.trim()).filter(Boolean);
+    const counts = tokens.filter((t) => /^\d+$/.test(t)).map(Number);
+    const sizes = tokens.filter((t) => !/^\d+$/.test(t));
+    if (counts.length !== 2 || sizes.length !== 1) return null;
+    const [a, b] = counts;
+    const other = a === piecesPerBox ? b : b === piecesPerBox ? a : null;
+    return other !== null && other > 1 && other <= MAX_PACKETS_PER_CARTON ? other : null;
 }
 
 export type PackagingInput = {
     pieces_per_box?: number | null;
+    packets_per_carton?: number | null;
     piece_size?: number | null;
     piece_size_unit?: string | null;
 };
@@ -128,7 +231,8 @@ export type PackagingInput = {
 /**
  * Normalises what an admin typed into the item form. A cleared number box
  * arrives as 0 (NumericInput hands back 0 for empty), and 0 means "not set" —
- * stored as null, never as a box of nothing.
+ * stored as null, never as a pack of nothing. A carton of one packet is no
+ * packet level at all, so it is stored as null too.
  */
 export function parsePackaging(
     input: PackagingInput,
@@ -137,9 +241,23 @@ export function parsePackaging(
     const perBox = input.pieces_per_box ?? null;
     if (perBox !== null && perBox !== 0) {
         if (!Number.isInteger(perBox) || perBox < 1 || perBox > MAX_PIECES_PER_BOX) {
-            return { ok: false, error: `Pieces per box must be a whole number from 1 to ${MAX_PIECES_PER_BOX}.` };
+            return { ok: false, error: `Pieces must be a whole number from 1 to ${MAX_PIECES_PER_BOX}.` };
         }
         pieces_per_box = perBox;
+    }
+
+    let packets_per_carton: number | null = null;
+    const packets = input.packets_per_carton ?? null;
+    if (packets !== null && packets !== 0) {
+        if (!Number.isInteger(packets) || packets < 1 || packets > MAX_PACKETS_PER_CARTON) {
+            return { ok: false, error: `Packets per carton must be a whole number from 1 to ${MAX_PACKETS_PER_CARTON}.` };
+        }
+        if (packets > 1) {
+            if (pieces_per_box === null || pieces_per_box < 2) {
+                return { ok: false, error: "Type how many pieces are in one packet before the packets in a carton." };
+            }
+            packets_per_carton = packets;
+        }
     }
 
     let piece_size: number | null = null;
@@ -156,28 +274,42 @@ export function parsePackaging(
         piece_size_unit = input.piece_size_unit;
     }
 
-    return { ok: true, value: { pieces_per_box, piece_size, piece_size_unit } };
+    return { ok: true, value: { pieces_per_box, packets_per_carton, piece_size, piece_size_unit } };
 }
 
 /**
- * Checks a received line's box breakdown against its piece total, for the
- * server. Both fields or neither; the boxes may not account for more pieces
- * than were received (whatever they don't account for is loose pieces).
- * Returns the problem, or null.
+ * Checks a received line's breakdown against its piece total, for the server.
+ * Each pair comes both-or-neither; the packs may not account for more than was
+ * received (whatever they don't account for is loose). Returns the problem, or null.
  */
 export function checkReceivedBoxes(line: {
     quantityReceived: number;
     boxesReceived?: number | null;
     piecesPerBox?: number | null;
+    cartonsReceived?: number | null;
+    packetsPerCarton?: number | null;
 }): string | null {
     const boxes = line.boxesReceived ?? null;
     const perBox = line.piecesPerBox ?? null;
-    if (boxes === null && perBox === null) return null;
-    if (boxes === null || perBox === null) return "A received line needs both its box count and its box size.";
-    if (!Number.isInteger(perBox) || perBox < 1 || perBox > MAX_PIECES_PER_BOX) {
-        return `Pieces per box must be a whole number from 1 to ${MAX_PIECES_PER_BOX}.`;
+    const cartons = line.cartonsReceived ?? null;
+    const ppc = line.packetsPerCarton ?? null;
+
+    if (boxes === null && perBox === null) {
+        return cartons === null && ppc === null ? null : "Cartons need the packets they were counted in.";
     }
-    if (!Number.isInteger(boxes) || boxes < 0) return "Boxes received must be a whole number of 0 or more.";
-    if (boxes * perBox > line.quantityReceived) return "The boxes add up to more pieces than were received.";
+    if (boxes === null || perBox === null) return "A received line needs both its pack count and its pack size.";
+    if (!Number.isInteger(perBox) || perBox < 1 || perBox > MAX_PIECES_PER_BOX) {
+        return `Pieces per pack must be a whole number from 1 to ${MAX_PIECES_PER_BOX}.`;
+    }
+    if (!Number.isInteger(boxes) || boxes < 0) return "The number of packs received must be a whole number of 0 or more.";
+    if (boxes * perBox > line.quantityReceived) return "The packs add up to more pieces than were received.";
+
+    if (cartons === null && ppc === null) return null;
+    if (cartons === null || ppc === null) return "A received line needs both its carton count and its packets per carton.";
+    if (!Number.isInteger(ppc) || ppc < 1 || ppc > MAX_PACKETS_PER_CARTON) {
+        return `Packets per carton must be a whole number from 1 to ${MAX_PACKETS_PER_CARTON}.`;
+    }
+    if (!Number.isInteger(cartons) || cartons < 0) return "Cartons received must be a whole number of 0 or more.";
+    if (cartons * ppc > boxes) return "The cartons add up to more packets than were received.";
     return null;
 }

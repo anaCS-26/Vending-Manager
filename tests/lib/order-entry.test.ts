@@ -1,20 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import {
-  adjustOrderQuantity,
   defaultOrderQuantity,
+  formatOrderQuantity,
+  lastOrderedByItem,
+  lineCount,
+  lineUnit,
   linesFromDeficits,
   linesFromPreviousOrder,
   mergeOrderLines,
+  orderAsText,
   roundUpToBatch,
+  startingQuantity,
+  stepLine,
+  unitsFor,
+  unitSize,
+  withCount,
+  withUnit,
 } from '@/lib/order-entry';
+import { levelsOf } from '@/lib/packaging';
+
+const SIPP = levelsOf({ pieces_per_box: 20, packets_per_carton: 8 }); // carton = 8 packets × 20 = 160
+const WATER = levelsOf({ pieces_per_box: 40 }); // carton = 40, no packets
+const LOOSE = levelsOf({ pieces_per_box: null });
 
 describe('defaultOrderQuantity', () => {
-  it('starts a new line at one case', () => {
-    expect(defaultOrderQuantity(24)).toBe(24);
+  it('starts a new line at one carton', () => {
+    expect(defaultOrderQuantity(160)).toBe(160);
   });
 
   // The admin's complaint: every one of ~60 lines opened at 1 and had to be retyped.
-  it('falls back to 1 only when the item has no case pack', () => {
+  it('falls back to 1 only when the item has no carton', () => {
     expect(defaultOrderQuantity(0)).toBe(1);
     expect(defaultOrderQuantity(null)).toBe(1);
     expect(defaultOrderQuantity(undefined)).toBe(1);
@@ -23,32 +38,127 @@ describe('defaultOrderQuantity', () => {
   });
 });
 
-describe('adjustOrderQuantity', () => {
-  it('adds and removes whole cases', () => {
-    expect(adjustOrderQuantity(24, 24)).toBe(48);
-    expect(adjustOrderQuantity(48, -24)).toBe(24);
+describe('startingQuantity', () => {
+  it('starts where the item was last ordered, so a routine order is mostly Enter', () => {
+    expect(startingQuantity(160, 800)).toBe(800);
   });
 
-  it('refuses a -case that would empty the line instead of clamping to 1', () => {
-    // Clamping 24 - 24 to 1 would make the next +24 land on 25: no number of cases.
-    expect(adjustOrderQuantity(24, -24)).toBe(24);
-    expect(adjustOrderQuantity(10, -24)).toBe(10);
+  it('starts at one carton when there is no history', () => {
+    expect(startingQuantity(160, undefined)).toBe(160);
   });
 
-  it('never returns less than 1', () => {
-    expect(adjustOrderQuantity(0, -24)).toBe(1);
-    expect(adjustOrderQuantity(NaN, 24)).toBe(1);
+  // Production has 1-piece test orders from the first week.
+  it('never starts below one carton', () => {
+    expect(startingQuantity(160, 1)).toBe(160);
+    expect(startingQuantity(1, 1)).toBe(1);
+  });
+});
+
+describe('order units', () => {
+  it('offers only the units an item has, biggest first', () => {
+    expect(unitsFor(SIPP)).toEqual(['carton', 'packet', 'piece']);
+    expect(unitsFor(WATER)).toEqual(['carton', 'piece']);
+    expect(unitsFor(LOOSE)).toEqual(['piece']);
+  });
+
+  it('knows how many pieces each unit is', () => {
+    expect(unitSize('carton', SIPP)).toBe(160);
+    expect(unitSize('packet', SIPP)).toBe(20);
+    expect(unitSize('piece', SIPP)).toBe(1);
+    expect(unitSize('packet', WATER)).toBe(1);
+  });
+
+  // The report: the admin typing an order works in cartons.
+  it('types a line in cartons and stores pieces', () => {
+    const line = withCount({ itemId: 1, quantityRequested: 160 }, 5, SIPP);
+    expect(line).toEqual({ itemId: 1, quantityRequested: 800, unit: 'carton' });
+    expect(lineCount(line, SIPP)).toBe(5);
+  });
+
+  it('shows an inherited quantity in the biggest unit that divides it — never rounded', () => {
+    // A repeated order of 700 SIPP is 35 packets, not "4 or 5 cartons".
+    expect(lineUnit({ itemId: 1, quantityRequested: 700 }, SIPP)).toBe('packet');
+    expect(lineCount({ itemId: 1, quantityRequested: 700 }, SIPP)).toBe(35);
+    expect(lineUnit({ itemId: 1, quantityRequested: 900 }, WATER)).toBe('piece');
+    expect(lineUnit({ itemId: 1, quantityRequested: 800 }, SIPP)).toBe('carton');
+  });
+
+  it('keeps the unit the admin picked while typing', () => {
+    // Switched to pieces, typing 160 must not flip back to "1 carton".
+    const line = withCount({ itemId: 1, quantityRequested: 1, unit: 'piece' }, 160, SIPP);
+    expect(lineUnit(line, SIPP)).toBe('piece');
+    expect(lineCount(line, SIPP)).toBe(160);
+  });
+
+  it('rounds up to whole units when the unit changes', () => {
+    expect(withUnit({ itemId: 1, quantityRequested: 700 }, 'carton', SIPP)).toEqual({ itemId: 1, quantityRequested: 800, unit: 'carton' });
+    expect(withUnit({ itemId: 1, quantityRequested: 800 }, 'piece', SIPP).quantityRequested).toBe(800);
+    expect(withUnit({ itemId: 1, quantityRequested: 0 }, 'carton', SIPP).quantityRequested).toBe(160);
+  });
+
+  it('steps by one unit and will not drop a line below one', () => {
+    const one = { itemId: 1, quantityRequested: 160 };
+    expect(stepLine(one, 1, SIPP).quantityRequested).toBe(320);
+    expect(stepLine(one, -1, SIPP)).toBe(one);
+    expect(stepLine({ itemId: 1, quantityRequested: 700 }, 1, SIPP).quantityRequested).toBe(720); // 36 packets
+  });
+});
+
+describe('formatOrderQuantity', () => {
+  it('says it the way a supplier would', () => {
+    expect(formatOrderQuantity(800, SIPP)).toBe('5 cartons');
+    expect(formatOrderQuantity(700, SIPP)).toBe('4 cartons + 3 packets');
+    expect(formatOrderQuantity(900, WATER)).toBe('22 cartons + 20 pcs');
+    expect(formatOrderQuantity(30, LOOSE)).toBe('30 pcs');
+    expect(formatOrderQuantity(1, LOOSE)).toBe('1 pc');
+  });
+});
+
+describe('orderAsText', () => {
+  it('writes the order as a message the supplier can read', () => {
+    const text = orderAsText({
+      id: 29, warehouseName: 'Riyadh Central', date: '20 Sep 2026',
+      lines: [
+        { name: 'SIPP GREEN', quantity: 800, levels: SIPP },
+        { name: 'AQUAFINA WATER', quantity: 900, levels: WATER },
+      ],
+    });
+    expect(text).toBe([
+      'Purchase order PO-0029',
+      'Deliver to: Riyadh Central',
+      'Date: 20 Sep 2026',
+      '',
+      '1. SIPP GREEN — 5 cartons',
+      '2. AQUAFINA WATER — 22 cartons + 20 pcs',
+      '',
+      '2 items',
+    ].join('\n'));
+  });
+});
+
+describe('lastOrderedByItem', () => {
+  const orders = [
+    { id: 1, status: 'COMPLETED', createdAt: new Date('2026-08-13'), Items: [{ itemId: 1, quantityRequested: 1000 }, { itemId: 2, quantityRequested: 1000 }] },
+    { id: 2, status: 'CANCELLED', createdAt: new Date('2026-09-01'), Items: [{ itemId: 1, quantityRequested: 5 }] },
+    { id: 3, status: 'PENDING', createdAt: new Date('2026-09-20'), Items: [{ itemId: 1, quantityRequested: 400 }, { itemId: 1, quantityRequested: 300 }] },
+  ];
+
+  it('takes the newest order that was not cancelled, per item', () => {
+    const last = lastOrderedByItem(orders);
+    expect(last.get(1)).toEqual({ quantity: 700, orderId: 3, date: new Date('2026-09-20') });
+    expect(last.get(2)?.quantity).toBe(1000);
+    expect(last.has(3)).toBe(false);
   });
 });
 
 describe('roundUpToBatch', () => {
-  it('covers the quantity in whole cases', () => {
+  it('covers the quantity in whole cartons', () => {
     expect(roundUpToBatch(25, 24)).toBe(48);
     expect(roundUpToBatch(24, 24)).toBe(24);
     expect(roundUpToBatch(1, 24)).toBe(24);
   });
 
-  it('passes the quantity through when there is no case pack', () => {
+  it('passes the quantity through when there is no carton', () => {
     expect(roundUpToBatch(7, 0)).toBe(7);
   });
 
@@ -126,11 +236,17 @@ describe('linesFromDeficits', () => {
     { id: 5, pieces_per_box: 12 },
   ];
 
-  it('orders what the supplier still owes this warehouse, in whole boxes', () => {
+  it('orders what the supplier still owes this warehouse, in whole cartons', () => {
     expect(linesFromDeficits(items, 7)).toEqual([
       { itemId: 1, quantityRequested: 48 },
       { itemId: 2, quantityRequested: 5 },
     ]);
+  });
+
+  // SIPP GREEN owes 400 in production: 3 cartons of 160, not 20 packets.
+  it('rounds up to the whole carton when the carton holds packets', () => {
+    const sipp = [{ id: 33, pieces_per_box: 20, packets_per_carton: 8, WarehouseStock: [{ warehouseId: 1, pending_deficit: 400 }] }];
+    expect(linesFromDeficits(sipp, 1)).toEqual([{ itemId: 33, quantityRequested: 480 }]);
   });
 
   it('ignores the deficits of another warehouse', () => {

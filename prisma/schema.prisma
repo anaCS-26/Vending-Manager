@@ -25,14 +25,21 @@ model Item {
   // driver's bag. 0 = no default (admin types manually). Sourced from the
   // client's case-pack list; see scripts/seed-default-assignment-qty.ts.
   default_assignment_qty Int                    @default(0)
-  // Packaging. Stock is counted in pieces everywhere; a box exists only at the
-  // warehouse door, where a delivery is counted in boxes and multiplied out.
-  // `pieces_per_box` is the usual box — the receiver can override it per
-  // delivery (PurchaseOrderItem.piecesPerBox), because the same product does
-  // arrive as a 24 one week and a 20 the next. Null = not set yet. The piece
+  // Packaging. Stock is counted in pieces everywhere; cartons exist only at
+  // the warehouse door (ordering and receiving), where they are multiplied out.
+  // The client packs in up to three levels: carton → packet → piece
+  // ("8*20*5GM" = a carton of 8 packets of 20).
+  //   pieces_per_box      pieces in the innermost unit: the packet when there
+  //                       are packets, otherwise the carton itself (AQUAFINA:
+  //                       a carton of 40). Null = not set yet.
+  //   packets_per_carton  packets in one carton. Null = the carton holds
+  //                       pieces directly.
+  // The receiver can override both per delivery (PurchaseOrderItem), because
+  // the same product does arrive as a 24 one week and a 20 the next. The piece
   // size is what's printed on one piece ("50 g", "320 ml"); display only.
   // See src/lib/packaging.ts.
   pieces_per_box         Int?
+  packets_per_carton     Int?
   piece_size             Float?
   piece_size_unit        String?
   imageUrl               String?
@@ -402,12 +409,19 @@ model PurchaseOrderItem {
   // Order-time Item.cost snapshot until the order is received, then the
   // per-piece cost actually paid (box price ÷ piecesPerBox).
   costPerUnit       Float         @default(0.0)
-  // How the receiver counted this line: boxesReceived full boxes of
-  // piecesPerBox, plus loose pieces (= quantityReceived − boxes × perBox).
-  // quantityReceived stays the source of truth. Null on lines received before
-  // box counting existed.
+  // How the receiver counted this line. quantityReceived stays the source of
+  // truth; these only record the breakdown. Null on lines received before box
+  // counting existed.
+  //   boxesReceived × piecesPerBox   full innermost units (packets, or cartons
+  //                                  when the item has no packets); the rest of
+  //                                  quantityReceived is loose pieces.
+  //   cartonsReceived × packetsPerCarton   of those packets, how many came as
+  //                                  whole cartons. Null when the line has no
+  //                                  packet level.
   boxesReceived     Int?
   piecesPerBox      Int?
+  cartonsReceived   Int?
+  packetsPerCarton  Int?
   item              Item          @relation(fields: [itemId], references: [id])
   purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
 

@@ -258,8 +258,9 @@ describe('completePurchaseOrder', () => {
     expect(itemId).toBe(1);
     expect(cost).toBeCloseTo(6.4, 6);
     // Both PurchaseOrderItem rows still get their own quantity and cost.
-    // (id, qty, costPerUnit, boxesReceived, piecesPerBox) — no box breakdown sent.
-    expect(rawValues(stmtWith('UPDATE "PurchaseOrderItem"'))).toEqual([99, 60, 7, null, null, 98, 40, 9, null, null]);
+    // (id, qty, costPerUnit, boxesReceived, piecesPerBox, cartonsReceived,
+    // packetsPerCarton) — no breakdown sent.
+    expect(rawValues(stmtWith('UPDATE "PurchaseOrderItem"'))).toEqual([99, 60, 7, null, null, null, null, 98, 40, 9, null, null, null, null]);
   });
 
   /**
@@ -314,14 +315,37 @@ describe('completePurchaseOrder', () => {
     expect(rawSql(poi)).toContain('"piecesPerBox" = v.per_box');
     // The per-piece cost actually paid replaces the order-time estimate.
     expect(rawSql(poi)).toContain('"costPerUnit" = v.cost');
-    expect(rawValues(poi)).toEqual([99, 203, 2, 10, 20]);
+    expect(rawValues(poi)).toEqual([99, 203, 2, 10, 20, null, null]);
     // Stock moves in pieces; 37 short of the 240 ordered.
     expect(rawValues(stmtWith('INSERT INTO "WarehouseStock"'))).toEqual([1, 1, 203, 37]);
     // Still four statements — the box columns ride on the existing update.
     expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(4);
   });
 
+  // The report that added the carton level: "1 carton × 8 packets × 20 pieces".
+  it('records how many packets came as whole cartons', async () => {
+    setAdminSession(1);
+    wireReads({ items: [{ id: 99, itemId: 1, quantityRequested: 1000 }], cost: 0.3 });
+
+    // 6 cartons of 8 × 20 + 3 packets + 5 pieces = 1,025; 49.60 a carton → 0.31 a piece.
+    const r = await completePurchaseOrder(700, [
+      { purchaseOrderItemId: 99, quantityReceived: 1025, costPerUnit: 0.31,
+        boxesReceived: 51, piecesPerBox: 20, cartonsReceived: 6, packetsPerCarton: 8,
+        price_standard: 1, price_hospital: 1, price_hotel: 1 },
+    ]);
+    expect(r.success).toBe(true);
+
+    const poi = stmtWith('UPDATE "PurchaseOrderItem"');
+    expect(rawSql(poi)).toContain('"cartonsReceived" = v.cartons');
+    expect(rawSql(poi)).toContain('"packetsPerCarton" = v.per_carton');
+    expect(rawValues(poi)).toEqual([99, 1025, 0.31, 51, 20, 6, 8]);
+    // The carton columns ride on the same update: still four statements.
+    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(4);
+  });
+
   it.each([
+    ['cartons worth more packets than were received', { quantityReceived: 1000, boxesReceived: 10, piecesPerBox: 20, cartonsReceived: 2, packetsPerCarton: 8 }],
+    ['cartons with no packets per carton', { quantityReceived: 1000, boxesReceived: 50, piecesPerBox: 20, cartonsReceived: 6, packetsPerCarton: null }],
     ['boxes worth more pieces than were received', { quantityReceived: 200, boxesReceived: 10, piecesPerBox: 24 }],
     ['a box size with no box count', { quantityReceived: 240, boxesReceived: null, piecesPerBox: 24 }],
     ['a box of zero', { quantityReceived: 0, boxesReceived: 10, piecesPerBox: 0 }],
