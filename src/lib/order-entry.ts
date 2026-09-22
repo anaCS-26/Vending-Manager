@@ -2,41 +2,114 @@
  * Purchase-order drafting rules, as pure functions (no React/Prisma) — the
  * `refill-entry.ts` / `forecast.ts` pattern. `OrderManagerUI` only renders them.
  *
- * The unit throughout is `Item.pieces_per_box`: the supplier's box. Unlike
- * the driver's refill sheet (where a box is the wrong unit — see
- * `refill-entry.ts`), a supplier order really is placed in boxes, so one box
- * is the right default here and nothing about it fabricates a figure: a PO
- * line is a request, and what arrives is counted at receiving.
+ * A supplier order is placed in cartons, so that is the unit a line is typed
+ * in: "5" on SIPP GREEN means 5 cartons of 8 packets of 20, and the line
+ * stores the 800 pieces. A line can be switched to pieces for the odd order
+ * that isn't whole cartons. There is deliberately no "packets" unit: packets
+ * are only the carton's size, and one word with two meanings on one line
+ * confused the client's admin. Unlike the driver's refill sheet (where
+ * a carton is the wrong unit — see `refill-entry.ts`), nothing here fabricates
+ * a figure: a PO line is a request, and what arrives is counted at receiving.
  *
- * This used to be `Item.default_assignment_qty`, the driver batch, for want of
- * a real box size. The two agree for most items but not all — MOVENPICK comes
- * in boxes of 10 and goes out to a driver 3 at a time — so the dispatch-side
- * `+N` keeps the batch and ordering uses the box.
+ * The carton is `Item.pieces_per_box` × `Item.packets_per_carton`, never the
+ * driver batch (`Item.default_assignment_qty`): MOVENPICK comes in cartons of
+ * 10 and goes out to a driver 3 at a time.
  */
 
-export type OrderLine = { itemId: number; quantityRequested: number };
+import { cartonSize, describeCount, hasCarton, levelsOf, type Levels } from "@/lib/packaging";
 
-/** A new line starts at one box; items with no box size start at 1. */
-export function defaultOrderQuantity(batch: number | null | undefined): number {
-    return typeof batch === "number" && Number.isFinite(batch) && batch > 0 ? Math.floor(batch) : 1;
+export type OrderUnit = "carton" | "piece";
+
+/**
+ * `unit` is only set once the admin picks one; until then the line shows the
+ * largest unit its quantity is a whole number of (see `lineUnit`).
+ */
+export type OrderLine = { itemId: number; quantityRequested: number; unit?: OrderUnit };
+
+export const UNIT_LABEL: Record<OrderUnit, { one: string; many: string }> = {
+    carton: { one: "carton", many: "cartons" },
+    piece: { one: "pc", many: "pcs" },
+};
+
+/** The units an item can be ordered in, biggest first. */
+export function unitsFor(l: Levels): OrderUnit[] {
+    const units: OrderUnit[] = [];
+    if (hasCarton(l)) units.push("carton");
+    units.push("piece");
+    return units;
+}
+
+/** Pieces in one of `unit`. */
+export function unitSize(unit: OrderUnit, l: Levels): number {
+    return unit === "carton" ? cartonSize(l) : 1;
 }
 
 /**
- * One tap of a ±case button. A line never drops below 1 — a line at zero is a
- * line the admin should delete, and `createPurchaseOrder` rejects it. A `−case`
- * that would cross that floor is refused rather than clamped: clamping 24 − 24
- * to 1 makes the next `+24` land on 25, which is no number of cases.
+ * The unit a line is shown in: the one the admin picked, as long as the
+ * quantity is still a whole number of it — otherwise the biggest unit that
+ * divides it exactly. A repeated order of 700 SIPP GREEN shows as 700 pcs,
+ * never as a rounded 4 or 5 cartons: nothing here changes a quantity unasked.
  */
-export function adjustOrderQuantity(current: number, delta: number): number {
-    if (!Number.isFinite(current) || !Number.isFinite(delta)) return 1;
-    const next = Math.floor(current + delta);
-    return next >= 1 ? next : Math.max(1, Math.floor(current));
+export function lineUnit(line: OrderLine, l: Levels): OrderUnit {
+    const units = unitsFor(l);
+    if (line.unit && units.includes(line.unit) && line.quantityRequested % unitSize(line.unit, l) === 0) return line.unit;
+    return units.find((u) => line.quantityRequested % unitSize(u, l) === 0) ?? "piece";
 }
 
-/** Smallest whole number of boxes covering `qty` (suppliers don't split one). */
-export function roundUpToBatch(qty: number, batch: number | null | undefined): number {
+/** The number typed in the line's box, in its unit. */
+export function lineCount(line: OrderLine, l: Levels): number {
+    return line.quantityRequested / unitSize(lineUnit(line, l), l);
+}
+
+/** The line after typing `count` into its box. */
+export function withCount(line: OrderLine, count: number, l: Levels): OrderLine {
+    const unit = lineUnit(line, l);
+    const n = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+    return { ...line, unit, quantityRequested: n * unitSize(unit, l) };
+}
+
+/**
+ * The line in another unit. Rounds UP to whole units — suppliers don't split a
+ * carton, and rounding down could empty the line.
+ */
+export function withUnit(line: OrderLine, unit: OrderUnit, l: Levels): OrderLine {
+    const size = unitSize(unit, l);
+    return { ...line, unit, quantityRequested: Math.max(1, Math.ceil(line.quantityRequested / size)) * size };
+}
+
+/**
+ * One tap of − or +, by one of the line's unit. A line never drops below one
+ * unit — a line at zero is a line the admin should delete, and
+ * `createPurchaseOrder` rejects it. A − that would cross that floor is refused
+ * rather than clamped.
+ */
+export function stepLine(line: OrderLine, delta: 1 | -1, l: Levels): OrderLine {
+    const unit = lineUnit(line, l);
+    const count = lineCount(line, l) + delta;
+    return count >= 1 ? { ...line, unit, quantityRequested: count * unitSize(unit, l) } : line;
+}
+
+/** A new line starts at one carton; items with no carton size start at 1. */
+export function defaultOrderQuantity(carton: number | null | undefined): number {
+    return typeof carton === "number" && Number.isFinite(carton) && carton > 0 ? Math.floor(carton) : 1;
+}
+
+/**
+ * Where a newly added line starts: what was ordered of this item last time,
+ * rounded up to whole cartons, so a routine order is mostly Enter, Enter.
+ * Always whole cartons, so the line opens in cartons and typing "5" means 5
+ * cartons — an old order of 700 SIPP GREEN would otherwise open as "700 pcs"
+ * and the 5 would become 5 pieces. Never less than one carton.
+ */
+export function startingQuantity(carton: number, lastOrdered: number | null | undefined): number {
+    const oneCarton = defaultOrderQuantity(carton);
+    return typeof lastOrdered === "number" && Number.isFinite(lastOrdered) && lastOrdered > oneCarton ? roundUpToBatch(lastOrdered, oneCarton) : oneCarton;
+}
+
+/** Smallest whole number of cartons covering `qty` (suppliers don't split one). */
+export function roundUpToBatch(qty: number, carton: number | null | undefined): number {
     if (!Number.isFinite(qty) || qty <= 0) return 0;
-    const size = defaultOrderQuantity(batch);
+    const size = defaultOrderQuantity(carton);
     return Math.ceil(qty / size) * size;
 }
 
@@ -88,12 +161,13 @@ export function linesFromPreviousOrder(
 
 /**
  * Lines covering what the supplier still owes this warehouse
- * (`WarehouseStock.pending_deficit`), rounded up to whole boxes.
+ * (`WarehouseStock.pending_deficit`), rounded up to whole cartons.
  */
 export function linesFromDeficits(
     items: Array<{
         id: number;
         pieces_per_box: number | null;
+        packets_per_carton?: number | null;
         WarehouseStock?: Array<{ warehouseId: number; pending_deficit?: number }>;
     }>,
     warehouseId: number,
@@ -102,8 +176,52 @@ export function linesFromDeficits(
     for (const item of items) {
         const deficit = item.WarehouseStock?.find((ws) => ws.warehouseId === warehouseId)?.pending_deficit ?? 0;
         if (deficit > 0) {
-            lines.push({ itemId: item.id, quantityRequested: roundUpToBatch(deficit, item.pieces_per_box) });
+            lines.push({ itemId: item.id, quantityRequested: roundUpToBatch(deficit, cartonSize(levelsOf(item))) });
         }
     }
     return lines;
+}
+
+export type LastOrdered = { quantity: number; orderId: number; date: Date };
+
+/**
+ * The most recent quantity requested of each item, across orders that weren't
+ * cancelled. Feeds the starting quantity of a new line and its "Last time" hint.
+ */
+export function lastOrderedByItem(
+    orders: Array<{ id: number; status: string; createdAt: Date | string; Items: Array<{ itemId: number; quantityRequested: number }> }>,
+): Map<number, LastOrdered> {
+    const newestFirst = orders
+        .filter((o) => o.status !== "CANCELLED")
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const last = new Map<number, LastOrdered>();
+    for (const order of newestFirst) {
+        const inThisOrder = new Map<number, number>();
+        for (const oi of order.Items) inThisOrder.set(oi.itemId, (inThisOrder.get(oi.itemId) ?? 0) + oi.quantityRequested);
+        for (const [itemId, quantity] of inThisOrder) {
+            if (!last.has(itemId) && quantity > 0) last.set(itemId, { quantity, orderId: order.id, date: new Date(order.createdAt) });
+        }
+    }
+    return last;
+}
+
+/** "5 cartons", "4 cartons + 60 pcs", "30 pcs". */
+export function formatOrderQuantity(pieces: number, l: Levels): string {
+    return describeCount(pieces, l) ?? `${pieces.toLocaleString("en-US")} ${pieces === 1 ? "pc" : "pcs"}`;
+}
+
+/**
+ * The order as a plain message for the supplier (WhatsApp, SMS, email), in
+ * cartons — the unit the supplier sells in. `date` arrives pre-formatted so
+ * this stays free of locale code.
+ */
+export function orderAsText(order: {
+    id: number;
+    warehouseName: string;
+    date: string;
+    lines: Array<{ name: string; quantity: number; levels: Levels }>;
+}): string {
+    const head = [`Purchase order PO-${String(order.id).padStart(4, "0")}`, `Deliver to: ${order.warehouseName}`, `Date: ${order.date}`];
+    const body = order.lines.map((l, i) => `${i + 1}. ${l.name} — ${formatOrderQuantity(l.quantity, l.levels)}`);
+    return [...head, "", ...body, "", `${order.lines.length} ${order.lines.length === 1 ? "item" : "items"}`].join("\n");
 }

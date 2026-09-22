@@ -6,7 +6,7 @@ import type { WarehouseWithItem, WarehouseType } from "@/types";
 import type { Item } from "@prisma/client";
 import { cn, formatCurrency } from "@/lib/utils";
 import { DataCard, MobileSortSelect } from "@/components/DataCard";
-import { describeInBoxes } from "@/lib/packaging";
+import { describeCount, levelsOf } from "@/lib/packaging";
 import { CELL, FIT, ItemIdentity, SortableTh, itemDetailLine } from "@/components/StockTableBits";
 import WarehouseAuditModal from "./WarehouseAuditModal";
 import CostCorrectionModal from "./CostCorrectionModal";
@@ -49,7 +49,7 @@ export function deriveWarehouseRow(stock: WarehouseWithItem) {
     return {
         qty,
         isZero: qty === 0,
-        inBoxes: qty === 0 ? null : describeInBoxes(qty, item.pieces_per_box),
+        inCartons: qty === 0 ? null : describeCount(qty, levelsOf(item)),
         owed: stock.pending_deficit > 0 ? stock.pending_deficit : 0,
         cost,
         price: item.price_standard,
@@ -239,9 +239,9 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                     value: (
                                         <>
                                             {r.qty.toLocaleString()}
-                                            {r.inBoxes && (
+                                            {r.inCartons && (
                                                 <span className="block text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                                                    {r.inBoxes}
+                                                    {r.inCartons}
                                                 </span>
                                             )}
                                         </>
@@ -315,8 +315,8 @@ export default function WarehouseInventoryTable({ inventory, warehouses, existin
                                                 <div className={cn("text-sm font-bold", r.isZero ? "text-accent-orange" : "text-slate-900 dark:text-white")}>
                                                     {r.isZero ? "0 · empty" : r.qty.toLocaleString()}
                                                 </div>
-                                                {r.inBoxes && (
-                                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">{r.inBoxes}</div>
+                                                {r.inCartons && (
+                                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">{r.inCartons}</div>
                                                 )}
                                                 {r.owed > 0 && (
                                                     <div className="text-[10px] font-semibold text-accent-orange leading-tight">

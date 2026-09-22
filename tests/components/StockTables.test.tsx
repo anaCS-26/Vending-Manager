@@ -13,7 +13,7 @@ vi.mock('next-themes', () => ({ useTheme: () => ({ resolvedTheme: 'dark' }) }));
 const item = (over: Record<string, unknown> = {}) => ({
     id: 1, name: 'Cola', sku: '0001', category: 'Uncategorized', bulk_format: '24*330ML',
     cost: 1.5, price_standard: 3, price_hospital: 3, price_hotel: 4,
-    pieces_per_box: 24, piece_size: 330, piece_size_unit: 'ml',
+    pieces_per_box: 24, packets_per_carton: null, piece_size: 330, piece_size_unit: 'ml',
     ...over,
 });
 
@@ -40,8 +40,8 @@ describe('StockTableBits', () => {
     });
 
     it('detail line is packaging then category, only what is set', () => {
-        expect(itemDetailLine(item())).toBe('Box of 24 × 330 ml');
-        expect(itemDetailLine(item({ category: 'Snack' }))).toBe('Box of 24 × 330 ml · Snack');
+        expect(itemDetailLine(item())).toBe('Carton of 24 × 330 ml');
+        expect(itemDetailLine(item({ category: 'Snack' }))).toBe('Carton of 24 × 330 ml · Snack');
         // No structured packaging: fall back to the raw bulk format string.
         expect(itemDetailLine(item({ pieces_per_box: null, piece_size: null, piece_size_unit: null }))).toBe('24*330ML');
         expect(itemDetailLine(item({ pieces_per_box: null, piece_size: null, piece_size_unit: null, bulk_format: null }))).toBeNull();
@@ -49,12 +49,19 @@ describe('StockTableBits', () => {
 });
 
 describe('deriveWarehouseRow', () => {
-    it('folds owed stock, boxes and tier prices into one shape', () => {
+    it('folds owed stock, cartons and tier prices into one shape', () => {
         const r = deriveWarehouseRow(wRow({ quantity_on_hand: 50, pending_deficit: 24 }));
         expect(r).toMatchObject({ qty: 50, isZero: false, owed: 24, cost: 1.5, price: 3, value: 75, location: 'Riyadh Central' });
-        expect(r.inBoxes).toBe('2 boxes + 2 pcs');
+        expect(r.inCartons).toBe('2 cartons + 2 pcs');
         // Hotel differs from standard, so the tier line shows.
         expect(r.tierPrices).toEqual({ hospital: 3, hotel: 4 });
+    });
+
+    // SIPP GREEN in production: a carton of 8 packets of 20.
+    it('counts a carton of packets as cartons, then loose pieces', () => {
+        const r = deriveWarehouseRow(wRow({ quantity_on_hand: 3384 }, { pieces_per_box: 20, packets_per_carton: 8 }));
+        expect(r.inCartons).toBe('21 cartons + 24 pcs');
+        expect(itemDetailLine(item({ pieces_per_box: 20, packets_per_carton: 8, piece_size: 5, piece_size_unit: 'g' }))).toBe('Carton of 8 packets × 20 × 5 g');
     });
 
     it('drops the tier line when every tier equals the standard price', () => {
@@ -62,10 +69,10 @@ describe('deriveWarehouseRow', () => {
         expect(r.tierPrices).toBeNull();
     });
 
-    it('an empty row has no box breakdown', () => {
+    it('an empty row has no carton breakdown', () => {
         const r = deriveWarehouseRow(wRow({ quantity_on_hand: 0 }));
         expect(r.isZero).toBe(true);
-        expect(r.inBoxes).toBeNull();
+        expect(r.inCartons).toBeNull();
         expect(r.value).toBe(0);
     });
 });

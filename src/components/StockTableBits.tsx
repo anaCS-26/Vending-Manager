@@ -30,7 +30,7 @@ export function showCategory(category: string | null | undefined): string | null
 }
 
 /** One line under the item name: packaging, then category — only what's set. */
-export function itemDetailLine(item: Pick<Item, "category" | "bulk_format" | "pieces_per_box" | "piece_size" | "piece_size_unit">): string | null {
+export function itemDetailLine(item: Pick<Item, "category" | "bulk_format" | "pieces_per_box" | "packets_per_carton" | "piece_size" | "piece_size_unit">): string | null {
     const parts = [describePackaging(item) ?? item.bulk_format?.trim() ?? null, showCategory(item.category)].filter(
         (p): p is string => !!p,
     );
@@ -47,7 +47,7 @@ export function ItemIdentity({
     index,
     className,
 }: {
-    item: Pick<Item, "name" | "sku" | "category" | "bulk_format" | "pieces_per_box" | "piece_size" | "piece_size_unit">;
+    item: Pick<Item, "name" | "sku" | "category" | "bulk_format" | "pieces_per_box" | "packets_per_carton" | "piece_size" | "piece_size_unit">;
     /** Row number when the cards show it inline (the table has its own column). */
     index?: number;
     className?: string;

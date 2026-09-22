@@ -9,7 +9,10 @@ import type { Bilingual } from "@/lib/error-codes";
  * doesn't exist — the Load Template button shipped with zero templates and sat
  * unused for weeks. So telling people is part of shipping:
  *
- *   1. Add an entry to the TOP of WHATS_NEW in the PR that ships the feature.
+ *   1. Add ONE entry to the TOP of WHATS_NEW in the PR that ships the feature —
+ *      one card per change the client notices, not one per screen it touches.
+ *      Three cards for one change is how a reader learns to skip the page;
+ *      detail that only matters on one screen belongs on that screen.
  *   2. Give it a short silent clip when the feature is a gesture ("press Enter,
  *      the cursor jumps") — a clip needs no translation. Drop the file in
  *      public/whats-new/ (mp4/H.264 — iOS Safari won't play webm).
@@ -17,10 +20,17 @@ import type { Bilingual } from "@/lib/error-codes";
  *   4. If the change alters something an older entry describes, set that
  *      entry's `supersededBy` to the new id. Never delete or rewrite it.
  *
- * The first time each user opens the app after a deploy they get the unseen
- * entries as a card stack (WhatsNewPrompt); the full list lives permanently at
- * /admin/whats-new and /driver/whats-new. Dismissals are recorded server-side
- * (`AnnouncementSeen`) so /super/support can show who has seen what.
+ * Three places show a note:
+ *   - WhatsNewPrompt: the first time each user opens the app after a deploy,
+ *     the unseen entries as a card stack. Dismissals are recorded server-side
+ *     (`AnnouncementSeen`) so /super/support can show who has seen what.
+ *   - WhatsNewHint (admin): a one-line "New on this page" strip on the screen
+ *     an entry's `href` points at, for HINT_DAYS after it ships, until closed
+ *     on that device. People learn a feature while doing the task, not in a
+ *     reading session — so `href` should be the page where the change is.
+ *   - /admin/whats-new and /driver/whats-new: the latest release open, older
+ *     notes one title per row by month, outdated notes behind one link
+ *     (`pageSections`).
  *
  * Rules for the copy, because the reader is a non-technical operator:
  * say what they can now DO, never how it works. "Big invoices no longer fail
@@ -65,6 +75,28 @@ export type WhatsNewEntry = {
 /** Newest first. */
 export const WHATS_NEW: WhatsNewEntry[] = [
     {
+        id: "2026-09-order-in-cartons",
+        date: "2026-09-22",
+        audience: ["admin"],
+        title: {
+            en: "Orders and deliveries now count in cartons",
+            ar: "الطلبات والاستلام صارت بالكرتون",
+        },
+        body: {
+            en: "In Manage Orders, type how many cartons you want; the app works out the pieces (1 carton = 8 packets × 20 = 160). When the delivery comes, press Start Receipt and just check the cartons and the price of one carton. “Copy order” turns an order into a WhatsApp message.",
+            ar: "في «إدارة الطلبات» (Manage Orders) اكتب عدد الكراتين التي تريدها، والتطبيق يحسب الحبّات بنفسه (كرتون واحد = 8 باكيت × 20 = 160 حبة). عند وصول البضاعة، اضغط «بدء الاستلام» (Start Receipt) وراجع فقط عدد الكراتين وسعر الكرتون الواحد. زر «Copy order» يحوّل الطلبية إلى رسالة واتساب.",
+        },
+        media: {
+            type: "image",
+            src: "/whats-new/receive-cartons.jpg",
+            alt: {
+                en: "A delivery line: 5 cartons = 800 pieces, with 1 carton = 8 packets × 20 = 160 pieces written underneath, then the price of one carton.",
+                ar: "سطر استلام: 5 كراتين = 800 حبة، ومكتوب تحته: كرتون واحد = 8 باكيت × 20 = 160 حبة، ثم سعر الكرتون الواحد.",
+            },
+        },
+        href: "/admin/orders",
+    },
+    {
         id: "2026-09-stock-tables-fit-screen",
         date: "2026-09-19",
         audience: ["admin"],
@@ -91,6 +123,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "عند وصول شحنة، افتح «إدارة الطلبات» (Manage Orders) ثم «الاستلامات المعلّقة» (Pending Receipts) واضغط «بدء الاستلام» (Start Receipt). لكل صنف، اكتب عدد الكراتين وسعر الكرتون الواحد كما هو في فاتورة المورّد، والتطبيق يحسب عدد الحبّات وسعر الحبّة بنفسه. يبقى المخزون محسوباً بالحبّة ويُصرف للسائقين بالحبّة. إذا كان الكرتون في هذه الشحنة يحتوي عدداً مختلفاً (20 بدل 24)، غيّر خانة «Pcs / box» في ذلك السطر، وهذا يغيّر هذه الشحنة فقط. استخدم خانة «Loose pcs» للحبّات التي وصلت خارج كرتون كامل. إذا ظهر تنبيه برتقالي بأن سعر الحبّة أعلى من سعر بيعها، راجع حجم الكرتون والسعر قبل الإنهاء. ويظهر الآن في «سجل الطلبات» (Order History) كيف تم عدّ كل سطر.",
         },
         href: "/admin/orders",
+        // "Box" was the packet for 26 items; receiving now counts cartons, packets and pieces.
+        supersededBy: "2026-09-order-in-cartons",
     },
     {
         id: "2026-09-item-box-size",
@@ -105,6 +139,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "يظهر الآن حجم الكرتون لكل صنف، مثلاً «Box of 24 × 50 g» (كرتون فيه 24 حبة، وزن الحبة 50 غرام)، في صفحات الأصناف والطلبات ومخزون المستودع، ويعرض مخزون المستودع عدد الكراتين أيضاً. الطلبات الجديدة تبدأ بكرتون واحد، وزرّا + و − يضيفان أو ينقصان كرتوناً كاملاً. لتغيير حجم الكرتون لصنف: افتح «إدارة النظام» (Manage System) واختر تبويب «الأصناف» (Items). ابحث عن الصنف، ومرّر الفأرة فوق بطاقته واضغط على أيقونة القلم في الزاوية العليا. غيّر «Pieces per box» (وكذلك «Size of one piece» إن لزم)، ثم اضغط «Save». اترك «Pieces per box» فارغاً إذا كان الصنف يأتي بالحبّة. بعض الأصناف ليس لها حجم كرتون بعد — أضِفه بالطريقة نفسها.",
         },
         href: "/admin/manage",
+        // "Pieces per box" is now "Packets per carton" + "Pieces per packet".
+        supersededBy: "2026-09-order-in-cartons",
     },
     {
         id: "2026-09-return-to-warehouse",
@@ -195,8 +231,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "كل صنف جديد في الطلبية يبدأ الآن بكرتون كامل بدلاً من حبة واحدة، مع أزرار لإضافة كرتون أو إزالته. وزر «تكرار آخر طلبية» ينسخ طلبيتك السابقة لتعدّل ما اختلف فقط.",
         },
         href: "/admin/orders",
-        // The "case" here was the driver batch; orders now start at the item's real box.
-        supersededBy: "2026-09-item-box-size",
+        // The "case" here was the driver batch; orders are now typed in the item's real cartons.
+        supersededBy: "2026-09-order-in-cartons",
     },
     {
         id: "2026-09-driver-return",
@@ -270,6 +306,86 @@ export function unseenEntries(
 /** The newer note that replaced this one, if any. */
 export function replacementFor(entry: WhatsNewEntry, entries: WhatsNewEntry[] = WHATS_NEW): WhatsNewEntry | undefined {
     return entry.supersededBy ? entries.find((e) => e.id === entry.supersededBy) : undefined;
+}
+
+/** How long a note keeps its "New on this page" strip. */
+export const HINT_DAYS = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Noon in Riyadh on the entry's day, so the day boundary can't flip it. */
+const entryTime = (e: WhatsNewEntry) => new Date(`${e.date}T12:00:00+03:00`).getTime();
+
+/**
+ * The note to show as a "New on this page" strip on `pathname`, if any: the
+ * newest current entry whose `href` is this page (or a page under it), shipped
+ * within HINT_DAYS of `now`, and not closed on this device. Outdated notes
+ * never hint — they would teach the old way on the very screen that changed.
+ */
+export function hintFor(
+    pathname: string,
+    entries: WhatsNewEntry[],
+    dismissedIds: Iterable<string>,
+    now: Date,
+): WhatsNewEntry | null {
+    const dismissed = new Set(dismissedIds);
+    return (
+        entries.find(
+            (e) =>
+                !e.supersededBy &&
+                !!e.href &&
+                (pathname === e.href || pathname.startsWith(`${e.href}/`)) &&
+                !dismissed.has(e.id) &&
+                now.getTime() - entryTime(e) <= HINT_DAYS * DAY_MS &&
+                now.getTime() >= entryTime(e) - DAY_MS,
+        ) ?? null
+    );
+}
+
+/**
+ * The notes worth sending to the browser for hints: current, with a page, and
+ * young enough to hint (a day of slack either side, since `hintFor` re-checks
+ * against the browser's clock). Keeps the whole catalogue out of every page.
+ */
+export function hintCandidates(entries: WhatsNewEntry[], now: Date): WhatsNewEntry[] {
+    return entries.filter(
+        (e) => !e.supersededBy && !!e.href && now.getTime() - entryTime(e) <= (HINT_DAYS + 1) * DAY_MS,
+    );
+}
+
+/** At most this many notes open at the top of the page. */
+export const LATEST_LIMIT = 3;
+
+/**
+ * How the What's New page lays notes out, so the reader meets the newest
+ * release first and a short list of titles after it — not a wall of every
+ * note ever written, in two languages.
+ *
+ * - `latest`: the newest release — current notes sharing the newest note's
+ *   date, at most LATEST_LIMIT — shown open. Anchored on the newest note
+ *   rather than today, so the page is the same however long ago it was built.
+ *   (A 7-day window opened six notes on the day it was tried.)
+ * - `earlier`: the other current notes, grouped by month ("YYYY-MM"), newest
+ *   month first, shown as one title per row that opens on tap.
+ * - `outdated`: notes a newer one replaced, behind a single link.
+ */
+export function pageSections(entries: WhatsNewEntry[]): {
+    latest: WhatsNewEntry[];
+    earlier: { month: string; entries: WhatsNewEntry[] }[];
+    outdated: WhatsNewEntry[];
+} {
+    const current = entries.filter((e) => !e.supersededBy);
+    const outdated = entries.filter((e) => !!e.supersededBy);
+    const newestDate = current.reduce((max, e) => (e.date > max ? e.date : max), "");
+    const latest = current.filter((e) => e.date === newestDate).slice(0, LATEST_LIMIT);
+    const earlier: { month: string; entries: WhatsNewEntry[] }[] = [];
+    for (const e of current) {
+        if (latest.includes(e)) continue;
+        const month = e.date.slice(0, 7);
+        const group = earlier.find((g) => g.month === month);
+        if (group) group.entries.push(e);
+        else earlier.push({ month, entries: [e] });
+    }
+    return { latest, earlier, outdated };
 }
 
 /**

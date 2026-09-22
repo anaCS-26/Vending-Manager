@@ -5,6 +5,9 @@ import {
   WHATS_NEW,
   audienceForRole,
   entriesFor,
+  hintCandidates,
+  hintFor,
+  pageSections,
   replacementFor,
   unseenEntries,
   validEntryIds,
@@ -100,5 +103,79 @@ describe('audience + seen rules', () => {
 
   it('validEntryIds drops unknown ids, other audiences, non-strings and duplicates', () => {
     expect(validEntryIds('driver', ['a', 'a', 'c', 'nope', 42, null, "'; DROP TABLE"], SAMPLE)).toEqual(['a']);
+  });
+});
+
+// A dated note on a page, for the hint and page-layout rules.
+const note = (id: string, date: string, extra: Partial<WhatsNewEntry> = {}): WhatsNewEntry => ({
+  ...entry(id, ['admin']), date, href: '/admin/orders', ...extra,
+});
+
+describe('"New on this page" hints', () => {
+  const now = new Date('2026-09-25T10:00:00+03:00');
+  const entries = [note('cartons', '2026-09-22'), note('older', '2026-09-10'), note('stock', '2026-09-19', { href: '/admin/warehouse' })];
+
+  it('shows the newest recent note for this page, and on pages under it', () => {
+    expect(hintFor('/admin/orders', entries, [], now)?.id).toBe('cartons');
+    expect(hintFor('/admin/orders/29', entries, [], now)?.id).toBe('cartons');
+    expect(hintFor('/admin/warehouse', entries, [], now)?.id).toBe('stock');
+  });
+
+  it('does not match a page that merely starts with the same letters', () => {
+    expect(hintFor('/admin/orders-archive', entries, [], now)).toBeNull();
+  });
+
+  it('falls back to the next note once the newest is closed on this device', () => {
+    expect(hintFor('/admin/orders', entries, ['cartons'], now)?.id).toBe('older');
+    expect(hintFor('/admin/orders', entries, ['cartons', 'older'], now)).toBeNull();
+  });
+
+  it('stops hinting a month after the note shipped', () => {
+    expect(hintFor('/admin/orders', entries, [], new Date('2026-10-21T10:00:00+03:00'))?.id).toBe('cartons');
+    expect(hintFor('/admin/orders', entries, [], new Date('2026-10-23T10:00:00+03:00'))).toBeNull();
+  });
+
+  it('never hints an outdated note — it would teach the old way on the screen that changed', () => {
+    expect(hintFor('/admin/orders', [note('cartons', '2026-09-22', { supersededBy: 'x' })], [], now)).toBeNull();
+  });
+
+  it('only sends the browser notes young enough to hint', () => {
+    const ids = hintCandidates([...entries, note('ancient', '2026-06-01'), note('nopage', '2026-09-22', { href: undefined })], now).map((e) => e.id);
+    expect(ids).toEqual(['cartons', 'older', 'stock']);
+  });
+});
+
+describe("What's New page layout", () => {
+  it('opens the latest release, lists the rest by month, and tucks outdated notes away', () => {
+    const { latest, earlier, outdated } = pageSections([
+      note('cartons', '2026-09-22'),
+      note('stock', '2026-09-19'),
+      { ...note('boxes', '2026-09-19'), supersededBy: 'cartons' },
+      note('enter', '2026-09-10'),
+      note('push', '2026-08-10'),
+    ]);
+    expect(latest.map((e) => e.id)).toEqual(['cartons']);
+    expect(earlier).toEqual([
+      { month: '2026-09', entries: [expect.objectContaining({ id: 'stock' }), expect.objectContaining({ id: 'enter' })] },
+      { month: '2026-08', entries: [expect.objectContaining({ id: 'push' })] },
+    ]);
+    expect(outdated.map((e) => e.id)).toEqual(['boxes']);
+  });
+
+  it('opens at most three notes, even on a busy release day', () => {
+    const day = ['a', 'b', 'c', 'd'].map((id) => note(id, '2026-09-22'));
+    const { latest, earlier } = pageSections(day);
+    expect(latest.map((e) => e.id)).toEqual(['a', 'b', 'c']);
+    expect(earlier[0].entries.map((e) => e.id)).toEqual(['d']);
+  });
+
+  it('anchors "latest" on the newest note, not on today', () => {
+    expect(pageSections([note('only', '2025-01-01')]).latest.map((e) => e.id)).toEqual(['only']);
+  });
+
+  // The worry that prompted the page layout: one change announced as three cards.
+  it('the shipped latest release is short enough to read in one go', () => {
+    const { latest } = pageSections(entriesFor('admin'));
+    expect(latest.length).toBeLessThanOrEqual(3);
   });
 });

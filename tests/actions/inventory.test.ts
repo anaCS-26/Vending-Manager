@@ -579,6 +579,27 @@ describe('updateItem packaging', () => {
     });
   });
 
+  it('saves packets per carton with the packet size', async () => {
+    setAdminSession(1);
+    prismaMock.item.findUnique.mockResolvedValue(makeItem() as any);
+    prismaMock.item.update.mockResolvedValue(makeItem() as any);
+    const r = await updateItem(1, 'SIPP GREEN', 'Snacks', '0081', 1, 1, 1, '8*20*5GM', 20, {
+      pieces_per_box: 20, packets_per_carton: 8, piece_size: 5, piece_size_unit: 'g',
+    });
+    expect(r.success).toBe(true);
+    expect(prismaMock.item.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({ pieces_per_box: 20, packets_per_carton: 8 }),
+    });
+  });
+
+  it('rejects packets per carton without a packet size', async () => {
+    setAdminSession(1);
+    const r = await updateItem(1, 'SIPP GREEN', 'Snacks', '0081', 1, 1, 1, '', 20, { pieces_per_box: 0, packets_per_carton: 8 });
+    expect(r.success).toBe(false);
+    expect(prismaMock.item.update).not.toHaveBeenCalled();
+  });
+
   // Callers that don't show the packaging fields must not blank them.
   it('leaves packaging alone when the caller does not send it', async () => {
     setAdminSession(1);
@@ -587,6 +608,7 @@ describe('updateItem packaging', () => {
     await updateItem(1, 'TWIX', 'Chocolate', '0044', 4, 4, 5);
     const data = prismaMock.item.update.mock.calls[0][0].data;
     expect(data).not.toHaveProperty('pieces_per_box');
+    expect(data).not.toHaveProperty('packets_per_carton');
     expect(data).not.toHaveProperty('piece_size');
   });
 

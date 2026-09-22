@@ -56,7 +56,7 @@ $i = 0; do { Start-Sleep 2; docker exec supabase_db_vending pg_isready -U postgr
 
 **When:** any change a client admin or driver would notice (a new screen, button or flow, a changed way of doing something, or a fix to something they hit). **Skip it** for refactors, invisible performance work, tests/docs/tooling, and `/super/*` (the developer's own console). If unsure, add one: a feature nobody is told about doesn't exist for them.
 
-**How:** add an entry at the **top** of `WHATS_NEW` in `src/lib/whats-new.ts`, in the same branch as the feature.
+**How:** add **one** entry at the **top** of `WHATS_NEW` in `src/lib/whats-new.ts`, in the same branch as the feature: one card per change the client notices, even when it touches several screens. Three cards for one change is how a reader learns to skip the page; a detail that only matters on one screen belongs on that screen (helper text), not in another card. Set `href` to the page where the change is: the card also appears there as a "New on this page" strip for 30 days.
 
 - **Short and plain.** Title ≤ 8 words saying what they can now do. Body 1–3 sentences (≤ ~50 words): where to find it (menu and button names exactly as they appear on screen), what to do, and what happens. No internals, no jargon, no percentages. Write the Arabic too (`ar`), just as simple.
 - **Media is your call.** Use a short silent mp4 clip for a gesture or sequence, a cropped screenshot when the hard part is *finding* the button, and nothing when a sentence is enough (most of the time). Recipe: [client-comms.md](docs/agents/client-comms.md#media-you-decide).
@@ -141,7 +141,7 @@ Before reporting: `git fetch origin; git rebase origin/main`. Resolve conflicts 
 | CI, `vercel.json`, npm/lockfile, schema push, RLS, seed scripts | [build-and-deploy.md](docs/agents/build-and-deploy.md) |
 | Guards, login, password reset, sessions, `Driver.pin` | [auth-and-security.md](docs/agents/auth-and-security.md) + skill `vms-security-rbac` |
 | `notifyClients`, push, service worker, the stock-alert cron | [realtime-and-push.md](docs/agents/realtime-and-push.md) |
-| Items, purchase orders, receiving in boxes, WAC, warehouse/machine calibration | [inventory-and-orders.md](docs/agents/inventory-and-orders.md) + skill `vms-accounting-wac` |
+| Items, purchase orders, cartons / packets / pieces, WAC, warehouse/machine calibration | [inventory-and-orders.md](docs/agents/inventory-and-orders.md) + skill `vms-accounting-wac` |
 | Driver bag, assignments, disputes, returns, dispatch templates, batched transactions | [driver-stock.md](docs/agents/driver-stock.md) + skill `vms-audit-trail` |
 | The driver refill sheet (`DriverRefillUI`, `refill-entry.ts`) | [driver-refill.md](docs/agents/driver-refill.md) |
 | `/admin/analytics`, `/admin/financials`, P&L, `/super/*`, AI Lab | [analytics-and-super.md](docs/agents/analytics-and-super.md) |
@@ -162,3 +162,4 @@ Deliberately left open. Don't "discover" these as new bugs, and remove a line wh
 - The legacy dispatch path (`logBatchRefills` dispatch branch, `returnDispatch`) still loops inside the transaction. It's dormant; rewrite it before re-linking `/admin/dispatches`.
 - `formatCurrency` emits the Riyal sign (U+20C1) with no fallback; PWA icon artwork is missing. ([ui](docs/agents/ui-and-mobile.md))
 - A service worker can't save a rotated push subscription; it's re-synced on the next app open.
+- `/admin/orders` loads every purchase order with all its lines (unbounded `findMany`); "Last time" prefills and Repeat last order read from that list. Fine at ~30 orders; page it before it reaches hundreds.

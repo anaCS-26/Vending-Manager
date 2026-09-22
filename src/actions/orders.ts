@@ -98,11 +98,17 @@ export async function completePurchaseOrder(
         purchaseOrderItemId: number;
         /** Pieces — always the source of truth for stock. */
         quantityReceived: number;
-        /** Per piece, excl. VAT (the screen divides the invoice's box price). */
+        /** Per piece, excl. VAT (the screen divides the invoice's carton price). */
         costPerUnit: number;
-        /** How the pieces were counted; recorded on the line, never used for stock. */
+        /**
+         * How the pieces were counted; recorded on the line, never used for
+         * stock. Full packs (packets, or cartons when there are no packets) of
+         * piecesPerBox, and how many of those packets came as whole cartons.
+         */
         boxesReceived?: number | null;
         piecesPerBox?: number | null;
+        cartonsReceived?: number | null;
+        packetsPerCarton?: number | null;
         price_standard: number;
         price_hospital: number;
         price_hotel: number;
@@ -238,8 +244,10 @@ export async function completePurchaseOrder(
                     SET "quantityReceived" = v.qty,
                         "costPerUnit" = v.cost,
                         "boxesReceived" = v.boxes,
-                        "piecesPerBox" = v.per_box
-                    FROM (VALUES ${Prisma.join(lines.map((l) => Prisma.sql`(${l.received.purchaseOrderItemId}::int, ${l.received.quantityReceived}::int, ${l.received.costPerUnit}::double precision, ${l.received.boxesReceived ?? null}::int, ${l.received.piecesPerBox ?? null}::int)`))}) AS v(id, qty, cost, boxes, per_box)
+                        "piecesPerBox" = v.per_box,
+                        "cartonsReceived" = v.cartons,
+                        "packetsPerCarton" = v.per_carton
+                    FROM (VALUES ${Prisma.join(lines.map((l) => Prisma.sql`(${l.received.purchaseOrderItemId}::int, ${l.received.quantityReceived}::int, ${l.received.costPerUnit}::double precision, ${l.received.boxesReceived ?? null}::int, ${l.received.piecesPerBox ?? null}::int, ${l.received.cartonsReceived ?? null}::int, ${l.received.packetsPerCarton ?? null}::int)`))}) AS v(id, qty, cost, boxes, per_box, cartons, per_carton)
                     WHERE poi.id = v.id
                 `;
             }
@@ -333,6 +341,7 @@ export async function createQuickItem(data: {
     category: string;
     bulk_format?: string;
     pieces_per_box?: number | null;
+    packets_per_carton?: number | null;
     piece_size?: number | null;
     piece_size_unit?: string | null;
 }) {
