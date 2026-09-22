@@ -60,9 +60,9 @@ describe('levelsOf', () => {
 });
 
 describe('piecesFromCount / splitCount', () => {
-  it('multiplies cartons and packets out to pieces, loose pieces on top', () => {
-    expect(piecesFromCount({ cartons: 1, packets: 0, pieces: 0 }, SIPP)).toBe(160);
-    expect(piecesFromCount({ cartons: 2, packets: 3, pieces: 5 }, SIPP)).toBe(385);
+  it('multiplies cartons out to pieces, loose pieces on top', () => {
+    expect(piecesFromCount({ cartons: 1, pieces: 0 }, SIPP)).toBe(160);
+    expect(piecesFromCount({ cartons: 4, pieces: 60 }, SIPP)).toBe(700);
     expect(piecesFromCount({ cartons: 22, pieces: 20 }, WATER)).toBe(900);
   });
 
@@ -72,24 +72,23 @@ describe('piecesFromCount / splitCount', () => {
     expect(piecesFromCount({ cartons: 10 }, levelsOf({ pieces_per_box: 20 }))).toBe(200);
   });
 
-  it('only counts packets when the item has them', () => {
-    expect(piecesFromCount({ cartons: 1, packets: 3 }, WATER)).toBe(40);
-  });
-
   it('counts a loose item piece by piece', () => {
     expect(piecesFromCount({ cartons: 5, pieces: 37 }, LOOSE)).toBe(37);
   });
 
   it('never produces negative or fractional pieces', () => {
-    expect(piecesFromCount({ cartons: -3, packets: -1, pieces: -1 }, SIPP)).toBe(0);
-    expect(piecesFromCount({ cartons: 1.9, packets: 1.5, pieces: 2.5 }, SIPP)).toBe(182);
+    expect(piecesFromCount({ cartons: -3, pieces: -1 }, SIPP)).toBe(0);
+    expect(piecesFromCount({ cartons: 1.9, pieces: 2.5 }, SIPP)).toBe(162);
   });
 
-  it('splits pieces into whole cartons, then packets, then what is left', () => {
-    expect(splitCount(3384, SIPP)).toEqual({ cartons: 21, packets: 1, pieces: 4 });
-    expect(splitCount(900, WATER)).toEqual({ cartons: 22, packets: 0, pieces: 20 });
-    expect(splitCount(5, LOOSE)).toEqual({ cartons: 0, packets: 0, pieces: 5 });
-    expect(splitCount(0, SIPP)).toEqual({ cartons: 0, packets: 0, pieces: 0 });
+  // Packets are only the carton's size: what's left over is loose pieces, never
+  // loose packets, so the admin has one number beside the cartons, not two.
+  it('splits pieces into whole cartons and loose pieces', () => {
+    expect(splitCount(700, SIPP)).toEqual({ cartons: 4, pieces: 60 });
+    expect(splitCount(3384, SIPP)).toEqual({ cartons: 21, pieces: 24 });
+    expect(splitCount(900, WATER)).toEqual({ cartons: 22, pieces: 20 });
+    expect(splitCount(5, LOOSE)).toEqual({ cartons: 0, pieces: 5 });
+    expect(splitCount(0, SIPP)).toEqual({ cartons: 0, pieces: 0 });
   });
 
   it('round-trips', () => {
@@ -101,10 +100,10 @@ describe('piecesFromCount / splitCount', () => {
 });
 
 describe('recordCount', () => {
-  it('stores packets and whole cartons for an item with packets', () => {
-    // 2 cartons of 8 + 3 packets = 19 full packets, 16 of them in cartons.
-    expect(recordCount({ cartons: 2, packets: 3, pieces: 5 }, SIPP)).toEqual({
-      boxesReceived: 19, piecesPerBox: 20, cartonsReceived: 2, packetsPerCarton: 8,
+  it('stores the cartons and the packets inside them for an item with packets', () => {
+    // 4 cartons of 8 = 32 full packets; the 60 loose pieces are what's left.
+    expect(recordCount({ cartons: 4, pieces: 60 }, SIPP)).toEqual({
+      boxesReceived: 32, piecesPerBox: 20, cartonsReceived: 4, packetsPerCarton: 8,
     });
   });
 
@@ -121,7 +120,7 @@ describe('recordCount', () => {
   });
 
   it('always passes the server check for what it produces', () => {
-    for (const [count, l] of [[{ cartons: 2, packets: 3, pieces: 5 }, SIPP], [{ cartons: 22, pieces: 20 }, WATER], [{ pieces: 30 }, LOOSE]] as const) {
+    for (const [count, l] of [[{ cartons: 4, pieces: 60 }, SIPP], [{ cartons: 22, pieces: 20 }, WATER], [{ pieces: 30 }, LOOSE]] as const) {
       expect(checkReceivedBoxes({ quantityReceived: piecesFromCount(count, l), ...recordCount(count, l) })).toBeNull();
     }
   });
@@ -181,8 +180,9 @@ describe('describing packaging', () => {
     expect(describeCartonSum(LOOSE)).toBeNull();
   });
 
-  it('shows a piece count as cartons, packets and pieces', () => {
-    expect(describeCount(3384, SIPP)).toBe('21 cartons + 1 packet + 4 pcs');
+  it('shows a piece count as cartons and pieces', () => {
+    expect(describeCount(3384, SIPP)).toBe('21 cartons + 24 pcs');
+    expect(describeCount(700, SIPP)).toBe('4 cartons + 60 pcs');
     expect(describeCount(160, SIPP)).toBe('1 carton');
     expect(describeCount(1000, levelsOf({ pieces_per_box: 24 }))).toBe('41 cartons + 16 pcs');
     expect(describeCount(5, WATER)).toBe('5 pcs');
@@ -191,8 +191,9 @@ describe('describing packaging', () => {
   });
 
   it('describes how a received line was counted', () => {
+    expect(describeReceivedLine({ quantityReceived: 700, boxesReceived: 32, piecesPerBox: 20, cartonsReceived: 4, packetsPerCarton: 8 })).toBe('4 cartons of 8 × 20 + 60 pcs');
+    // Loose packets are never recorded now, but the server accepts them, so one still reads.
     expect(describeReceivedLine({ quantityReceived: 385, boxesReceived: 19, piecesPerBox: 20, cartonsReceived: 2, packetsPerCarton: 8 })).toBe('2 cartons of 8 × 20 + 3 packets + 5 pcs');
-    expect(describeReceivedLine({ quantityReceived: 60, boxesReceived: 3, piecesPerBox: 20, cartonsReceived: 0, packetsPerCarton: 8 })).toBe('3 packets');
     expect(describeReceivedLine({ quantityReceived: 200, boxesReceived: 10, piecesPerBox: 20 })).toBe('10 cartons of 20');
     expect(describeReceivedLine({ quantityReceived: 243, boxesReceived: 10, piecesPerBox: 24 })).toBe('10 cartons of 24 + 3 pcs');
     // Received before counting existed, or counted in pieces.

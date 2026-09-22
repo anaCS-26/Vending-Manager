@@ -58,9 +58,9 @@ describe('deriveWarehouseRow', () => {
     });
 
     // SIPP GREEN in production: a carton of 8 packets of 20.
-    it('counts a carton of packets as cartons, then packets, then pieces', () => {
+    it('counts a carton of packets as cartons, then loose pieces', () => {
         const r = deriveWarehouseRow(wRow({ quantity_on_hand: 3384 }, { pieces_per_box: 20, packets_per_carton: 8 }));
-        expect(r.inCartons).toBe('21 cartons + 1 packet + 4 pcs');
+        expect(r.inCartons).toBe('21 cartons + 24 pcs');
         expect(itemDetailLine(item({ pieces_per_box: 20, packets_per_carton: 8, piece_size: 5, piece_size_unit: 'g' }))).toBe('Carton of 8 packets × 20 × 5 g');
     });
 

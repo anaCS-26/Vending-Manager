@@ -43,7 +43,7 @@ describe('startingQuantity', () => {
     expect(startingQuantity(160, 800)).toBe(800);
   });
 
-  // Found in the browser: 700 opened as "35 packets", so typing 5 ordered 5 packets.
+  // Found in the browser: 700 opened in a smaller unit, so typing 5 didn't mean 5 cartons.
   it('rounds last time up to whole cartons, so the line opens in cartons', () => {
     expect(startingQuantity(160, 700)).toBe(800);
     expect(startingQuantity(40, 900)).toBe(920);
@@ -61,17 +61,17 @@ describe('startingQuantity', () => {
 });
 
 describe('order units', () => {
-  it('offers only the units an item has, biggest first', () => {
-    expect(unitsFor(SIPP)).toEqual(['carton', 'packet', 'piece']);
+  // No "packets" unit: packets are only the carton's size, and one word with
+  // two meanings on one line confused the admin.
+  it('offers cartons and pieces only, biggest first', () => {
+    expect(unitsFor(SIPP)).toEqual(['carton', 'piece']);
     expect(unitsFor(WATER)).toEqual(['carton', 'piece']);
     expect(unitsFor(LOOSE)).toEqual(['piece']);
   });
 
   it('knows how many pieces each unit is', () => {
     expect(unitSize('carton', SIPP)).toBe(160);
-    expect(unitSize('packet', SIPP)).toBe(20);
     expect(unitSize('piece', SIPP)).toBe(1);
-    expect(unitSize('packet', WATER)).toBe(1);
   });
 
   // The report: the admin typing an order works in cartons.
@@ -82,9 +82,9 @@ describe('order units', () => {
   });
 
   it('shows an inherited quantity in the biggest unit that divides it — never rounded', () => {
-    // A repeated order of 700 SIPP is 35 packets, not "4 or 5 cartons".
-    expect(lineUnit({ itemId: 1, quantityRequested: 700 }, SIPP)).toBe('packet');
-    expect(lineCount({ itemId: 1, quantityRequested: 700 }, SIPP)).toBe(35);
+    // A repeated order of 700 SIPP is 700 pcs, not "4 or 5 cartons".
+    expect(lineUnit({ itemId: 1, quantityRequested: 700 }, SIPP)).toBe('piece');
+    expect(lineCount({ itemId: 1, quantityRequested: 700 }, SIPP)).toBe(700);
     expect(lineUnit({ itemId: 1, quantityRequested: 900 }, WATER)).toBe('piece');
     expect(lineUnit({ itemId: 1, quantityRequested: 800 }, SIPP)).toBe('carton');
   });
@@ -106,14 +106,14 @@ describe('order units', () => {
     const one = { itemId: 1, quantityRequested: 160 };
     expect(stepLine(one, 1, SIPP).quantityRequested).toBe(320);
     expect(stepLine(one, -1, SIPP)).toBe(one);
-    expect(stepLine({ itemId: 1, quantityRequested: 700 }, 1, SIPP).quantityRequested).toBe(720); // 36 packets
+    expect(stepLine({ itemId: 1, quantityRequested: 700 }, 1, SIPP).quantityRequested).toBe(701); // in pieces
   });
 });
 
 describe('formatOrderQuantity', () => {
   it('says it the way a supplier would', () => {
     expect(formatOrderQuantity(800, SIPP)).toBe('5 cartons');
-    expect(formatOrderQuantity(700, SIPP)).toBe('4 cartons + 3 packets');
+    expect(formatOrderQuantity(700, SIPP)).toBe('4 cartons + 60 pcs');
     expect(formatOrderQuantity(900, WATER)).toBe('22 cartons + 20 pcs');
     expect(formatOrderQuantity(30, LOOSE)).toBe('30 pcs');
     expect(formatOrderQuantity(1, LOOSE)).toBe('1 pc');

@@ -4,8 +4,10 @@
  *
  * A supplier order is placed in cartons, so that is the unit a line is typed
  * in: "5" on SIPP GREEN means 5 cartons of 8 packets of 20, and the line
- * stores the 800 pieces. A line can be switched to packets or pieces for the
- * odd order that isn't whole cartons. Unlike the driver's refill sheet (where
+ * stores the 800 pieces. A line can be switched to pieces for the odd order
+ * that isn't whole cartons. There is deliberately no "packets" unit: packets
+ * are only the carton's size, and one word with two meanings on one line
+ * confused the client's admin. Unlike the driver's refill sheet (where
  * a carton is the wrong unit — see `refill-entry.ts`), nothing here fabricates
  * a figure: a PO line is a request, and what arrives is counted at receiving.
  *
@@ -14,9 +16,9 @@
  * 10 and goes out to a driver 3 at a time.
  */
 
-import { cartonSize, describeCount, hasCarton, hasPackets, levelsOf, type Levels } from "@/lib/packaging";
+import { cartonSize, describeCount, hasCarton, levelsOf, type Levels } from "@/lib/packaging";
 
-export type OrderUnit = "carton" | "packet" | "piece";
+export type OrderUnit = "carton" | "piece";
 
 /**
  * `unit` is only set once the admin picks one; until then the line shows the
@@ -26,7 +28,6 @@ export type OrderLine = { itemId: number; quantityRequested: number; unit?: Orde
 
 export const UNIT_LABEL: Record<OrderUnit, { one: string; many: string }> = {
     carton: { one: "carton", many: "cartons" },
-    packet: { one: "packet", many: "packets" },
     piece: { one: "pc", many: "pcs" },
 };
 
@@ -34,22 +35,19 @@ export const UNIT_LABEL: Record<OrderUnit, { one: string; many: string }> = {
 export function unitsFor(l: Levels): OrderUnit[] {
     const units: OrderUnit[] = [];
     if (hasCarton(l)) units.push("carton");
-    if (hasPackets(l)) units.push("packet");
     units.push("piece");
     return units;
 }
 
 /** Pieces in one of `unit`. */
 export function unitSize(unit: OrderUnit, l: Levels): number {
-    if (unit === "carton") return cartonSize(l);
-    if (unit === "packet") return hasPackets(l) ? l.perPacket : 1;
-    return 1;
+    return unit === "carton" ? cartonSize(l) : 1;
 }
 
 /**
  * The unit a line is shown in: the one the admin picked, as long as the
  * quantity is still a whole number of it — otherwise the biggest unit that
- * divides it exactly. A repeated order of 700 SIPP GREEN shows as 35 packets,
+ * divides it exactly. A repeated order of 700 SIPP GREEN shows as 700 pcs,
  * never as a rounded 4 or 5 cartons: nothing here changes a quantity unasked.
  */
 export function lineUnit(line: OrderLine, l: Levels): OrderUnit {
@@ -100,8 +98,8 @@ export function defaultOrderQuantity(carton: number | null | undefined): number 
  * Where a newly added line starts: what was ordered of this item last time,
  * rounded up to whole cartons, so a routine order is mostly Enter, Enter.
  * Always whole cartons, so the line opens in cartons and typing "5" means 5
- * cartons — an old order of 700 SIPP GREEN would otherwise open as "35
- * packets" and the 5 would become 5 packets. Never less than one carton.
+ * cartons — an old order of 700 SIPP GREEN would otherwise open as "700 pcs"
+ * and the 5 would become 5 pieces. Never less than one carton.
  */
 export function startingQuantity(carton: number, lastOrdered: number | null | undefined): number {
     const oneCarton = defaultOrderQuantity(carton);
@@ -207,7 +205,7 @@ export function lastOrderedByItem(
     return last;
 }
 
-/** "5 cartons", "35 packets", "22 cartons + 20 pcs", "30 pcs". */
+/** "5 cartons", "4 cartons + 60 pcs", "30 pcs". */
 export function formatOrderQuantity(pieces: number, l: Levels): string {
     return describeCount(pieces, l) ?? `${pieces.toLocaleString("en-US")} ${pieces === 1 ? "pc" : "pcs"}`;
 }

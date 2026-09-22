@@ -120,16 +120,17 @@ describe('OrderManagerUI — drafting a purchase order', () => {
         }));
     });
 
-    it('can switch one line to packets or pieces for an odd amount', async () => {
+    // Cartons or pieces only: "packets" would be a second meaning beside the carton's size.
+    it('can switch one line to pieces for an odd amount', async () => {
         await renderNewTab();
         await add('sipp', 6);
         const unit = screen.getByRole('combobox', { name: /unit for sipp green/i });
-        expect(within(unit).getAllByRole('option').map(o => o.textContent)).toEqual(['carton', 'packet', 'pc']);
+        expect(within(unit).getAllByRole('option').map(o => o.textContent)).toEqual(['carton', 'pc']);
 
-        fireEvent.change(unit, { target: { value: 'packet' } });
-        expect(qtyOf(6).value).toBe('8'); // 1 carton = 8 packets
-        fireEvent.change(qtyOf(6), { target: { value: '3' } });
-        expect(piecesOf(6)).toHaveTextContent('60 pcs');
+        fireEvent.change(unit, { target: { value: 'piece' } });
+        expect(qtyOf(6).value).toBe('160'); // 1 carton = 160 pieces
+        fireEvent.change(qtyOf(6), { target: { value: '60' } });
+        expect(qtyOf(6).value).toBe('60');
     });
 
     it('steps by one carton and will not drop a line below one', async () => {
@@ -210,7 +211,7 @@ describe('OrderManagerUI — receiving a delivery in cartons', () => {
               item: { ...items[2], last_purchase_cost: 0.5 } },
         ],
     } as any;
-    // SIPP GREEN on PO 29: 1,000 = 6 cartons of 8 × 20 (960) + 2 packets.
+    // SIPP GREEN on PO 29: 1,000 = 6 cartons of 8 × 20 (960) + 40 loose pieces.
     const sippOrder = {
         ...pendingOrder, id: 29,
         Items: [{ id: 503, itemId: 6, quantityRequested: 1000, quantityReceived: 0, costPerUnit: 0.31, boxesReceived: null, piecesPerBox: null, item: items[5] }],
@@ -245,7 +246,7 @@ describe('OrderManagerUI — receiving a delivery in cartons', () => {
         render(<OrderManagerUI warehouses={warehouses} items={items} pendingOrders={[sippOrder]} completedOrders={[]} />);
         fireEvent.click(screen.getByRole('button', { name: /copy order/i }));
         await waitFor(() => expect(writeText).toHaveBeenCalled());
-        expect(writeText.mock.calls[0][0]).toContain('1. SIPP GREEN — 6 cartons + 2 packets');
+        expect(writeText.mock.calls[0][0]).toContain('1. SIPP GREEN — 6 cartons + 40 pcs');
     });
 
     it("opens each line as the order, in the item's usual carton, with a price per carton", async () => {
@@ -262,26 +263,29 @@ describe('OrderManagerUI — receiving a delivery in cartons', () => {
         expect(input('rcv-cartons-502')).toBeNull();
     });
 
-    it('receives a carton of packets and records cartons, packets and pieces', async () => {
+    // The admin's request, kept simple: cartons and loose pieces are the only
+    // counts. Packets appear once, as the carton's size.
+    it('receives a carton of packets as cartons + loose pieces', async () => {
         await startReceipt(sippOrder);
         expect(input('rcv-cartons-503').value).toBe('6');
-        expect(input('rcv-packets-503').value).toBe('2');
+        expect(input('rcv-pieces-503').value).toBe('40');
+        expect(document.getElementById('rcv-packets-503')).toBeNull();
         expect(screen.getByText('1 carton = 8 packets × 20 = 160 pcs')).toBeInTheDocument();
         // 0.31 a piece × 160 = 49.60 a carton.
         expect(input('rcv-price-503').value).toBe('49.6');
 
-        fireEvent.change(input('rcv-packets-503'), { target: { value: '3' } });
-        fireEvent.change(input('rcv-pieces-503'), { target: { value: '5' } });
-        expect(screen.getByTestId('rcv-total-503')).toHaveTextContent('1,025 pcs');
+        fireEvent.change(input('rcv-cartons-503'), { target: { value: '4' } });
+        fireEvent.change(input('rcv-pieces-503'), { target: { value: '60' } });
+        expect(screen.getByTestId('rcv-total-503')).toHaveTextContent('700 pcs');
 
         const payload = await confirm();
         expect(payload).toEqual([expect.objectContaining({
             purchaseOrderItemId: 503,
-            quantityReceived: 1025,
+            quantityReceived: 700,
             costPerUnit: 0.31,
-            boxesReceived: 51,        // 6 × 8 + 3 packets
+            boxesReceived: 32,        // the 4 × 8 packets inside the cartons
             piecesPerBox: 20,
-            cartonsReceived: 6,
+            cartonsReceived: 4,
             packetsPerCarton: 8,
         })]);
     });

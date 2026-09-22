@@ -9,7 +9,7 @@ import { formatCurrency, formatSaudiDate, formatSaudiTime } from "@/lib/utils";
 import { computeReceiptTotals } from "@/lib/receipt-totals";
 import { formatOrderQuantity, lastOrderedByItem, lineCount, lineUnit, linesFromDeficits, linesFromPreviousOrder, mergeOrderLines, orderAsText, startingQuantity, stepLine, UNIT_LABEL, unitSize, unitsFor, withCount, withUnit, type OrderLine, type OrderUnit } from "@/lib/order-entry";
 import { entryKeyNav } from "@/lib/entry-keys";
-import { boxPriceFromPieceCost, cartonSize, costPerPiece, describeCartonSum, describeCount, describePackaging, describeReceivedLine, hasCarton, hasPackets, levelsOf, MAX_PACKETS_PER_CARTON, MAX_PIECES_PER_BOX, PIECE_SIZE_UNITS, piecesFromCount, recordCount, splitCount } from "@/lib/packaging";
+import { boxPriceFromPieceCost, cartonSize, costPerPiece, describeCartonSum, describeCount, describePackaging, describeReceivedLine, hasCarton, levelsOf, MAX_PACKETS_PER_CARTON, MAX_PIECES_PER_BOX, PIECE_SIZE_UNITS, piecesFromCount, recordCount, splitCount } from "@/lib/packaging";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { NumericInput } from "@/components/NumericInput";
 import { DataCard } from "@/components/DataCard";
@@ -36,14 +36,13 @@ type Props = {
 const DRAFT_KEY = "vms:po-draft";
 
 /**
- * One line of a delivery as the receiver counts it: cartons, loose packets and
- * loose pieces, at the invoice's price for one carton. The pack sizes start as
- * the item's and can be changed for this delivery only. Pieces and the
- * per-piece cost (what stock and WAC need) are derived — see packaging.ts.
+ * One line of a delivery as the receiver counts it: whole cartons plus loose
+ * pieces, at the invoice's price for one carton. The pack sizes start as the
+ * item's and can be changed for this delivery only. Pieces and the per-piece
+ * cost (what stock and WAC need) are derived — see packaging.ts.
  */
 type ReceivedLine = {
     cartons: number;
-    packets: number;
     pieces: number;
     /** Pieces in a packet (or in the carton, when there are no packets). */
     perPacket: number;
@@ -286,7 +285,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
 
     /**
      * Pre-fills every line with what was ordered, in the item's usual cartons:
-     * 1,000 SIPP GREEN (cartons of 8 × 20) opens as 6 cartons + 2 packets + 0 pcs.
+     * 1,000 SIPP GREEN (cartons of 8 × 20 = 160) opens as 6 cartons + 40 pcs.
      * The carton price comes from the last per-piece cost, so when everything
      * arrived as ordered the receiver only checks each price against the invoice.
      */
@@ -993,7 +992,8 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                                     <span className="font-mono text-[10px] text-slate-500 shrink-0">#{oi.item.sku}</span>
                                                                                 </div>
                                                                                 <div className="space-y-3">
-                                                                                    {/* What arrived: cartons + packets + pieces = pieces. */}
+                                                                                    {/* What arrived: cartons + loose pieces = pieces. Packets are only the
+                                                                                        carton's size (the sentence below) — never a second thing to count. */}
                                                                                     <div className="flex flex-wrap items-end gap-x-2 gap-y-2">
                                                                                         {inCartons && (
                                                                                             <ReceiveField id={`rcv-cartons-${oi.id}`} label="Cartons">
@@ -1006,19 +1006,6 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                                                     className={RECEIVE_ENTRY}
                                                                                                 />
                                                                                             </ReceiveField>
-                                                                                        )}
-                                                                                        {inCartons && hasPackets(lv) && (
-                                                                                            <>
-                                                                                                <span aria-hidden className="pb-2.5 text-sm font-bold text-slate-400">+</span>
-                                                                                                <ReceiveField id={`rcv-packets-${oi.id}`} label="Packets">
-                                                                                                    <NumericInput
-                                                                                                        id={`rcv-packets-${oi.id}`}
-                                                                                                        value={line.packets}
-                                                                                                        onChange={packets => updateReceived(oi.id, { packets })}
-                                                                                                        className={RECEIVE_EXTRA}
-                                                                                                    />
-                                                                                                </ReceiveField>
-                                                                                            </>
                                                                                         )}
                                                                                         {inCartons && <span aria-hidden className="pb-2.5 text-sm font-bold text-slate-400">+</span>}
                                                                                         <ReceiveField id={`rcv-pieces-${oi.id}`} label={inCartons ? "Loose pcs" : "Pieces"}>
@@ -1046,10 +1033,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                                                                     max={MAX_PACKETS_PER_CARTON}
                                                                                                     value={line.packetsPerCarton > 1 ? line.packetsPerCarton : 0}
                                                                                                     placeholder="None"
-                                                                                                    onChange={n => updateReceived(oi.id, n > 1
-                                                                                                        ? { packetsPerCarton: n }
-                                                                                                        // No packets any more: the packets typed become loose pieces, so the total doesn't move.
-                                                                                                        : { packetsPerCarton: 1, packets: 0, pieces: line.pieces + (hasPackets(lv) ? line.packets * lv.perPacket : 0) })}
+                                                                                                    onChange={n => updateReceived(oi.id, { packetsPerCarton: n > 1 ? n : 1 })}
                                                                                                     className={RECEIVE_EXTRA}
                                                                                                 />
                                                                                             </ReceiveField>

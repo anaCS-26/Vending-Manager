@@ -19,6 +19,11 @@
  * × 20 pieces" came out as "1 carton × packet + piece": the app used to model
  * one level, and for 26 items that level was his packet, not his carton.
  *
+ * Packets are a SIZE only — they define how big a carton is. Quantities are
+ * always counted as cartons + loose pieces, never as loose packets: the admin
+ * reads little English, and a "packets" count beside a "packets per carton"
+ * size was two meanings of one word on one line.
+ *
  * Why receiving asks for a price per CARTON: the supplier invoice prints one,
  * and the old screen asked for a price per piece. Production shows the two
  * being confused — AQUAFINA WATER, a 2 SAR bottle, is costed at 31 SAR because
@@ -72,34 +77,31 @@ export const cartonSize = (l: Levels) => l.perPacket * l.packetsPerCarton;
 export const hasCarton = (l: Levels) => cartonSize(l) > 1;
 export const hasPackets = (l: Levels) => l.packetsPerCarton > 1;
 
-/** How a quantity was counted at the door. */
-export type Count = { cartons: number; packets: number; pieces: number };
+/** How a quantity was counted at the door: whole cartons plus loose pieces. */
+export type Count = { cartons: number; pieces: number };
 
 const whole = (n: number | undefined) => (typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
 
 /**
- * Cartons + packets + loose pieces, in pieces. Each level only counts when the
- * item has it — for a carton of 40 there is nothing between the carton and the
- * piece, and a loose item has no carton — matching the fields the screen shows.
+ * Cartons + loose pieces, in pieces. Cartons only count when the item has one
+ * — a loose item shows no carton field — matching the fields the screen shows.
  */
 export function piecesFromCount(c: Partial<Count>, l: Levels): number {
-    return (hasCarton(l) ? whole(c.cartons) * cartonSize(l) : 0) + (hasPackets(l) ? whole(c.packets) * l.perPacket : 0) + whole(c.pieces);
+    return (hasCarton(l) ? whole(c.cartons) * cartonSize(l) : 0) + whole(c.pieces);
 }
 
-/** Whole cartons first, then whole packets, then what's left. */
+/** Whole cartons, then what's left as loose pieces. */
 export function splitCount(pieces: number, l: Levels): Count {
-    let rest = whole(pieces);
-    const cartons = hasCarton(l) ? Math.floor(rest / cartonSize(l)) : 0;
-    rest -= cartons * cartonSize(l);
-    const packets = hasPackets(l) ? Math.floor(rest / l.perPacket) : 0;
-    rest -= packets * l.perPacket;
-    return { cartons, packets, pieces: rest };
+    const all = whole(pieces);
+    const cartons = hasCarton(l) ? Math.floor(all / cartonSize(l)) : 0;
+    return { cartons, pieces: all - cartons * cartonSize(l) };
 }
 
 /**
  * How a delivery count is stored on its PO line (see PurchaseOrderItem):
- * full packs of the innermost unit, plus — when there are packets — how many
- * of those came as whole cartons. A loose item records nothing.
+ * full packs of the innermost unit (the packets inside the cartons, or the
+ * cartons themselves), plus — when there are packets — the cartons they came
+ * in. A loose item records nothing.
  */
 export function recordCount(c: Partial<Count>, l: Levels): {
     boxesReceived: number | null;
@@ -111,7 +113,7 @@ export function recordCount(c: Partial<Count>, l: Levels): {
     const cartons = whole(c.cartons);
     if (!hasPackets(l)) return { boxesReceived: cartons, piecesPerBox: l.perPacket, cartonsReceived: null, packetsPerCarton: null };
     return {
-        boxesReceived: cartons * l.packetsPerCarton + whole(c.packets),
+        boxesReceived: cartons * l.packetsPerCarton,
         piecesPerBox: l.perPacket,
         cartonsReceived: cartons,
         packetsPerCarton: l.packetsPerCarton,
@@ -120,13 +122,12 @@ export function recordCount(c: Partial<Count>, l: Levels): {
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 
-/** "21 cartons + 1 packet + 4 pcs" — a piece count as packs. Null for a loose item. */
+/** "21 cartons + 24 pcs" — a piece count in cartons. Null for a loose item. */
 export function describeCount(pieces: number, l: Levels): string | null {
     if (!hasCarton(l)) return null;
-    const { cartons, packets, pieces: loose } = splitCount(pieces, l);
+    const { cartons, pieces: loose } = splitCount(pieces, l);
     const parts: string[] = [];
     if (cartons > 0) parts.push(plural(cartons, "carton", "cartons"));
-    if (packets > 0) parts.push(plural(packets, "packet", "packets"));
     if (loose > 0) parts.push(plural(loose, "pc", "pcs"));
     return parts.length > 0 ? parts.join(" + ") : "0 cartons";
 }
@@ -176,8 +177,10 @@ export function describeCartonSum(l: Levels): string | null {
 }
 
 /**
- * How a received PO line was counted — "2 cartons of 8 × 20 + 3 packets + 5 pcs"
- * — or null for lines received before counting existed, and for loose items.
+ * How a received PO line was counted — "2 cartons of 8 × 20 + 5 pcs" — or null
+ * for lines received before counting existed, and for loose items. (A line
+ * never records loose packets today, but the server accepts them, so a stored
+ * one still reads correctly.)
  */
 export function describeReceivedLine(line: {
     quantityReceived: number;

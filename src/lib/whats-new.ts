@@ -73,8 +73,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "اكتب الطلبية بالكرتون",
         },
         body: {
-            en: "In Manage Orders, the number on each line is now cartons. The app works out the packets and pieces for you (1 carton = 8 packets × 20 = 160). Each item starts at what you ordered last time. To send the order, press “Copy order” under Pending Receipts and paste it into WhatsApp.",
-            ar: "في «إدارة الطلبات» (Manage Orders) صار الرقم في كل سطر يعني عدد الكراتين، والتطبيق يحسب الباكيتات والحبّات بنفسه (كرتون واحد = 8 باكيت × 20 = 160 حبة). كل صنف يبدأ بالكمية التي طلبتها آخر مرة. لإرسال الطلبية للمورّد، اضغط «Copy order» في «الاستلامات المعلّقة» (Pending Receipts) والصقها في واتساب.",
+            en: "In Manage Orders, the number on each line is now cartons. The app works out the pieces for you (1 carton = 8 packets × 20 = 160 pieces). Each item starts at what you ordered last time. To send the order, press “Copy order” under Pending Receipts and paste it into WhatsApp.",
+            ar: "في «إدارة الطلبات» (Manage Orders) صار الرقم في كل سطر يعني عدد الكراتين، والتطبيق يحسب عدد الحبّات بنفسه (كرتون واحد = 8 باكيت × 20 = 160 حبة). كل صنف يبدأ بالكمية التي طلبتها آخر مرة. لإرسال الطلبية للمورّد، اضغط «Copy order» في «الاستلامات المعلّقة» (Pending Receipts) والصقها في واتساب.",
         },
         href: "/admin/orders",
     },
@@ -83,19 +83,19 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         date: "2026-09-22",
         audience: ["admin"],
         title: {
-            en: "Receive in cartons, packets and pieces",
-            ar: "استلام البضاعة بالكرتون والباكيت والحبّة",
+            en: "Receive deliveries in cartons",
+            ar: "استلام البضاعة بالكرتون",
         },
         body: {
-            en: "Press Start Receipt: every line is already filled in as ordered, at last time’s price. Change only what the invoice says differently: cartons, extra packets or loose pieces, and the price of one carton. If a carton held a different amount this time, press “Different this time?”.",
-            ar: "اضغط «بدء الاستلام» (Start Receipt): كل سطر معبّأ مسبقاً كما في الطلبية وبسعر آخر مرة. غيّر فقط ما يختلف في الفاتورة: عدد الكراتين، والباكيتات أو الحبّات الزائدة، وسعر الكرتون الواحد. إذا كان الكرتون هذه المرة يحتوي كمية مختلفة، اضغط «Different this time?».",
+            en: "Press Start Receipt: every line is already filled in as ordered, at last time’s price. Change only what the invoice says differently: the number of cartons, any loose pieces, and the price of one carton. If a carton held a different amount this time, press “Different this time?”.",
+            ar: "اضغط «بدء الاستلام» (Start Receipt): كل سطر معبّأ مسبقاً كما في الطلبية وبسعر آخر مرة. غيّر فقط ما يختلف في الفاتورة: عدد الكراتين، والحبّات الزائدة إن وُجدت، وسعر الكرتون الواحد. إذا كان الكرتون هذه المرة يحتوي كمية مختلفة، اضغط «Different this time?».",
         },
         media: {
             type: "image",
             src: "/whats-new/receive-cartons.jpg",
             alt: {
-                en: "A delivery line: 4 cartons + 3 packets = 700 pieces, with 1 carton = 8 packets × 20 = 160 pieces written underneath.",
-                ar: "سطر استلام: 4 كراتين + 3 باكيت = 700 حبة، ومكتوب تحته: كرتون واحد = 8 باكيت × 20 = 160 حبة.",
+                en: "A delivery line: 5 cartons = 800 pieces, with 1 carton = 8 packets × 20 = 160 pieces written underneath, then the price of one carton.",
+                ar: "سطر استلام: 5 كراتين = 800 حبة، ومكتوب تحته: كرتون واحد = 8 باكيت × 20 = 160 حبة، ثم سعر الكرتون الواحد.",
             },
         },
         href: "/admin/orders",
