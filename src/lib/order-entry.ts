@@ -97,13 +97,15 @@ export function defaultOrderQuantity(carton: number | null | undefined): number 
 }
 
 /**
- * Where a newly added line starts: what was ordered of this item last time, so
- * a routine order is mostly Enter, Enter. Never less than one carton — a stray
- * test order of 1 piece shouldn't become the default.
+ * Where a newly added line starts: what was ordered of this item last time,
+ * rounded up to whole cartons, so a routine order is mostly Enter, Enter.
+ * Always whole cartons, so the line opens in cartons and typing "5" means 5
+ * cartons — an old order of 700 SIPP GREEN would otherwise open as "35
+ * packets" and the 5 would become 5 packets. Never less than one carton.
  */
 export function startingQuantity(carton: number, lastOrdered: number | null | undefined): number {
     const oneCarton = defaultOrderQuantity(carton);
-    return typeof lastOrdered === "number" && Number.isInteger(lastOrdered) && lastOrdered >= oneCarton ? lastOrdered : oneCarton;
+    return typeof lastOrdered === "number" && Number.isFinite(lastOrdered) && lastOrdered > oneCarton ? roundUpToBatch(lastOrdered, oneCarton) : oneCarton;
 }
 
 /** Smallest whole number of cartons covering `qty` (suppliers don't split one). */

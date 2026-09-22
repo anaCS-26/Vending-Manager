@@ -141,7 +141,7 @@ Before reporting: `git fetch origin; git rebase origin/main`. Resolve conflicts 
 | CI, `vercel.json`, npm/lockfile, schema push, RLS, seed scripts | [build-and-deploy.md](docs/agents/build-and-deploy.md) |
 | Guards, login, password reset, sessions, `Driver.pin` | [auth-and-security.md](docs/agents/auth-and-security.md) + skill `vms-security-rbac` |
 | `notifyClients`, push, service worker, the stock-alert cron | [realtime-and-push.md](docs/agents/realtime-and-push.md) |
-| Items, purchase orders, receiving in boxes, WAC, warehouse/machine calibration | [inventory-and-orders.md](docs/agents/inventory-and-orders.md) + skill `vms-accounting-wac` |
+| Items, purchase orders, cartons / packets / pieces, WAC, warehouse/machine calibration | [inventory-and-orders.md](docs/agents/inventory-and-orders.md) + skill `vms-accounting-wac` |
 | Driver bag, assignments, disputes, returns, dispatch templates, batched transactions | [driver-stock.md](docs/agents/driver-stock.md) + skill `vms-audit-trail` |
 | The driver refill sheet (`DriverRefillUI`, `refill-entry.ts`) | [driver-refill.md](docs/agents/driver-refill.md) |
 | `/admin/analytics`, `/admin/financials`, P&L, `/super/*`, AI Lab | [analytics-and-super.md](docs/agents/analytics-and-super.md) |
@@ -162,3 +162,4 @@ Deliberately left open. Don't "discover" these as new bugs, and remove a line wh
 - The legacy dispatch path (`logBatchRefills` dispatch branch, `returnDispatch`) still loops inside the transaction. It's dormant; rewrite it before re-linking `/admin/dispatches`.
 - `formatCurrency` emits the Riyal sign (U+20C1) with no fallback; PWA icon artwork is missing. ([ui](docs/agents/ui-and-mobile.md))
 - A service worker can't save a rotated push subscription; it's re-synced on the next app open.
+- `/admin/orders` loads every purchase order with all its lines (unbounded `findMany`); "Last time" prefills and Repeat last order read from that list. Fine at ~30 orders; page it before it reaches hundreds.

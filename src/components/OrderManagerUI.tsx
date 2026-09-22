@@ -718,15 +718,12 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                                         <span className="font-mono uppercase">#{item.sku}</span>
                                                         <span>•</span>
                                                         <span>{packagingLabel(item)}</span>
-                                                        {selectedWarehouseId && (
-                                                            <>
-                                                                <span>•</span>
-                                                                <span className={currentStock < 10 ? "text-accent-orange font-bold" : "text-accent-green font-bold"}>
-                                                                    In warehouse: {formatOrderQuantity(currentStock, lv)}
-                                                                </span>
-                                                            </>
-                                                        )}
                                                     </div>
+                                                    {selectedWarehouseId && (
+                                                        <p className={`text-xs font-bold mt-0.5 ${currentStock < 10 ? "text-accent-orange" : "text-accent-green"}`}>
+                                                            In warehouse: {formatOrderQuantity(currentStock, lv)}
+                                                        </p>
+                                                    )}
                                                     {last && (
                                                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
                                                             <History className="w-3 h-3" />
@@ -920,7 +917,7 @@ export default function OrderManagerUI({ warehouses, items, pendingOrders, compl
                                         : null;
                                     const shownItems = expandedOrders.has(order.id) ? order.Items : order.Items.slice(0, PENDING_PREVIEW);
                                     return (
-                                        <div key={order.id} className="glass-panel border border-slate-300 shadow-sm dark:border-white/10 rounded-[2rem] p-6 lg:p-8 relative overflow-hidden group">
+                                        <div key={order.id} className="glass-panel border border-slate-300 shadow-sm dark:border-white/10 rounded-[2rem] p-4 sm:p-6 lg:p-8 relative overflow-hidden group">
                                             <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-accent-orange"></div>
 
                                             <div className="flex flex-col lg:flex-row gap-8">

@@ -43,6 +43,12 @@ describe('startingQuantity', () => {
     expect(startingQuantity(160, 800)).toBe(800);
   });
 
+  // Found in the browser: 700 opened as "35 packets", so typing 5 ordered 5 packets.
+  it('rounds last time up to whole cartons, so the line opens in cartons', () => {
+    expect(startingQuantity(160, 700)).toBe(800);
+    expect(startingQuantity(40, 900)).toBe(920);
+  });
+
   it('starts at one carton when there is no history', () => {
     expect(startingQuantity(160, undefined)).toBe(160);
   });

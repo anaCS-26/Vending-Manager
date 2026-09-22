@@ -65,6 +65,56 @@ export type WhatsNewEntry = {
 /** Newest first. */
 export const WHATS_NEW: WhatsNewEntry[] = [
     {
+        id: "2026-09-order-in-cartons",
+        date: "2026-09-22",
+        audience: ["admin"],
+        title: {
+            en: "Type orders in cartons",
+            ar: "اكتب الطلبية بالكرتون",
+        },
+        body: {
+            en: "In Manage Orders, the number on each line is now cartons. The app works out the packets and pieces for you (1 carton = 8 packets × 20 = 160). Each item starts at what you ordered last time. To send the order, press “Copy order” under Pending Receipts and paste it into WhatsApp.",
+            ar: "في «إدارة الطلبات» (Manage Orders) صار الرقم في كل سطر يعني عدد الكراتين، والتطبيق يحسب الباكيتات والحبّات بنفسه (كرتون واحد = 8 باكيت × 20 = 160 حبة). كل صنف يبدأ بالكمية التي طلبتها آخر مرة. لإرسال الطلبية للمورّد، اضغط «Copy order» في «الاستلامات المعلّقة» (Pending Receipts) والصقها في واتساب.",
+        },
+        href: "/admin/orders",
+    },
+    {
+        id: "2026-09-receive-cartons-packets",
+        date: "2026-09-22",
+        audience: ["admin"],
+        title: {
+            en: "Receive in cartons, packets and pieces",
+            ar: "استلام البضاعة بالكرتون والباكيت والحبّة",
+        },
+        body: {
+            en: "Press Start Receipt: every line is already filled in as ordered, at last time’s price. Change only what the invoice says differently: cartons, extra packets or loose pieces, and the price of one carton. If a carton held a different amount this time, press “Different this time?”.",
+            ar: "اضغط «بدء الاستلام» (Start Receipt): كل سطر معبّأ مسبقاً كما في الطلبية وبسعر آخر مرة. غيّر فقط ما يختلف في الفاتورة: عدد الكراتين، والباكيتات أو الحبّات الزائدة، وسعر الكرتون الواحد. إذا كان الكرتون هذه المرة يحتوي كمية مختلفة، اضغط «Different this time?».",
+        },
+        media: {
+            type: "image",
+            src: "/whats-new/receive-cartons.jpg",
+            alt: {
+                en: "A delivery line: 4 cartons + 3 packets = 700 pieces, with 1 carton = 8 packets × 20 = 160 pieces written underneath.",
+                ar: "سطر استلام: 4 كراتين + 3 باكيت = 700 حبة، ومكتوب تحته: كرتون واحد = 8 باكيت × 20 = 160 حبة.",
+            },
+        },
+        href: "/admin/orders",
+    },
+    {
+        id: "2026-09-packets-per-carton",
+        date: "2026-09-22",
+        audience: ["admin"],
+        title: {
+            en: "Set the packets in each carton",
+            ar: "حدّد عدد الباكيتات في كل كرتون",
+        },
+        body: {
+            en: "Open Manage System → Items, move the mouse over an item and press the pencil. Fill “Packets per carton” and “Pieces per packet”; the screen shows the total. Leave packets empty when the carton holds the pieces directly, like 40 bottles of water.",
+            ar: "افتح «إدارة النظام» (Manage System) ثم «الأصناف» (Items)، مرّر الفأرة فوق الصنف واضغط أيقونة القلم. املأ «Packets per carton» و«Pieces per packet»، وستظهر لك الكمية الكاملة. اترك الباكيتات فارغة إذا كان الكرتون يحتوي الحبّات مباشرة، مثل 40 علبة ماء.",
+        },
+        href: "/admin/manage",
+    },
+    {
         id: "2026-09-stock-tables-fit-screen",
         date: "2026-09-19",
         audience: ["admin"],
@@ -91,6 +141,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "عند وصول شحنة، افتح «إدارة الطلبات» (Manage Orders) ثم «الاستلامات المعلّقة» (Pending Receipts) واضغط «بدء الاستلام» (Start Receipt). لكل صنف، اكتب عدد الكراتين وسعر الكرتون الواحد كما هو في فاتورة المورّد، والتطبيق يحسب عدد الحبّات وسعر الحبّة بنفسه. يبقى المخزون محسوباً بالحبّة ويُصرف للسائقين بالحبّة. إذا كان الكرتون في هذه الشحنة يحتوي عدداً مختلفاً (20 بدل 24)، غيّر خانة «Pcs / box» في ذلك السطر، وهذا يغيّر هذه الشحنة فقط. استخدم خانة «Loose pcs» للحبّات التي وصلت خارج كرتون كامل. إذا ظهر تنبيه برتقالي بأن سعر الحبّة أعلى من سعر بيعها، راجع حجم الكرتون والسعر قبل الإنهاء. ويظهر الآن في «سجل الطلبات» (Order History) كيف تم عدّ كل سطر.",
         },
         href: "/admin/orders",
+        // "Box" was the packet for 26 items; receiving now counts cartons, packets and pieces.
+        supersededBy: "2026-09-receive-cartons-packets",
     },
     {
         id: "2026-09-item-box-size",
@@ -105,6 +157,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "يظهر الآن حجم الكرتون لكل صنف، مثلاً «Box of 24 × 50 g» (كرتون فيه 24 حبة، وزن الحبة 50 غرام)، في صفحات الأصناف والطلبات ومخزون المستودع، ويعرض مخزون المستودع عدد الكراتين أيضاً. الطلبات الجديدة تبدأ بكرتون واحد، وزرّا + و − يضيفان أو ينقصان كرتوناً كاملاً. لتغيير حجم الكرتون لصنف: افتح «إدارة النظام» (Manage System) واختر تبويب «الأصناف» (Items). ابحث عن الصنف، ومرّر الفأرة فوق بطاقته واضغط على أيقونة القلم في الزاوية العليا. غيّر «Pieces per box» (وكذلك «Size of one piece» إن لزم)، ثم اضغط «Save». اترك «Pieces per box» فارغاً إذا كان الصنف يأتي بالحبّة. بعض الأصناف ليس لها حجم كرتون بعد — أضِفه بالطريقة نفسها.",
         },
         href: "/admin/manage",
+        // "Pieces per box" is now "Packets per carton" + "Pieces per packet".
+        supersededBy: "2026-09-packets-per-carton",
     },
     {
         id: "2026-09-return-to-warehouse",
@@ -195,8 +249,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "كل صنف جديد في الطلبية يبدأ الآن بكرتون كامل بدلاً من حبة واحدة، مع أزرار لإضافة كرتون أو إزالته. وزر «تكرار آخر طلبية» ينسخ طلبيتك السابقة لتعدّل ما اختلف فقط.",
         },
         href: "/admin/orders",
-        // The "case" here was the driver batch; orders now start at the item's real box.
-        supersededBy: "2026-09-item-box-size",
+        // The "case" here was the driver batch; orders are now typed in the item's real cartons.
+        supersededBy: "2026-09-order-in-cartons",
     },
     {
         id: "2026-09-driver-return",
