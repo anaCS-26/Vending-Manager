@@ -1,5 +1,6 @@
 "use client"
-import { useState, useTransition, useEffect, useMemo } from "react"
+import { useState, useTransition, useEffect, useMemo, useRef } from "react"
+import type { KeyboardEvent } from "react"
 import { CheckCircle2, ChevronDown, Package, Plus, MapPin, Zap, Search, Loader2, Save, Camera, Navigation, FileText, History, ListChecks, AlertTriangle, X } from "lucide-react"
 import { logBatchRefills, getMachineInventoryDetails, getItems, uploadItemImage, getRefillHints } from "@/actions/inventory"
 import imageCompression from 'browser-image-compression';
@@ -15,8 +16,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NumericInput } from "@/components/NumericInput";
 import { useDriverStore, OfflineLog } from "@/stores/useDriverStore";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
-import { seedRefillQuantity, splitRefillRows, countUnconfirmed, adjustByBatch, assignRefillGroup } from "@/lib/refill-entry";
-import type { RefillGroup } from "@/lib/refill-entry";
+import { seedRefillQuantity, refillSections, countUnconfirmed, adjustByBatch } from "@/lib/refill-entry";
+import { moveEntryFocus } from "@/lib/entry-keys";
 
 type DriverRefillUIProps = {
     machines: MachineType[];
@@ -44,11 +45,6 @@ type ItemFormState = {
      * nobody read must not become one.
      */
     confirmed: boolean;
-    /**
-     * Which section the row renders in. Decided once when the machine is opened
-     * and then frozen for as long as it stays open — see `assignRefillGroup`.
-     */
-    group: RefillGroup;
 };
 
 export function DriverRefillUI({ machines: serverMachines, activeDispatches: serverDispatches, userRole = 'driver' }: DriverRefillUIProps) {
@@ -116,9 +112,11 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
     // View mode toggle
     const [viewMode, setViewMode] = useState<"BAG" | "MACHINE">("BAG");
 
-    // Pre-submit review sheet (prefill mode) and the "everything else" disclosure.
+    // Pre-submit review sheet (prefill mode).
     const [isReviewOpen, setIsReviewOpen] = useState(false);
-    const [showAllItems, setShowAllItems] = useState(false);
+
+    const searchRef = useRef<HTMLInputElement>(null);
+    const sheetRef = useRef<HTMLDivElement>(null);
 
     // Fetch Global Catalog once (if online)
     useEffect(() => {
@@ -137,42 +135,26 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
     }, [])
 
     /**
-     * The visible sheet: search + tab filter, then the needs-stock split from
-     * `src/lib/refill-entry.ts`. Emptiest first inside the primary group, since
-     * that is the order the driver works the machine in.
+     * The visible sheet: search + tab filter, then fixed category groups in
+     * shelf order (`refillSections`). A row's place depends only on what the
+     * item is, never on a quantity, so nothing moves while the driver types.
      *
      * Declared up here with the other hooks, above the "no active route" early
      * return — a useMemo below it would run on some renders and not others.
      */
-    const { primaryRows, secondaryRows } = useMemo(() => {
-        const query = itemSearch.toLowerCase();
-        const rows = Object.values(machineItems)
-            .filter(row => {
-                if (query
-                    && !row.item?.name?.toLowerCase().includes(query)
-                    && !row.item?.sku?.toLowerCase().includes(query)) return false;
-                return viewMode === "BAG"
-                    ? row.bagQuantity > 0 || row.refilled > 0
-                    : row.estimated_stock > 0 || row.returned > 0;
-            })
-            .sort((a, b) => a.item.name.localeCompare(b.item.name));
-
-        const { primary, secondary } = splitRefillRows(rows, {
-            isSearching: itemSearch.length > 0,
-            viewMode,
+    const sections = useMemo(() => {
+        const query = itemSearch.trim().toLowerCase();
+        const rows = Object.values(machineItems).filter(row => {
+            if (query
+                && !row.item?.name?.toLowerCase().includes(query)
+                && !row.item?.sku?.toLowerCase().includes(query)
+                && !row.item?.category?.toLowerCase().includes(query)) return false;
+            return viewMode === "BAG"
+                ? row.bagQuantity > 0 || row.refilled > 0
+                : row.estimated_stock > 0 || row.returned > 0;
         });
-        return {
-            primaryRows: [...primary].sort((a, b) =>
-                a.estimated_stock - b.estimated_stock || a.item.name.localeCompare(b.item.name)
-            ),
-            secondaryRows: secondary,
-        };
+        return refillSections(rows);
     }, [machineItems, itemSearch, viewMode]);
-
-    /** Staged lines sitting inside the collapsed section, so the header can say so. */
-    const hiddenStagedCount = secondaryRows.filter(
-        r => r.refilled > 0 || r.returned > 0 || r.bag_returned > 0
-    ).length;
 
     /** machineId → itemId → last quantity. Rebuilt only when the cache changes. */
     const hintIndex = useMemo(() => {
@@ -323,7 +305,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                  * machine — and in prefill mode would silently resurrect a number the
                  * driver had deliberately zeroed.
                  */
-                const seed = (itemId: number, bagQuantity: number, estimated_stock: number) => {
+                const seed = (itemId: number, bagQuantity: number) => {
                     const existing = prevState[itemId];
                     const lastQty = machineHints?.get(itemId) ?? null;
                     if (existing) {
@@ -334,23 +316,13 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                             lastQty,
                             prefilled: existing.prefilled,
                             confirmed: existing.confirmed,
-                            // Frozen with the rest of the row: recomputing it here
-                            // would reintroduce the reordering this exists to stop.
-                            group: existing.group,
                         };
                     }
-                    const seeded = seedRefillQuantity(refillMode, lastQty, bagQuantity);
                     return {
                         returned: 0,
                         bag_returned: 0,
                         lastQty,
-                        ...seeded,
-                        group: assignRefillGroup({
-                            ...seeded,
-                            bag_returned: 0,
-                            estimated_stock,
-                            lastQty,
-                        }),
+                        ...seedRefillQuantity(refillMode, lastQty, bagQuantity),
                     };
                 };
 
@@ -367,7 +339,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                         bagQuantity: bagRemaining,
                         inBag: isAvailableToDriver,
                         estimated_stock: estimated,
-                        ...seed(ms.itemId, bagRemaining, estimated),
+                        ...seed(ms.itemId, bagRemaining),
                     };
                 });
 
@@ -382,7 +354,7 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                             bagQuantity: bagRemaining,
                             inBag: true,
                             estimated_stock: estimated,
-                            ...seed(itemId, bagRemaining, estimated),
+                            ...seed(itemId, bagRemaining),
                         };
                     }
                 });
@@ -580,6 +552,49 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
         });
     };
 
+    /**
+     * The keyboard's Next/Enter key on a quantity box: jump to the next item's
+     * box, in sheet order, and bring it into view — so a machine is keyed as
+     * "5, Next, 3, Next" without touching the screen between numbers.
+     *
+     * While searching, Enter means "done with this item": the search clears and
+     * the cursor goes back to it for the next code. Drivers who work by item
+     * code were typing a code, entering the number, then deleting the code by
+     * hand before the next one.
+     *
+     * On the last box, Enter closes the keyboard so the Submit bar is visible.
+     */
+    const onQtyKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.nativeEvent.isComposing) return;
+        if (e.key === "Enter" && itemSearch) {
+            e.preventDefault();
+            setItemSearch("");
+            searchRef.current?.focus();
+            return;
+        }
+        const step = e.key === "ArrowDown" || (e.key === "Enter" && !e.shiftKey) ? 1
+            : e.key === "ArrowUp" || (e.key === "Enter" && e.shiftKey) ? -1
+            : null;
+        if (step === null) return;
+        e.preventDefault();
+        if (moveEntryFocus(e.currentTarget, step)) {
+            (document.activeElement as HTMLElement | null)?.scrollIntoView({ block: "center", behavior: "smooth" });
+        } else if (e.key === "Enter") {
+            e.currentTarget.blur();
+        }
+    };
+
+    /** Enter in the search box: straight into the first match's quantity box. */
+    const onSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+        e.preventDefault();
+        const first = sheetRef.current?.querySelector<HTMLInputElement>("input[data-entry]:not(:disabled)");
+        if (first) {
+            first.focus();
+            first.select();
+        }
+    };
+
     const activeMachineDetails = machines.find(m => m.id.toString() === selectedMachine);
 
     // Totals for the submit bar. Both view tabs contribute, so a driver who
@@ -664,9 +679,11 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
             {/* No `overflow-y-auto` below `sm` — see the container comment above. */}
             <div className="flex-1 sm:overflow-y-auto px-4 py-4 sm:py-6 relative z-10 custom-scrollbar">
 
-                {/* Machine Selection Bar */}
-                <div className="mb-4 sm:mb-6 relative z-40 sticky top-0 bg-slate-50/95 dark:bg-[#121214]/95 backdrop-blur-md pb-2 pt-2">
-                    <div className="relative group mb-3">
+                {/* Machine Selection Bar. Only the picker is pinned: with the
+                    address card inside it too, the pinned bar covered ~40% of a
+                    phone screen and hid the sheet's group headings. */}
+                <div className="mb-3 relative z-40 sticky top-0 bg-slate-50/95 dark:bg-[#121214]/95 backdrop-blur-md pb-2 pt-2">
+                    <div className="relative group">
                         <select
                             value={selectedMachine}
                             onChange={(e) => {
@@ -689,50 +706,50 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                         <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-accent-purple w-5 h-5 pointer-events-none" />
                         <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5 pointer-events-none" />
                     </div>
+                </div>
 
-                    {/* Machine Details & Routing Panel */}
-                    <AnimatePresence>
-                        {activeMachineDetails && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="bg-white dark:bg-black/20 border border-slate-200 dark:border-white/5 rounded-2xl p-4 overflow-hidden"
-                            >
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div className="flex-1 space-y-2">
-                                        <div className="flex items-start gap-2">
-                                            <MapPin className="w-4 h-4 text-slate-400 mt-1 shrink-0" />
-                                            <div>
-                                                <p className="text-sm font-semibold text-slate-900 dark:text-white">{activeMachineDetails.address || 'No Address Provided'}</p>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400">{activeMachineDetails.district}</p>
-                                            </div>
+                {/* Machine Details & Routing Panel */}
+                <AnimatePresence>
+                    {activeMachineDetails && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mb-4 sm:mb-6 bg-white dark:bg-black/20 border border-slate-200 dark:border-white/5 rounded-2xl p-4 overflow-hidden"
+                        >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="flex-1 space-y-2">
+                                    <div className="flex items-start gap-2">
+                                        <MapPin className="w-4 h-4 text-slate-400 mt-1 shrink-0" />
+                                        <div>
+                                            <p className="text-sm font-semibold text-slate-900 dark:text-white">{activeMachineDetails.address || 'No Address Provided'}</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">{activeMachineDetails.district}</p>
                                         </div>
-
-                                        {activeMachineDetails.notes && (
-                                            <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 p-2.5 rounded-lg border border-amber-200 dark:border-amber-500/20">
-                                                <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                                                <p className="text-xs font-medium text-amber-800 dark:text-amber-300 leading-snug">{activeMachineDetails.notes}</p>
-                                            </div>
-                                        )}
                                     </div>
 
-                                    {(activeMachineDetails.latitude && activeMachineDetails.longitude) ? (
-                                        <a
-                                            href={`https://www.google.com/maps/dir/?api=1&destination=${activeMachineDetails.latitude},${activeMachineDetails.longitude}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 px-4 py-2.5 rounded-xl font-bold text-sm transition-colors border border-blue-200 dark:border-blue-500/20 whitespace-nowrap"
-                                        >
-                                            <Navigation className="w-4 h-4" />
-                                            Get Directions
-                                        </a>
-                                    ) : null}
+                                    {activeMachineDetails.notes && (
+                                        <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 p-2.5 rounded-lg border border-amber-200 dark:border-amber-500/20">
+                                            <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                                            <p className="text-xs font-medium text-amber-800 dark:text-amber-300 leading-snug">{activeMachineDetails.notes}</p>
+                                        </div>
+                                    )}
                                 </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
+
+                                {(activeMachineDetails.latitude && activeMachineDetails.longitude) ? (
+                                    <a
+                                        href={`https://www.google.com/maps/dir/?api=1&destination=${activeMachineDetails.latitude},${activeMachineDetails.longitude}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 px-4 py-2.5 rounded-xl font-bold text-sm transition-colors border border-blue-200 dark:border-blue-500/20 whitespace-nowrap"
+                                    >
+                                        <Navigation className="w-4 h-4" />
+                                        Get Directions
+                                    </a>
+                                ) : null}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {selectedMachine && isLoadingMachineStock && (
                     <div className="flex justify-center my-12">
@@ -763,66 +780,53 @@ export function DriverRefillUI({ machines: serverMachines, activeDispatches: ser
                         {/* Search Bar (Offline Capable) */}
                         <div className="relative mb-4">
                             <input
+                                ref={searchRef}
                                 type="text"
-                                placeholder="Search by SKU or Item Name..."
+                                placeholder="Search by code or item name..."
                                 value={itemSearch}
                                 onChange={(e) => setItemSearch(e.target.value)}
-                                className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl py-3 pl-11 pr-4 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue transition-colors shadow-sm"
+                                onKeyDown={onSearchKeyDown}
+                                enterKeyHint="next"
+                                autoComplete="off"
+                                className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl min-h-[44px] py-3 pl-11 pr-12 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-accent-blue transition-colors shadow-sm"
                             />
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            {itemSearch && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setItemSearch(""); searchRef.current?.focus(); }}
+                                    aria-label="Clear search"
+                                    className="absolute right-0 top-0 h-full w-11 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
                         </div>
 
-                        <div className="space-y-3">
-                            {primaryRows.map((row) => (
-                                <RefillRow
-                                    key={row.itemId}
-                                    row={row}
-                                    viewMode={viewMode}
-                                    updateItem={updateItem}
-                                    adjustRefillByBatch={adjustRefillByBatch}
-                                />
-                            ))}
-
-                            {/* Everything the machine still looks stocked on. Collapsed,
-                                never dropped — the estimate is an estimate, and the
-                                driver is the one looking at the actual shelf. */}
-                            {secondaryRows.length > 0 && (
-                                <>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowAllItems(v => !v)}
-                                        aria-expanded={showAllItems}
-                                        className="w-full flex items-center justify-between gap-3 min-h-[44px] px-4 py-3 rounded-2xl bg-white dark:bg-[#1a1a1c] border border-dashed border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-accent-blue/50 transition-colors"
-                                    >
-                                        <span className="text-xs font-bold text-left">
-                                            {showAllItems ? "Hide" : "Show"} {secondaryRows.length} item{secondaryRows.length === 1 ? "" : "s"} that should still be stocked
-                                        </span>
-                                        <span className="flex items-center gap-2 shrink-0">
-                                            {/* Rows stay put once staged, so a count made in here
-                                                stays in here. Surface it on the collapsed header
-                                                rather than letting it hide. */}
-                                            {hiddenStagedCount > 0 && (
-                                                <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-accent-blue/20 text-accent-blue">
-                                                    {hiddenStagedCount} staged
-                                                </span>
-                                            )}
-                                            <ChevronDown className={`w-4 h-4 transition-transform ${showAllItems ? "rotate-180" : ""}`} />
-                                        </span>
-                                    </button>
-
-                                    {showAllItems && secondaryRows.map((row) => (
+                        {/* Grouped like the paper sheet: chips, chocolate … water.
+                            `data-entry-group` makes the keyboard's Next key walk
+                            the quantity boxes in exactly this order. */}
+                        <div ref={sheetRef} data-entry-group className="space-y-5">
+                            {sections.map((section) => (
+                                <section key={section.key} aria-label={section.label} className="space-y-2">
+                                    <h3 className="flex items-baseline justify-between px-1 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                                        <span>{section.label}</span>
+                                        <span className="font-mono text-[10px] font-medium">{section.rows.length}</span>
+                                    </h3>
+                                    {section.rows.map((row) => (
                                         <RefillRow
                                             key={row.itemId}
                                             row={row}
                                             viewMode={viewMode}
                                             updateItem={updateItem}
                                             adjustRefillByBatch={adjustRefillByBatch}
+                                            onQtyKeyDown={onQtyKeyDown}
                                         />
                                     ))}
-                                </>
-                            )}
+                                </section>
+                            ))}
 
-                            {primaryRows.length === 0 && secondaryRows.length === 0 && (
+                            {sections.length === 0 && (
                                 <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm font-medium">
                                     {itemSearch ? `Nothing matches "${itemSearch}".` : "No items in this view."}
                                 </div>
@@ -1023,23 +1027,19 @@ function PrefillReviewSheet({
     );
 }
 
-/**
- * One item on the refill sheet.
- *
- * Extracted from an inline `.map()` so the "needs stock" group and the collapsed
- * "still stocked" group render byte-identical rows — two copies of 140 lines of
- * markup would have drifted within a sprint.
- */
+/** One item on the refill sheet. */
 function RefillRow({
     row,
     viewMode,
     updateItem,
     adjustRefillByBatch,
+    onQtyKeyDown,
 }: {
     row: ItemFormState;
     viewMode: "BAG" | "MACHINE";
     updateItem: (id: number, field: keyof ItemFormState, val: any) => void;
     adjustRefillByBatch: (id: number, delta: number, maxFromBag: number) => void;
+    onQtyKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
 }) {
     const isModified = row.refilled > 0 || row.returned > 0;
     const needsCheck = row.prefilled && !row.confirmed;
@@ -1070,7 +1070,7 @@ function RefillRow({
     };
 
     return (
-        <div className={`p-4 rounded-3xl transition-colors border ${
+        <div className={`p-3 rounded-3xl transition-colors border ${
             needsCheck
                 ? 'bg-amber-50 dark:bg-amber-500/5 border-amber-400/60 shadow-sm'
                 : isModified
@@ -1078,22 +1078,22 @@ function RefillRow({
                     : 'bg-white dark:bg-[#1a1a1c] border-slate-200 dark:border-white/5'
         }`}>
 
-            <div className="flex justify-between items-start mb-3">
+            <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-3 flex-1 pr-2">
                     <div className="flex-shrink-0">
                         {row.item.imageUrl ? (
-                            <label className="relative block w-16 h-16 cursor-pointer group">
-                                <img src={row.item.imageUrl} alt={row.item.name} className="w-16 h-16 rounded-xl object-cover bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 group-hover:opacity-50 transition-opacity shadow-sm" />
+                            <label className="relative block w-12 h-12 cursor-pointer group">
+                                <img src={row.item.imageUrl} alt={row.item.name} className="w-12 h-12 rounded-xl object-cover bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 group-hover:opacity-50 transition-opacity shadow-sm" />
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
                                     <Camera className="w-6 h-6 text-white" />
                                 </div>
                                 <input type="file" accept="image/*" className="hidden" onChange={uploadImage} />
                             </label>
                         ) : (
-                            <label className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm gap-1">
+                            <label className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-200 dark:hover:bg-white/10 transition-colors shadow-sm gap-1">
                                 <input type="file" accept="image/*" className="hidden" onChange={uploadImage} />
-                                <Camera className="w-5 h-5 text-slate-400" />
-                                <span className="text-[8px] font-bold text-slate-500 uppercase">Add Photo</span>
+                                <Camera className="w-4 h-4 text-slate-400" />
+                                <span className="text-[7px] font-bold text-slate-500 uppercase">Photo</span>
                             </label>
                         )}
                     </div>
@@ -1153,7 +1153,7 @@ function RefillRow({
                 </div>
             )}
 
-            <div className="flex items-start justify-between gap-2 pt-3 border-t border-slate-100 dark:border-white/5 w-full">
+            <div className="flex items-start justify-between gap-2 pt-2 border-t border-slate-100 dark:border-white/5 w-full">
 
                 {/* Returned Counter (Machine View Only) */}
                 {viewMode === "MACHINE" && (
@@ -1163,6 +1163,7 @@ function RefillRow({
                         value={row.returned}
                         ariaLabel="Returned quantity"
                         onChange={(n) => updateItem(row.itemId, 'returned', n)}
+                        onKeyDown={onQtyKeyDown}
                     />
                 )}
 
@@ -1174,6 +1175,7 @@ function RefillRow({
                             labelClass="text-accent-green"
                             value={row.refilled}
                             ariaLabel="Refilled quantity"
+                            onKeyDown={onQtyKeyDown}
                             max={row.bagQuantity - row.bag_returned}
                             overBudget={row.refilled + row.bag_returned > row.bagQuantity}
                             onChange={(n) => updateItem(row.itemId, 'refilled', n)}
@@ -1228,6 +1230,7 @@ function QtyStepper({
     ariaLabel,
     max,
     overBudget = false,
+    onKeyDown,
 }: {
     label: string;
     labelClass: string;
@@ -1237,6 +1240,12 @@ function QtyStepper({
     ariaLabel: string;
     max?: number;
     overBudget?: boolean;
+    /**
+     * Makes this box a stop for the keyboard's Next key (`data-entry`). Only the
+     * box a driver fills on every visit gets one; "Return (Warehouse)" is rare,
+     * so Next skips it.
+     */
+    onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
 }) {
     return (
         <div className="flex flex-col flex-1 min-w-0">
@@ -1258,6 +1267,9 @@ function QtyStepper({
                     value={value}
                     onChange={onChange}
                     onBlur={onBlur}
+                    onKeyDown={onKeyDown}
+                    data-entry={onKeyDown ? "" : undefined}
+                    enterKeyHint={onKeyDown ? "next" : undefined}
                     aria-label={ariaLabel}
                     className={`flex-1 min-w-0 w-full text-center font-bold bg-transparent border-none outline-none ${overBudget ? 'text-accent-pink' : 'text-slate-900 dark:text-white'}`}
                 />

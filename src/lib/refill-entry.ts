@@ -21,15 +21,8 @@ import type { RefillEntryMode } from "@/types";
 /** The subset of the sheet's row state these rules actually read. */
 export type RefillRowLike = {
     refilled: number;
-    bag_returned: number;
-    estimated_stock: number;
-    /** What this machine took of this item last visit; null when there's no history. */
-    lastQty: number | null;
     confirmed: boolean;
 };
-
-/** Which section of the sheet a row sits in. Decided once per machine, then frozen. */
-export type RefillGroup = "primary" | "secondary";
 
 /**
  * How a row's refill box starts out.
@@ -56,67 +49,72 @@ export function seedRefillQuantity(
 }
 
 /**
- * Whether this item plausibly needs stock on this visit.
+ * The order the sheet's groups appear in: snacks top to bottom, then drinks —
+ * the way the drivers read a machine, and the order they asked for ("chips at
+ * the top, then Pringles, chocolates, then juices, soft drinks, iced tea").
  *
- * There is no par level on MachineStock, so "needs stock" is the best available
- * proxy: the system believes the slot is empty, or it holds less than one
- * typical top-up for this machine. Anything already staged counts too — which
- * matters when prefill mode seeds the sheet before the driver sees it.
- *
- * Evaluated exactly once per machine, by `assignRefillGroup`. See there for why
- * it must never be re-run against live state.
+ * Matched by keyword on the item's free-text `category`, so a renamed or
+ * misspelled category ("coffe") still lands in its group. Pringles are filed
+ * under Chips in the catalogue, so they sit inside that group, together.
+ * Anything that matches nothing goes after these, alphabetically by category.
  */
-export function needsStock(row: RefillRowLike): boolean {
-    if (row.refilled > 0 || row.bag_returned > 0) return true;
-    if (row.estimated_stock === 0) return true;
-    return row.lastQty !== null && row.estimated_stock < row.lastQty;
+export const REFILL_SECTION_ORDER: ReadonlyArray<{ label: string; keywords: readonly string[] }> = [
+    { label: "Chips", keywords: ["chip", "crisp"] },
+    { label: "Chocolate", keywords: ["chocolate", "choco"] },
+    { label: "Biscuits & Wafers", keywords: ["biscuit", "wafer", "cookie"] },
+    { label: "Cakes", keywords: ["cake"] },
+    { label: "Juices & Dairy", keywords: ["juice", "dairy", "milk"] },
+    { label: "Soft Drinks", keywords: ["soft", "soda", "cola"] },
+    { label: "Iced Tea", keywords: ["tea"] },
+    { label: "Coffee", keywords: ["coffe", "cafe"] },
+    { label: "Water", keywords: ["water"] },
+];
+
+/** The item fields the ordering reads. */
+export type RefillSortable = { item: { name?: string | null; sku?: string | null; category?: string | null } };
+
+export type RefillSection<T> = { key: string; label: string; rows: T[] };
+
+function sectionOf(category: string | null | undefined): { rank: number; key: string; label: string } {
+    const raw = (category ?? "").trim();
+    const lower = raw.toLowerCase();
+    const i = REFILL_SECTION_ORDER.findIndex((s) => s.keywords.some((k) => lower.includes(k)));
+    if (i >= 0) return { rank: i, key: REFILL_SECTION_ORDER[i].label, label: REFILL_SECTION_ORDER[i].label };
+    const label = raw && lower !== "uncategorized" && lower !== "uncategorised" ? raw : "Other";
+    return { rank: REFILL_SECTION_ORDER.length, key: label.toLowerCase(), label };
 }
 
 /**
- * Fixes a row's section when the machine is opened — and it is never
- * recalculated while the driver works.
+ * Lays the sheet out like the paper sheet it replaced: fixed category groups
+ * in `REFILL_SECTION_ORDER`, items A–Z inside each group.
  *
- * This function existing separately from `needsStock` is the whole point.
- * Deriving the section live meant a row's first `+` tap made `needsStock` flip
- * true, so a row the driver had expanded out of the collapsed group jumped to
- * the top of the sheet and every row below it slid up one position. With the
- * ±batch buttons that is not cosmetic: the second tap of `+6` lands on whatever
- * slid under the finger, and a refill quantity is booked as sold.
+ * It used to sort by the system's stock estimate and fold "probably still
+ * full" items behind a disclosure. The estimate is a guess (machines don't
+ * report sales), so the order looked random from one machine to the next and
+ * the item the driver needed was often folded away — drivers searched every
+ * item by code instead, typing and deleting 20–25 codes a machine.
  *
- * Frozen membership costs nothing — a row in the wrong section is still one tap
- * away, and the sections re-sort on the next machine.
+ * Nothing here reads a quantity, on purpose: a row's position depends only on
+ * what the item is, so no tap can move it. When position followed live state,
+ * the first `+` tap on a row moved it and the second tap of `+6` landed on
+ * whatever slid under the finger — booked as sold.
  */
-export function assignRefillGroup(row: RefillRowLike): RefillGroup {
-    return needsStock(row) ? "primary" : "secondary";
-}
-
-/**
- * Splits the sheet into "probably needs stock" and a collapsed remainder.
- *
- * Machines here stock ~26 items and the bag carries the full morning load, so
- * the Bag tab renders ~57 rows — while a real visit touches 7.6 of them (90-day
- * fleet average). Alphabetical order made the driver scroll past 50 rows to
- * reach 8. Nothing is removed; the remainder is one tap away.
- *
- * Two cases deliberately return a flat list: an active search is already a
- * filter (splitting it again would hide the hit the driver typed to find), and
- * the Machine tab records returns coming *out*, where "needs stock" is
- * meaningless.
- *
- * Partitions on the row's frozen `group` rather than re-deriving it, so nothing
- * on this sheet can change position in response to a tap.
- */
-export function splitRefillRows<T extends { group: RefillGroup }>(
-    rows: T[],
-    opts: { isSearching: boolean; viewMode: "BAG" | "MACHINE" },
-): { primary: T[]; secondary: T[] } {
-    if (opts.isSearching || opts.viewMode === "MACHINE") {
-        return { primary: rows, secondary: [] };
+export function refillSections<T extends RefillSortable>(rows: T[]): RefillSection<T>[] {
+    const byKey = new Map<string, RefillSection<T> & { rank: number }>();
+    for (const row of rows) {
+        const s = sectionOf(row.item?.category);
+        let section = byKey.get(s.key);
+        if (!section) {
+            section = { key: s.key, label: s.label, rank: s.rank, rows: [] };
+            byKey.set(s.key, section);
+        }
+        section.rows.push(row);
     }
-    return {
-        primary: rows.filter((r) => r.group === "primary"),
-        secondary: rows.filter((r) => r.group === "secondary"),
-    };
+    const byName = (a: T, b: T) =>
+        (a.item?.name ?? "").localeCompare(b.item?.name ?? "") || (a.item?.sku ?? "").localeCompare(b.item?.sku ?? "");
+    return [...byKey.values()]
+        .sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label))
+        .map(({ key, label, rows: sectionRows }) => ({ key, label, rows: [...sectionRows].sort(byName) }));
 }
 
 /**

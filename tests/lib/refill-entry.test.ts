@@ -1,11 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
     seedRefillQuantity,
-    needsStock,
-    splitRefillRows,
+    refillSections,
     countUnconfirmed,
     adjustByBatch,
-    assignRefillGroup,
     type RefillRowLike,
 } from '@/lib/refill-entry';
 
@@ -16,7 +14,7 @@ import {
  */
 
 function row(overrides: Partial<RefillRowLike> = {}): RefillRowLike {
-    return { refilled: 0, bag_returned: 0, estimated_stock: 5, lastQty: null, confirmed: true, ...overrides };
+    return { refilled: 0, confirmed: true, ...overrides };
 }
 
 describe('seedRefillQuantity', () => {
@@ -43,113 +41,69 @@ describe('seedRefillQuantity', () => {
     });
 });
 
-describe('needsStock', () => {
-    it('flags a slot the system believes is empty', () => {
-        expect(needsStock(row({ estimated_stock: 0 }))).toBe(true);
-    });
+describe('refillSections', () => {
+    /** A sheet row as the ordering sees it: the item, plus live quantities it must ignore. */
+    const line = (sku: string, name: string, category: string, refilled = 0) =>
+        ({ item: { sku, name, category }, refilled, estimated_stock: 5 });
 
-    it('flags a slot holding less than one typical top-up', () => {
-        expect(needsStock(row({ estimated_stock: 2, lastQty: 6 }))).toBe(true);
-    });
-
-    it('does not flag a slot still fuller than a typical top-up', () => {
-        expect(needsStock(row({ estimated_stock: 9, lastQty: 6 }))).toBe(false);
-    });
-
-    it('does not flag an unknown item that still has stock', () => {
-        expect(needsStock(row({ estimated_stock: 4, lastQty: null }))).toBe(false);
-    });
-
-    it('pins a row the driver has already staged, however full the slot looks', () => {
-        // Otherwise a count in progress could reorder into the collapsed group
-        // and vanish from under the driver's finger.
-        expect(needsStock(row({ estimated_stock: 30, lastQty: 2, refilled: 4 }))).toBe(true);
-        expect(needsStock(row({ estimated_stock: 30, lastQty: 2, bag_returned: 1 }))).toBe(true);
-    });
-});
-
-describe('assignRefillGroup', () => {
-    it('sends likely-needed items to the primary section', () => {
-        expect(assignRefillGroup(row({ estimated_stock: 0 }))).toBe('primary');
-        expect(assignRefillGroup(row({ estimated_stock: 2, lastQty: 6 }))).toBe('primary');
-    });
-
-    it('sends the still-stocked remainder to the collapsed section', () => {
-        expect(assignRefillGroup(row({ estimated_stock: 9, lastQty: 6 }))).toBe('secondary');
-        expect(assignRefillGroup(row({ estimated_stock: 4, lastQty: null }))).toBe('secondary');
-    });
-
-    it('puts prefill-seeded rows up front — they are all about to be submitted', () => {
-        const seeded = seedRefillQuantity('prefill', 6, 20);
-        expect(assignRefillGroup(row({ ...seeded, estimated_stock: 30, lastQty: 6 }))).toBe('primary');
-    });
-});
-
-describe('splitRefillRows', () => {
-    /** Group is assigned once, when the machine is opened. */
-    const grouped = <T extends RefillRowLike>(r: T) => ({ ...r, group: assignRefillGroup(r) });
-
-    const rows = [
-        grouped(row({ estimated_stock: 0 })),                 // empty      → primary
-        grouped(row({ estimated_stock: 1, lastQty: 6 })),     // low        → primary
-        grouped(row({ estimated_stock: 9, lastQty: 6 })),     // stocked    → secondary
-        grouped(row({ estimated_stock: 4, lastQty: null })),  // no history → secondary
+    // Real catalogue names and categories from production, shuffled.
+    const sheet = [
+        line('0010', 'PEPSI CaN', 'Soft Drinks'),
+        line('0157', 'ZOI ICE TEA BERRY', 'Iced Tea'),
+        line('0103', 'PRINGLES RED ORIGINAL', 'Chips'),
+        line('0033', 'SNICKERS', 'Chocolate'),
+        line('0045', 'AQUAFINA WATER', 'Water'),
+        line('0018', 'KDD MANGO', 'Juices & Dairy'),
+        line('0052', 'LAYS YELLOW SALT', 'Chips'),
+        line('0028', 'OREO BISCUIT VANIL', 'Biscuits & Wafers'),
+        line('0170', 'CHOCOLATE CAKE', 'Cakes'),
+        line('0165', 'MOVENPICK CAPPUCINO', 'Coffee'),
+        line('0197', 'landessa', 'coffe'),
+        line('0195', 'AMADA MOOD', 'Uncategorized'),
+        line('0050', 'DORITOS ORANGE CHEESE', 'Chips'),
     ];
 
-    it('puts only the likely-needed rows up front and collapses the rest', () => {
-        const { primary, secondary } = splitRefillRows(rows, { isSearching: false, viewMode: 'BAG' });
-        expect(primary).toHaveLength(2);
-        expect(secondary).toHaveLength(2);
+    it('lists snacks first and drinks after, in the order the drivers asked for', () => {
+        expect(refillSections(sheet).map(s => s.label)).toEqual([
+            'Chips', 'Chocolate', 'Biscuits & Wafers', 'Cakes',
+            'Juices & Dairy', 'Soft Drinks', 'Iced Tea', 'Coffee', 'Water', 'Other',
+        ]);
     });
 
-    it('never drops a row — the two groups always reconstruct the input', () => {
-        const { primary, secondary } = splitRefillRows(rows, { isSearching: false, viewMode: 'BAG' });
-        expect([...primary, ...secondary]).toHaveLength(rows.length);
-        rows.forEach(r => expect([...primary, ...secondary]).toContain(r));
+    it('sorts A–Z inside a group, so Pringles sit together among the chips', () => {
+        const chips = refillSections(sheet)[0].rows.map(r => r.item.name);
+        expect(chips).toEqual(['DORITOS ORANGE CHEESE', 'LAYS YELLOW SALT', 'PRINGLES RED ORIGINAL']);
     });
 
-    it('stays flat while searching, so a hit is never hidden behind the disclosure', () => {
-        const { primary, secondary } = splitRefillRows(rows, { isSearching: true, viewMode: 'BAG' });
-        expect(primary).toHaveLength(rows.length);
-        expect(secondary).toHaveLength(0);
+    it('files a misspelled category with its group instead of starting a new one', () => {
+        const coffee = refillSections(sheet).find(s => s.label === 'Coffee')!;
+        expect(coffee.rows.map(r => r.item.sku)).toEqual(['0197', '0165']);
     });
 
-    it('stays flat on the Machine tab, where "needs stock" has no meaning', () => {
-        const { primary, secondary } = splitRefillRows(rows, { isSearching: false, viewMode: 'MACHINE' });
-        expect(primary).toHaveLength(rows.length);
-        expect(secondary).toHaveLength(0);
+    it('puts categories it does not know after the known ones, by name', () => {
+        const labels = refillSections([
+            line('1', 'X', 'Zebra snacks'),
+            line('2', 'Y', 'Gum'),
+            line('3', 'Z', 'Water'),
+            line('4', 'W', ''),
+        ]).map(s => s.label);
+        expect(labels).toEqual(['Water', 'Gum', 'Other', 'Zebra snacks']);
     });
 
-    // The regression this whole `group` field exists for. Staging a quantity used
-    // to flip needsStock() true, so a row expanded out of the collapsed section
-    // jumped to the top of the sheet and everything below slid up one position —
-    // meaning the second tap of a ±batch button landed on a different item, and
-    // refill quantity is booked as sold.
-    it('does not move a row between sections when it is staged', () => {
-        const collapsed = grouped(row({ estimated_stock: 9, lastQty: 6 }));
-        expect(collapsed.group).toBe('secondary');
-
-        const afterTap = { ...collapsed, refilled: 6, confirmed: true };
-        const { primary, secondary } = splitRefillRows([afterTap], { isSearching: false, viewMode: 'BAG' });
-
-        expect(secondary).toHaveLength(1);
-        expect(primary).toHaveLength(0);
-        // needsStock alone would now say otherwise — which is exactly the trap.
-        expect(needsStock(afterTap)).toBe(true);
+    it('never drops or duplicates a row', () => {
+        const out = refillSections(sheet).flatMap(s => s.rows);
+        expect(out).toHaveLength(sheet.length);
+        sheet.forEach(r => expect(out).toContain(r));
     });
 
-    it('holds every row in its own section across a burst of taps', () => {
-        const sectionOf = (rs: typeof rows) => {
-            const { primary, secondary } = splitRefillRows(rs, { isSearching: false, viewMode: 'BAG' });
-            return rs.map(r => (primary.includes(r) ? 'primary' : secondary.includes(r) ? 'secondary' : 'MISSING'));
-        };
-
-        const before = sectionOf(rows);
-        expect(before).toEqual(['primary', 'primary', 'secondary', 'secondary']);
-
-        // Spam +6 three times on every row, the way a driver does.
-        const tapped = rows.map(r => ({ ...r, refilled: r.refilled + 18 }));
-        expect(sectionOf(tapped)).toEqual(before);
+    // The regression the old estimate-based order had: staging a quantity moved
+    // the row, so the second tap of a ±batch button landed on a different item
+    // and refill quantity is booked as sold. Position must depend on the item only.
+    it('keeps every row in place across a burst of taps', () => {
+        const order = (rows: typeof sheet) => refillSections(rows).flatMap(s => s.rows.map(r => r.item.sku));
+        const before = order(sheet);
+        const tapped = sheet.map((r, i) => ({ ...r, refilled: i % 2 ? 18 : 0, estimated_stock: i }));
+        expect(order(tapped)).toEqual(before);
     });
 });
 
