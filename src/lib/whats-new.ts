@@ -75,6 +75,20 @@ export type WhatsNewEntry = {
 /** Newest first. */
 export const WHATS_NEW: WhatsNewEntry[] = [
     {
+        id: "2026-09-refill-sheet-order",
+        date: "2026-09-23",
+        audience: ["driver"],
+        title: {
+            en: "Refill list now grouped like your sheet",
+            ar: "قائمة التعبئة صارت مرتّبة مثل ورقتك",
+        },
+        body: {
+            en: "After you pick a machine, items are grouped: chips first, then chocolate, biscuits, cakes, juices, soft drinks, iced tea, coffee and water. Type a number and press Next on your keyboard to jump to the next item. Searching by code? Press Next and the search clears for the next code.",
+            ar: "بعد اختيار المكينة، تظهر الأصناف في مجموعات: الشيبس أولاً، ثم الشوكولاتة، البسكويت، الكيك، العصائر، المشروبات الغازية، الشاي المثلج، القهوة، والماء. اكتب الرقم واضغط «التالي» في لوحة المفاتيح للانتقال إلى الصنف التالي. تبحث بالرمز؟ اضغط «التالي» ويُمسح البحث لتكتب الرمز التالي.",
+        },
+        href: "/driver",
+    },
+    {
         id: "2026-09-order-in-cartons",
         date: "2026-09-22",
         audience: ["admin"],
@@ -263,6 +277,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
             ar: "الأصناف التي تحتاج تعبئة غالباً تظهر الآن في الأعلى. وبجانب كل صنف زر بالكمية التي عبّأتها في الزيارة السابقة — اضغطه بدلاً من الكتابة. يمكنك تغيير الطريقة من «الإعدادات».",
         },
         href: "/driver/settings",
+        // "Items that probably need stock appear first" is gone: the sheet is in shelf order now.
+        supersededBy: "2026-09-refill-sheet-order",
     },
     {
         id: "2026-08-push-notifications",
